@@ -55,8 +55,8 @@ async function readSSE(response) {
 
 // fn_index map (order of .click/.change registrations in app.py)
 const FN = {
-  build_director_outputs: 2,  // line 11696
-  generate_image: 42,         // line 12194
+  build_director_outputs: 3,  // build_director_button.click (update_image_generator_status is at 2)
+  generate_image: 43,         // generate_image_button.click (shifted by 1)
 };
 
 export async function buildDirectorOutputs({

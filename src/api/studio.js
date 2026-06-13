@@ -54,9 +54,12 @@ async function readSSE(response) {
 }
 
 // fn_index map (order of .click/.change registrations in app.py)
+// creative_engine_input.change = 0
+// update_image_generator_status × 9 (for loop over 9 controls) = indices 1–9
+// build_director_button.click = 10
 const FN = {
-  build_director_outputs: 3,  // build_director_button.click (update_image_generator_status is at 2)
-  generate_image: 43,         // generate_image_button.click (shifted by 1)
+  build_director_outputs: 10,
+  generate_image: 43,
 };
 
 export async function buildDirectorOutputs({

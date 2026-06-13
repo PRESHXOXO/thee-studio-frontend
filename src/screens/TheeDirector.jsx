@@ -40,7 +40,7 @@ export function TheeDirector({ onNav }) {
       });
       setOutputs(result);
     } catch (e) {
-      setError('Could not reach backend. Make sure your Gradio app is running on port 7860.');
+      setError(`Error: ${e?.message || String(e)}`);
     } finally {
       setLoading(false);
     }

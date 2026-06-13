@@ -1,10 +1,13 @@
 const BASE = '/gradio_api';
 
+// Stable session hash for this browser session
+const SESSION_HASH = Math.random().toString(36).slice(2);
+
 async function predict(fnIndex, data) {
   const res = await fetch(`${BASE}/run/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fn_index: fnIndex, data }),
+    body: JSON.stringify({ fn_index: fnIndex, data, session_hash: SESSION_HASH }),
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   const json = await res.json();

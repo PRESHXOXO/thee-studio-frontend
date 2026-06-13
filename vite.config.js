@@ -6,9 +6,8 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/gradio': {
+      '/gradio_api': {
         target: 'http://127.0.0.1:7860',
-        rewrite: (path) => path.replace(/^\/gradio/, ''),
         changeOrigin: true,
       },
     },

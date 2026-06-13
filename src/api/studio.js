@@ -1,7 +1,7 @@
-const BASE = '/gradio';
+const BASE = '/gradio_api';
 
 async function predict(fnIndex, data) {
-  const res = await fetch(`${BASE}/api/predict`, {
+  const res = await fetch(`${BASE}/run/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ fn_index: fnIndex, data }),

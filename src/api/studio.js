@@ -1,30 +1,21 @@
 const BASE = '/gradio';
 
-async function callNamed(apiName, data) {
-  const res = await fetch(`${BASE}/run/${apiName}`, {
+async function predict(fnIndex, data) {
+  const res = await fetch(`${BASE}/run/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data }),
+    body: JSON.stringify({ fn_index: fnIndex, data }),
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   const json = await res.json();
   return json.data;
 }
 
-// Fetch available character names from the Gradio /info endpoint
-export async function getCharacters() {
-  try {
-    const res = await fetch(`${BASE}/info`);
-    if (!res.ok) return [];
-    const info = await res.json();
-    // Look for character choices in the named_endpoints or component info
-    const endpoints = info?.named_endpoints || info?.unnamed_endpoints || [];
-    // Fall back: just return empty — Characters screen loads from backend state
-    return [];
-  } catch {
-    return [];
-  }
-}
+// fn_index map (determined by event handler registration order in app.py)
+const FN = {
+  build_director_outputs: 2,  // build_director_button.click — line 11696
+  generate_image:         42, // generate_image_button.click — line 12194
+};
 
 // Build director prompts
 // Inputs: vision, content_type, mood, output_goal, character_or_group, scene_name, use_identity_lock
@@ -38,7 +29,7 @@ export async function buildDirectorOutputs({
   scene = '',
   useIdentityLock = false,
 } = {}) {
-  const data = await callNamed('build_director_outputs', [
+  const data = await predict(FN.build_director_outputs, [
     vision,
     contentType,
     mood,
@@ -55,8 +46,7 @@ export async function buildDirectorOutputs({
   };
 }
 
-// Generate image via ComfyUI / cloud engine
-// Inputs match generate_image_with_comfyui handler
+// Generate image
 export async function generateImage({
   engine = 'FLUX Schnell',
   performanceMode = 'Balanced',
@@ -74,7 +64,7 @@ export async function generateImage({
   width = 512,
   height = 768,
 } = {}) {
-  const data = await callNamed('generate_image', [
+  const data = await predict(FN.generate_image, [
     engine,
     performanceMode,
     comfyServerUrl,

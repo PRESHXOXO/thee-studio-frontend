@@ -8,10 +8,10 @@ import { PromptOutput } from '../components/feedback/PromptOutput.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { buildDirectorOutputs } from '../api/studio.js';
 
-const CONTENT_TYPES  = ['Editorial', 'UGC', 'Product', 'Lifestyle', 'Campaign'].map(v => ({ value: v, label: v }));
-const MOODS          = ['Warm & confident', 'Soft & dreamy', 'Bold & glossy', 'Natural & candid'].map(v => ({ value: v, label: v }));
-const OUTPUT_GOALS   = ['Still image', 'Video clip', 'Carousel', 'Story', 'Campaign hero'].map(v => ({ value: v, label: v }));
-const LOCATIONS      = ['Rooftop', 'Studio', 'Cafe', 'Suite', 'Street', 'Yacht', 'Penthouse', 'Poolside', 'Desert', 'Beach'].map(v => ({ value: v, label: v }));
+const CONTENT_TYPES  = ['Portrait', 'Beauty', 'Fashion', 'Lifestyle', 'Product', 'UGC', 'Campaign', 'Social Post', 'Cinematic Still', 'Travel / Hospitality'].map(v => ({ value: v, label: v }));
+const MOODS          = ['Clean', 'Soft', 'Luxury', 'Bold', 'Romantic', 'Playful', 'Editorial', 'Candid', 'Cinematic', 'Elevated Casual'].map(v => ({ value: v, label: v }));
+const OUTPUT_GOALS   = ['Build Prompt Only', 'Generate Image', 'Create Variations', 'Campaign Asset'].map(v => ({ value: v, label: v }));
+const LOCATIONS      = ['None', 'Yacht', 'Penthouse', 'Podcast Studio', 'Bedroom', 'Luxury Car'].map(v => ({ value: v, label: v }));
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', margin: 0 };
 

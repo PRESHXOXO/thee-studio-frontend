@@ -1,0 +1,73 @@
+/* Thee Studio™ — Color tokens
+   Warm, editorial, feminine-tech. Coral & cherry accents on cream/rose-glass surfaces. */
+:root {
+  /* ---- Base palette ---- */
+  --cream:        #FFF7F2;  /* soft cream — app background */
+  --white:        #FFFFFF;  /* clean white */
+  --rose-glass:   #FFF0ED;  /* rose glass — primary card surface */
+  --blush:        #FFE1DC;  /* soft blush */
+  --peach:        #FFD1C7;  /* pale peach */
+  --coral:        #FF6B4A;  /* coral — primary action */
+  --hot-coral:    #FF4F5E;  /* hot coral */
+  --cherry:       #D91E46;  /* cherry red — deep action */
+  --ruby:         #E83D52;  /* ruby accent */
+  --champagne:    #FFD166;  /* champagne — highlight / lock */
+  --plum:         #211821;  /* deep plum — dark surfaces */
+  --ink:          #101014;  /* ink black — text */
+  --warm-gray:    #6E625D;  /* warm gray — secondary text */
+  --border-fine:  #E8DDD3;  /* fine border */
+
+  /* ---- Tints for depth (derived, warm) ---- */
+  --plum-80:      #2C1F2C;
+  --plum-60:      #4A3A45;
+  --cream-deep:   #FBEBE3;  /* cream one step down, for inset wells */
+  --rose-deep:    #FFE6E0;
+
+  /* ---- Semantic: surfaces ---- */
+  --surface-app:        var(--cream);
+  --surface-card:       var(--white);
+  --surface-card-rose:  var(--rose-glass);
+  --surface-inset:      var(--cream-deep);
+  --surface-dark:       var(--plum);
+  --surface-sidebar:    var(--white);
+  --surface-raised:     var(--white);
+
+  /* ---- Semantic: text ---- */
+  --text-strong:   var(--ink);      /* headlines, primary */
+  --text-body:     #2A2329;         /* body copy */
+  --text-muted:    var(--warm-gray);/* secondary / captions */
+  --text-on-dark:  #FCEFE9;
+  --text-on-accent:#FFFFFF;
+  --text-faint:    #A6968E;         /* placeholders, disabled (still readable) */
+
+  /* ---- Semantic: borders ---- */
+  --border:        var(--border-fine);
+  --border-strong: #DBC8BC;
+  --border-on-dark:#3A2E37;
+
+  /* ---- Semantic: accents ---- */
+  --accent:        var(--coral);
+  --accent-hot:    var(--hot-coral);
+  --accent-deep:   var(--cherry);
+  --accent-ruby:   var(--ruby);
+  --accent-gold:   var(--champagne);
+  --accent-soft:   var(--blush);
+
+  /* ---- Status ---- */
+  --status-ready:   #2F9E6B;  /* warm-leaning green */
+  --status-ready-bg:#E4F4EC;
+  --status-warn:    #C8881E;
+  --status-warn-bg: #FBEFD6;
+  --status-off:     var(--warm-gray);
+  --status-off-bg:  #EFE6DF;
+  --status-locked:  var(--cherry);
+  --status-locked-bg:#FCE3E7;
+
+  /* ---- Gradients ---- */
+  --grad-coral:   linear-gradient(135deg, var(--coral) 0%, var(--hot-coral) 55%, var(--cherry) 100%);
+  --grad-rose:    linear-gradient(160deg, #FFFFFF 0%, var(--rose-glass) 100%);
+  --grad-blush:   linear-gradient(160deg, var(--peach) 0%, var(--blush) 100%);
+  --grad-plum:    linear-gradient(150deg, var(--plum) 0%, #34232F 100%);
+  /* warm placeholder fill for portrait / proof-sheet imagery */
+  --grad-portrait:linear-gradient(155deg, #E9B79F 0%, #C77E66 45%, #7A4A47 100%); /* @kind color */
+}

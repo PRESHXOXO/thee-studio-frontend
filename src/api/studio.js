@@ -1,21 +1,64 @@
-import { Client } from '@gradio/client';
+const BASE = '/gradio_api';
+const SESSION_HASH = Math.random().toString(36).slice(2);
 
-const GRADIO_URL = 'http://127.0.0.1:7860';
+async function predict(fnIndex, data) {
+  const res = await fetch(`${BASE}/run/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fn_index: fnIndex, data, session_hash: SESSION_HASH }),
+  });
 
-let _client = null;
-async function getClient() {
-  if (!_client) _client = await Client.connect(GRADIO_URL);
-  return _client;
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const contentType = res.headers.get('content-type') || '';
+
+  // Gradio 6.x returns SSE stream
+  if (contentType.includes('text/event-stream')) {
+    return await readSSE(res);
+  }
+
+  // Older fallback: plain JSON
+  const json = await res.json();
+  return json.data;
 }
 
-// fn_index map (order of event handler registrations in app.py)
+async function readSSE(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const raw = line.slice(6).trim();
+      if (!raw || raw === '[DONE]') continue;
+      try {
+        const event = JSON.parse(raw);
+        if (event.msg === 'process_completed') {
+          if (event.output?.error) throw new Error(event.output.error);
+          return event.output?.data ?? [];
+        }
+      } catch (e) {
+        if (e.message !== 'Unexpected token') throw e;
+      }
+    }
+  }
+  throw new Error('Stream ended without completion');
+}
+
+// fn_index map (order of .click/.change registrations in app.py)
 const FN = {
-  build_director_outputs: 2,  // build_director_button.click — line 11696
-  generate_image:         42, // generate_image_button.click — line 12194
+  build_director_outputs: 2,  // line 11696
+  generate_image: 42,         // line 12194
 };
 
-// Build director prompts
-// Returns: { positivePrompt, negativePrompt, recommendedEngine, reason }
 export async function buildDirectorOutputs({
   vision = '',
   contentType = '',
@@ -25,17 +68,9 @@ export async function buildDirectorOutputs({
   scene = '',
   useIdentityLock = false,
 } = {}) {
-  const client = await getClient();
-  const result = await client.predict(FN.build_director_outputs, {
-    vision,
-    content_type: contentType,
-    mood,
-    output_goal: outputGoal,
-    character_or_group: character,
-    scene_name: scene,
-    use_identity_lock: useIdentityLock,
-  });
-  const data = result.data;
+  const data = await predict(FN.build_director_outputs, [
+    vision, contentType, mood, outputGoal, character, scene, useIdentityLock,
+  ]);
   return {
     positivePrompt:    data[0] || '',
     negativePrompt:    data[1] || '',
@@ -44,7 +79,6 @@ export async function buildDirectorOutputs({
   };
 }
 
-// Generate image
 export async function generateImage({
   engine = 'FLUX Schnell',
   performanceMode = 'Balanced',
@@ -62,15 +96,10 @@ export async function generateImage({
   width = 512,
   height = 768,
 } = {}) {
-  const client = await getClient();
-  const result = await client.predict(FN.generate_image, [
+  const data = await predict(FN.generate_image, [
     engine, performanceMode, comfyServerUrl, comfyWorkflowPath,
     imageStyle, positivePrompt, negativePrompt, imageSize,
     quality, batchSize, seed, cfg, steps, width, height,
   ]);
-  const data = result.data;
-  return {
-    images: data[0] || [],
-    status: data[1] || '',
-  };
+  return { images: data[0] || [], status: data[1] || '' };
 }

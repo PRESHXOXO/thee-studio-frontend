@@ -8,7 +8,11 @@ async function predict(fnIndex, data) {
     body: JSON.stringify({ fn_index: fnIndex, data, session_hash: SESSION_HASH }),
   });
 
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    let detail = '';
+    try { detail = await res.text(); } catch {}
+    throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
+  }
 
   const contentType = res.headers.get('content-type') || '';
 

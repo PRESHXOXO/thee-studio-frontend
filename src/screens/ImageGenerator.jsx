@@ -3,7 +3,7 @@ import { Card } from '../components/surfaces/Card.jsx';
 import { Select } from '../components/forms/Select.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { generateImages } from '../api/studio.js';
+import { generateImage } from '../api/studio.js';
 
 const ENGINE_OPTIONS    = ['FLUX Schnell', 'OpenAI Image', 'Local ComfyUI'].map(v => ({ value: v, label: v }));
 const PERF_OPTIONS      = ['Fast', 'Balanced', 'Best'].map(v => ({ value: v, label: v }));
@@ -31,10 +31,15 @@ export function ImageGenerator() {
     setImages([]);
     try {
       const [width, height] = FORMAT_DIMS[format] || [768, 1024];
-      const result = await generateImages({
-        character: '', scene: '', style, mood: perf, extra: quality,
-        provider: engine.toLowerCase().includes('comfy') ? 'comfyui' : engine.toLowerCase().includes('openai') ? 'openai' : 'replicate',
-        model: '', width, height, seed: -1, steps: 20, cfg: 7, batchSize: 1,
+      const result = await generateImage({
+        engine,
+        performanceMode: perf,
+        imageStyle: style,
+        quality,
+        width,
+        height,
+        positivePrompt: '',
+        negativePrompt: '',
       });
       setImages(result.images || []);
     } catch {

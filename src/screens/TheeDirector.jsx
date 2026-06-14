@@ -12,29 +12,51 @@ const CONTENT_TYPES  = ['Portrait', 'Beauty', 'Fashion', 'Lifestyle', 'Product',
 const MOODS          = ['Clean', 'Soft', 'Luxury', 'Bold', 'Romantic', 'Playful', 'Editorial', 'Candid', 'Cinematic', 'Elevated Casual'].map(v => ({ value: v, label: v }));
 const OUTPUT_GOALS   = ['Build Prompt Only', 'Generate Image', 'Create Variations', 'Campaign Asset'].map(v => ({ value: v, label: v }));
 const LOCATIONS      = ['None', 'Yacht', 'Penthouse', 'Podcast Studio', 'Bedroom', 'Luxury Car'].map(v => ({ value: v, label: v }));
+const GENDERS        = ['Unspecified', 'Woman', 'Man', 'Non-binary'].map(v => ({ value: v, label: v }));
+const ETHNICITIES    = [
+  { value: 'Unspecified',   label: 'Unspecified' },
+  { value: 'Black',         label: 'Black / Dark skin' },
+  { value: 'Brown',         label: 'Brown / Medium skin' },
+  { value: 'Latina',        label: 'Latina / Hispanic' },
+  { value: 'East Asian',    label: 'East Asian' },
+  { value: 'South Asian',   label: 'South Asian' },
+  { value: 'White',         label: 'White / Fair skin' },
+  { value: 'Mixed',         label: 'Mixed' },
+];
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', margin: 0 };
 
 export function TheeDirector({ onNav }) {
-  const [vision, setVision]         = React.useState('');
+  const [vision, setVision]           = React.useState('');
   const [contentType, setContentType] = React.useState('');
-  const [mood, setMood]             = React.useState('');
-  const [outputGoal, setOutputGoal] = React.useState('');
-  const [scene, setScene]           = React.useState('');
-  const [loading, setLoading]       = React.useState(false);
-  const [error, setError]           = React.useState('');
-  const [outputs, setOutputs]       = React.useState(null);
+  const [mood, setMood]               = React.useState('');
+  const [outputGoal, setOutputGoal]   = React.useState('');
+  const [scene, setScene]             = React.useState('');
+  const [gender, setGender]           = React.useState('Unspecified');
+  const [ethnicity, setEthnicity]     = React.useState('Unspecified');
+  const [loading, setLoading]         = React.useState(false);
+  const [error, setError]             = React.useState('');
+  const [outputs, setOutputs]         = React.useState(null);
 
   const handleBuild = async () => {
     setError('');
     setLoading(true);
     try {
+      // Inject subject identity into vision so the backend builds it into the prompt
+      const subjectParts = [
+        gender !== 'Unspecified' ? gender : '',
+        ethnicity !== 'Unspecified' ? ethnicity : '',
+      ].filter(Boolean);
+      const enrichedVision = subjectParts.length
+        ? `${subjectParts.join(', ')} subject. ${vision}`.trim()
+        : vision;
+
       const result = await buildDirectorOutputs({
-        vision,
+        vision: enrichedVision,
         contentType,
         mood,
         outputGoal,
-        character: '',
+        character: 'None',
         scene,
         useIdentityLock: false,
       });
@@ -71,6 +93,14 @@ export function TheeDirector({ onNav }) {
           <Field label="Vision" hint="Describe the creative direction in your own words.">
             <Input value={vision} onChange={setVision} placeholder="e.g. Golden hour poolside, effortless luxury…" />
           </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Gender">
+              <Select value={gender} onChange={setGender} options={GENDERS} />
+            </Field>
+            <Field label="Ethnicity">
+              <Select value={ethnicity} onChange={setEthnicity} options={ETHNICITIES} />
+            </Field>
+          </div>
           <Field label="Content Type">
             <Select value={contentType} onChange={setContentType} options={CONTENT_TYPES} placeholder="Select type…" />
           </Field>

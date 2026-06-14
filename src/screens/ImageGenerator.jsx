@@ -10,15 +10,15 @@ import { generateImage, fetchEngineChoices } from '../api/studio.js';
 const FALLBACK_ENGINES = [
   'Fast Draft',
   'DreamShaper Classic',
+  'Replicate FLUX Schnell',
+  'Replicate FLUX Pro',
+  'OpenAI Image',
+  'Prompt Only',
   'Photoreal Portrait — Setup Needed',
   'Editorial Beauty — Setup Needed',
   'Fashion Campaign — Setup Needed',
   'Product Shot — Setup Needed',
   'Cinematic Still — Setup Needed',
-  'Sienna Cloud Preview — Setup Needed',
-  'Replicate FLUX Schnell',
-  'OpenAI Image',
-  'Prompt Only',
 ];
 
 // These match the backend constants exactly

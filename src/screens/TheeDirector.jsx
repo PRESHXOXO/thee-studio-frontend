@@ -128,6 +128,10 @@ const CLOTHING_VIBES = [
   { value: 'monochrome minimal: tonal outfit, clean lines, Celine', label: 'Monochrome Minimal — Celine' },
   { value: 'Y2K glam: low rise, butterfly clips, rhinestones', label: 'Y2K Glam' },
   { value: 'old money: cashmere, equestrian, Ralph Lauren', label: 'Old Money — cashmere + equestrian' },
+  { value: 'intimate editorial: silk robe, sheer lace bodysuit, soft natural confidence, tasteful editorial pose', label: 'Intimate Editorial — silk + lace' },
+  { value: 'lingerie editorial: designer lingerie set, Savage X Fenty or La Perla, tasteful boudoir-inspired editorial', label: 'Lingerie Editorial — designer set' },
+  { value: 'swimwear luxury: high-end bikini or one-piece, resort lifestyle, body confidence', label: 'Swimwear — resort luxury' },
+  { value: 'barely-there: minimal coverage, body-conscious editorial, luxury lifestyle', label: 'Barely There — editorial' },
 ];
 
 const SPECIAL_FEATURES = [
@@ -213,6 +217,44 @@ function buildStructuredVision({ vision, gender, skinTone, hairStyle, hairColor,
   return s.join('\n\n');
 }
 
+// FLUX-optimized prompt: natural flowing language works far better than section headers
+// for FLUX Pro/Ultra. Raw photorealistic output = less AI filtering on the output.
+function buildFluxVision({ vision, gender, skinTone, hairStyle, hairColor, eyeDetail, jewelry, clothing, features, mood, contentType, scene }) {
+  const parts = [];
+
+  // Subject block — flowing natural description
+  const subjectParts = [];
+  if (gender !== 'Unspecified') subjectParts.push(gender.toLowerCase());
+  if (skinTone !== 'Unspecified') subjectParts.push(`with ${skinTone} skin`);
+
+  let subjectLine = subjectParts.length ? `A stunning ${subjectParts.join(' ')}` : 'A stunning person';
+
+  const hairParts = [
+    hairStyle !== 'Unspecified' ? hairStyle : '',
+    hairColor !== 'Unspecified' ? hairColor : '',
+  ].filter(Boolean);
+  if (hairParts.length) subjectLine += `, ${hairParts.join(', ')} hair`;
+  if (eyeDetail !== 'Unspecified') subjectLine += `, ${eyeDetail} eyes`;
+  if (features !== 'None') subjectLine += `, ${features}`;
+  parts.push(subjectLine + '.');
+
+  // Wardrobe
+  if (clothing !== 'Unspecified') parts.push(`Wearing ${clothing}.`);
+  if (jewelry !== 'None') parts.push(`Adorned with ${jewelry}.`);
+
+  // Scene and mood
+  if (scene && scene !== 'None') parts.push(`Set in a ${scene.toLowerCase()} environment.`);
+  if (vision) parts.push(vision.trim().endsWith('.') ? vision.trim() : vision.trim() + '.');
+
+  const moodParts = [contentType !== 'Portrait' ? contentType : '', mood !== 'Clean' ? mood : ''].filter(Boolean);
+  if (moodParts.length) parts.push(`${moodParts.join(', ')} mood and aesthetic.`);
+
+  // Quality anchors — FLUX responds well to these at the end
+  parts.push('Photorealistic editorial photograph. Shot on Sony A1 85mm f/1.4. Natural soft studio light, warm color grading. Individual hair strand detail, visible skin pores, natural skin texture, realistic fabric physics, lifelike human expression and anatomy. Ultra-detailed 4K. Luxury commercial campaign quality. Not AI-generated looking, no plastic skin, no uncanny valley, no distorted anatomy.');
+
+  return parts.join(' ');
+}
+
 export function TheeDirector({ onNav }) {
   const [vision, setVision]           = React.useState('');
   const [contentType, setContentType] = React.useState('Portrait');
@@ -244,7 +286,22 @@ export function TheeDirector({ onNav }) {
       positivePrompt,
       negativePrompt: STANDARD_NEGATIVE,
       recommendedEngine: 'OpenAI Image',
-      reason: 'Direct mode — structured brief sent straight to the engine, no backend compression.',
+      reason: 'Structured format optimized for OpenAI gpt-image-1.',
+    });
+  };
+
+  // FLUX build: natural language prompt + recommends FLUX Ultra for unrestricted editorial/sensual content.
+  // safety_tolerance=5 + raw=true are set in the backend for FLUX Pro/Ultra automatically.
+  const handleFluxBuild = () => {
+    const positivePrompt = buildFluxVision({
+      vision, gender, skinTone, hairStyle, hairColor,
+      eyeDetail, jewelry, clothing, features, mood, contentType, scene,
+    });
+    setOutputs({
+      positivePrompt,
+      negativePrompt: STANDARD_NEGATIVE,
+      recommendedEngine: 'Replicate FLUX Ultra',
+      reason: 'Natural language format optimized for FLUX Pro/Ultra. Backend uses raw mode + safety_tolerance 5 for unrestricted editorial output.',
     });
   };
 
@@ -321,7 +378,10 @@ export function TheeDirector({ onNav }) {
           {error && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
 
           <Button variant="primary" onClick={handleDirectBuild} style={{ width: '100%' }}>
-            <Icon name="zap" size={15} /> Direct Build — OpenAI / Cloud
+            <Icon name="zap" size={15} /> Direct Build — OpenAI
+          </Button>
+          <Button variant="dark" onClick={handleFluxBuild} style={{ width: '100%' }}>
+            <Icon name="flame" size={15} /> Direct Build — FLUX Unrestricted
           </Button>
           <Button variant="secondary" loading={loading} onClick={handleBuild} style={{ width: '100%' }}>
             <Icon name="wand-2" size={15} /> {loading ? 'Building…' : 'AI Refine — Local / ComfyUI'}

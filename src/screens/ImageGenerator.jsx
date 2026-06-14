@@ -14,6 +14,7 @@ const FALLBACK_ENGINES = [
   'Replicate FLUX Pro',
   'OpenAI Image',
   'Prompt Only',
+  'Uncensored Portrait XL',
   'Thee Studio Cloud Preview — Setup Needed',
   'Photoreal Portrait — Setup Needed',
   'Editorial Beauty — Setup Needed',

@@ -72,6 +72,17 @@ export function ImageGenerator({ initialPrompts }) {
     });
   }, []);
 
+  // When the live engine list loads, validate the current selection is still in it.
+  // Prevents a stale engine value (e.g. from a previous session) from slipping through.
+  React.useEffect(() => {
+    if (!engineOptions.length || !engine) return;
+    const valid = engineOptions.some(o => o.value === engine);
+    if (!valid) {
+      const ready = engineOptions.find(o => !o.value.includes('Setup Needed'));
+      if (ready) setEngine(ready.value);
+    }
+  }, [engineOptions]);
+
   // Pre-fill prompts when coming from Director
   React.useEffect(() => {
     if (initialPrompts?.positivePrompt) setPositive(initialPrompts.positivePrompt);

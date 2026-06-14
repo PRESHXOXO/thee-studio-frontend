@@ -42,10 +42,12 @@ const SCREENS = {
 
 export default function App() {
   const [activeNav, setActiveNav] = React.useState('home');
-  const [pendingPrompts, setPendingPrompts] = React.useState(null);
+  const [pendingPrompts,   setPendingPrompts]   = React.useState(null);
+  const [pendingCharacter, setPendingCharacter] = React.useState(null);
 
-  function handleNav(id, prompts) {
-    if (prompts) setPendingPrompts(prompts);
+  function handleNav(id, data) {
+    if (id === 'images'     && data) setPendingPrompts(data);
+    if (id === 'characters' && data) setPendingCharacter(data);
     setActiveNav(id);
   }
 
@@ -53,9 +55,8 @@ export default function App() {
   const screenLabel = SCREENS[activeNav]?.label || 'Studio Home';
 
   const screenProps = { onNav: handleNav };
-  if (activeNav === 'images' && pendingPrompts) {
-    screenProps.initialPrompts = pendingPrompts;
-  }
+  if (activeNav === 'images'     && pendingPrompts)   screenProps.initialPrompts   = pendingPrompts;
+  if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>

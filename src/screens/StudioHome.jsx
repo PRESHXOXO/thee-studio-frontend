@@ -59,6 +59,20 @@ function HighlightCard({ item }) {
 }
 
 export function StudioHome({ onNav }) {
+  const fileInputRef = React.useRef(null);
+
+  const handleImport = () => fileInputRef.current?.click();
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      onNav && onNav('characters', { image: ev.target.result, name: file.name.replace(/\.[^.]+$/, '') });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 48, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
 
@@ -72,7 +86,8 @@ export function StudioHome({ onNav }) {
           Build iconic creators. Produce stunning content. Scale campaigns with intelligence and intent.
         </p>
         <div style={{ display: 'flex', gap: 10 }}>
-          <Button variant="secondary" onClick={() => {}}>
+          <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
+          <Button variant="secondary" onClick={handleImport}>
             <Icon name="upload" size={15} /> Import
           </Button>
           <Button variant="primary" onClick={() => onNav && onNav('images')}>

@@ -150,9 +150,9 @@ const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', tex
 
 export function TheeDirector({ onNav }) {
   const [vision, setVision]           = React.useState('');
-  const [contentType, setContentType] = React.useState('');
-  const [mood, setMood]               = React.useState('');
-  const [outputGoal, setOutputGoal]   = React.useState('');
+  const [contentType, setContentType] = React.useState('Portrait');
+  const [mood, setMood]               = React.useState('Clean');
+  const [outputGoal, setOutputGoal]   = React.useState('Build Prompt Only');
   const [scene, setScene]             = React.useState('None');
   const [gender, setGender]           = React.useState('Unspecified');
   const [skinTone, setSkinTone]       = React.useState('Unspecified');

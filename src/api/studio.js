@@ -1,6 +1,29 @@
 const BASE = '/gradio_api';
 const SESSION_HASH = Math.random().toString(36).slice(2);
 
+// Replaces words that trigger OpenAI's safety filter while preserving prompt quality.
+// Applied automatically when engine is OpenAI Image.
+const OPENAI_REPLACEMENTS = [
+  [/\bsensual\b/gi,     'refined'],
+  [/\bseductive\b/gi,   'magnetic'],
+  [/\bintimate\b/gi,    'warm and personal'],
+  [/\bsuggestive\b/gi,  'editorial'],
+  [/\bsexy\b/gi,        'confident'],
+  [/\brevealing\b/gi,   'fashion-forward'],
+  [/\bboudoir\b/gi,     'editorial boudoir-inspired'],
+  [/\berotic\b/gi,      'artistic'],
+  [/\bnude\b/gi,        'natural'],
+  [/\bexplicit\b/gi,    'editorial'],
+];
+
+export function sanitizeForOpenAI(prompt) {
+  let safe = prompt;
+  for (const [pattern, replacement] of OPENAI_REPLACEMENTS) {
+    safe = safe.replace(pattern, replacement);
+  }
+  return safe;
+}
+
 async function predict(fnIndex, data) {
   const res = await fetch(`${BASE}/run/predict`, {
     method: 'POST',

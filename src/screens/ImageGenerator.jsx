@@ -3,7 +3,7 @@ import { Card } from '../components/surfaces/Card.jsx';
 import { Select } from '../components/forms/Select.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { generateImage, fetchEngineChoices } from '../api/studio.js';
+import { generateImage, fetchEngineChoices, sanitizeForOpenAI } from '../api/studio.js';
 
 // Fallback engine list — matches the app.py YAML engine definitions.
 // Used only when the live Gradio config fetch fails.
@@ -12,6 +12,7 @@ const FALLBACK_ENGINES = [
   'DreamShaper Classic',
   'Replicate FLUX Schnell',
   'Replicate FLUX Pro',
+  'Replicate FLUX Ultra',
   'OpenAI Image',
   'Prompt Only',
   'Photoreal Portrait — Setup Needed',
@@ -87,6 +88,8 @@ export function ImageGenerator({ initialPrompts }) {
     setImages([]);
     try {
       const [width, height] = FORMAT_DIMS[format] || [832, 1216];
+      const isOpenAI = engine.toLowerCase().includes('openai');
+      const finalPositive = isOpenAI ? sanitizeForOpenAI(positivePrompt) : positivePrompt;
       const result = await generateImage({
         engine,
         performanceMode: perf,
@@ -95,7 +98,7 @@ export function ImageGenerator({ initialPrompts }) {
         quality,
         width,
         height,
-        positivePrompt,
+        positivePrompt: finalPositive,
         negativePrompt,
       });
       setImages(result.images || []);

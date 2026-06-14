@@ -147,6 +147,72 @@ const SPECIAL_FEATURES = [
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', margin: 0 };
 
+function buildStructuredVision({ vision, gender, skinTone, hairStyle, hairColor, eyeDetail, jewelry, clothing, features, mood, contentType, scene }) {
+  const s = [];
+
+  s.push('Create an ultra-realistic 4K luxury editorial image.');
+
+  // Subject identity
+  const hasSubject = gender !== 'Unspecified' || skinTone !== 'Unspecified' || eyeDetail !== 'Unspecified';
+  if (hasSubject) {
+    const who = gender !== 'Unspecified' ? gender : 'person';
+    const skin = skinTone !== 'Unspecified'
+      ? `${skinTone} complexion with visible natural skin texture, subtle pores, natural highlights, slight imperfections, and believable dimensional warmth`
+      : '';
+    const eyes = eyeDetail !== 'Unspecified'
+      ? `${eyeDetail} eyes, softly expressive and realistic`
+      : '';
+    s.push(`SUBJECT: A confident, editorial-presence ${who}${skin ? `, ${skin}` : ''}${eyes ? `. ${eyes}` : ''}. The face should feel elegant, grounded, and real — natural facial asymmetry, soft expression, believable presence, premium editorial quality.`);
+  }
+
+  // Hair
+  if (hairStyle !== 'Unspecified' || hairColor !== 'Unspecified') {
+    const hair = [
+      hairStyle !== 'Unspecified' ? hairStyle : '',
+      hairColor !== 'Unspecified' ? `in ${hairColor}` : '',
+    ].filter(Boolean).join(' ');
+    s.push(`HAIR: ${hair}. Detailed and textured with natural frizz, fine flyaway hairs, realistic strand separation, small curly loose ends. The hair should catch light naturally showing realistic depth and shine — never plastic, never overly perfect.`);
+  }
+
+  // Wardrobe & styling
+  const hasWardrobe = clothing !== 'Unspecified' || jewelry !== 'None' || features !== 'None';
+  if (hasWardrobe) {
+    const items = [
+      clothing !== 'Unspecified' ? `${clothing} — realistic fabric texture, believable folds, tension at seams, and natural light interaction` : '',
+      jewelry !== 'None' ? jewelry : '',
+      features !== 'None' ? features : '',
+    ].filter(Boolean);
+    s.push(`WARDROBE & STYLING: ${items.join('. ')}. Everything should look expensive, editorial, and proportional — never cheap, never cartoonish.`);
+  }
+
+  // Scene / location
+  if (scene && scene !== 'None') {
+    s.push(`LOCATION: ${scene} setting. Luxury environment with polished surfaces, premium details, and refined atmosphere. Clean and controlled — expensive and aspirational without being cluttered.`);
+  }
+
+  // User's creative direction
+  if (vision) s.push(`CREATIVE DIRECTION: ${vision}`);
+
+  // Mood & brand
+  if (mood || contentType) {
+    s.push(`MOOD & BRAND: ${[mood, contentType].filter(Boolean).join(', ')} energy. The image should feel aspirational but believable — luxury without looking staged, forced, or overly commercial. Warm, intimate, and quietly expensive.`);
+  }
+
+  // Pose & composition
+  s.push('POSE & COMPOSITION: Natural, elegant editorial posture. Graceful and relaxed body language — never stiff, never exaggerated. Use premium editorial framing with intentional negative space, flattering three-quarter angle, natural proportions, and realistic anatomy. Suitable for a luxury campaign or high-end lifestyle magazine.');
+
+  // Lighting
+  s.push('LIGHTING: Warm dimensional lighting with realistic shadows and highlights. Light wraps naturally around skin, creating believable depth and warmth. Refined color grading — warm amber highlights, rich skin tones, no flat lighting, no harsh flash, no muddy shadows.');
+
+  // Camera & realism
+  s.push('CAMERA: Photorealistic editorial photography on a high-end full-frame camera (Sony A1, Canon R5, or Hasselblad). 85mm portrait lens, shallow depth of field, natural bokeh, crisp subject detail, soft background separation. High dynamic range, realistic lens behavior, clean focus, natural skin rendering, visible fabric texture, fine hair detail.');
+
+  // Quality controls
+  s.push('QUALITY: Ultra-realistic, 4K resolution, high-end commercial photography, premium editorial finish. Realistic skin texture with natural imperfections. No plastic skin, no waxy face, no over-smoothed beauty filter, no uncanny AI face, no distorted hands, no broken anatomy, no extra fingers, believable fabric physics, no floating elements, no oversaturated colors, no cartoonish luxury styling.');
+
+  return s.join('\n\n');
+}
+
 export function TheeDirector({ onNav }) {
   const [vision, setVision]           = React.useState('');
   const [contentType, setContentType] = React.useState('Portrait');
@@ -169,26 +235,10 @@ export function TheeDirector({ onNav }) {
     setError('');
     setLoading(true);
     try {
-      // Build a rich subject descriptor and inject into vision
-      const subjectParts = [
-        gender !== 'Unspecified' ? gender : '',
-        skinTone !== 'Unspecified' ? `${skinTone} skin` : '',
-        hairStyle !== 'Unspecified' ? `${hairStyle}${hairColor !== 'Unspecified' ? `, ${hairColor}` : ''}` : '',
-        eyeDetail !== 'Unspecified' ? `${eyeDetail} eyes` : '',
-        jewelry !== 'None' ? jewelry : '',
-        clothing !== 'Unspecified' ? `${clothing} styling` : '',
-        features !== 'None' ? features : '',
-      ].filter(Boolean);
-
-      const subjectBlock = subjectParts.length
-        ? `Subject: ${subjectParts.join(', ')}.`
-        : '';
-
-      const enrichedVision = [
-        subjectBlock,
-        vision,
-        'photorealistic, ultra-detailed skin texture, natural imperfections, fine hair detail, fabric texture, intentional lighting.',
-      ].filter(Boolean).join(' ').trim();
+      const enrichedVision = buildStructuredVision({
+        vision, gender, skinTone, hairStyle, hairColor,
+        eyeDetail, jewelry, clothing, features, mood, contentType, scene,
+      });
 
       const result = await buildDirectorOutputs({
         vision: enrichedVision,
@@ -199,7 +249,14 @@ export function TheeDirector({ onNav }) {
         scene: scene || 'None',
         useIdentityLock: false,
       });
-      setOutputs(result);
+
+      // Append comprehensive quality negative prompt to whatever the backend returns
+      const NEGATIVE_QUALITY = 'low resolution, blurry, soft focus on subject, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, uneven eyes, warped hands, extra fingers, missing fingers, broken anatomy, unnatural body proportions, twisted limbs, stiff pose, flat lighting, harsh flash, muddy shadows, oversaturated colors, cluttered background, cartoon styling, floating tattoos, tattoo distortion, fake jewelry, bad fabric physics, poor composition, cropped limbs, awkward framing, generic influencer photo, artificial smile, lifeless expression, overprocessed HDR, grainy image, noisy image, unrealistic skin color, washed-out skin tone, dull hair texture, plastic hair, duplicate body parts, distorted face';
+      const enhancedNegative = result.negativePrompt
+        ? `${result.negativePrompt}, ${NEGATIVE_QUALITY}`
+        : NEGATIVE_QUALITY;
+
+      setOutputs({ ...result, negativePrompt: enhancedNegative });
     } catch (e) {
       setError(`Error: ${e?.message || String(e)}`);
     } finally {

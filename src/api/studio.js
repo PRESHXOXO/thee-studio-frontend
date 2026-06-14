@@ -150,5 +150,16 @@ export async function generateImage({
     imageStyle, positivePrompt, negativePrompt, imageSize,
     quality, batchSize, seed, cfg, steps, width, height,
   ]);
-  return { images: data[0] || [], status: data[1] || '' };
+
+  // Gradio 6.x gallery returns objects like { url: "http://127.0.0.1:7860/gradio_api/file=..." }
+  // Rewrite to relative /gradio_api/... so our Vite proxy can serve them.
+  const gallery = data[0] || [];
+  const images = gallery.map(item => {
+    let url = typeof item === 'string' ? item : (item?.url || item?.image?.url || '');
+    url = url.replace(/^https?:\/\/127\.0\.0\.1:7860\/gradio_api/, '/gradio_api');
+    url = url.replace(/^https?:\/\/127\.0\.0\.1:7860/, '/gradio_api');
+    return url;
+  }).filter(Boolean);
+
+  return { images, status: data[1] || '' };
 }

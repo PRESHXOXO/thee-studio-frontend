@@ -150,65 +150,65 @@ const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', tex
 function buildStructuredVision({ vision, gender, skinTone, hairStyle, hairColor, eyeDetail, jewelry, clothing, features, mood, contentType, scene }) {
   const s = [];
 
-  s.push('Create an ultra-realistic 4K luxury editorial image.');
+  s.push('Ultra-realistic 4K commercial lifestyle photography. Shot for a premium fashion and lifestyle brand campaign. The final image must look like a high-end photograph taken on a professional camera — not AI-generated, not illustrated, not stylized.');
 
-  // Subject identity
+  // Subject — framed as casting/creative direction, no body language
   const hasSubject = gender !== 'Unspecified' || skinTone !== 'Unspecified' || eyeDetail !== 'Unspecified';
   if (hasSubject) {
-    const who = gender !== 'Unspecified' ? gender : 'person';
+    const who = gender !== 'Unspecified' ? gender : 'talent';
     const skin = skinTone !== 'Unspecified'
-      ? `${skinTone} complexion with visible natural skin texture, subtle pores, natural highlights, slight imperfections, and believable dimensional warmth`
+      ? `${skinTone} complexion. Skin should render with realistic texture — visible pores, natural highlights, subtle variations in tone, no plastic or airbrushed appearance`
       : '';
     const eyes = eyeDetail !== 'Unspecified'
-      ? `${eyeDetail} eyes, softly expressive and realistic`
+      ? `${eyeDetail} eyes. Eye rendering should be sharp, wet, dimensional, and lifelike`
       : '';
-    s.push(`SUBJECT: A confident, editorial-presence ${who}${skin ? `, ${skin}` : ''}${eyes ? `. ${eyes}` : ''}. The face should feel elegant, grounded, and real — natural facial asymmetry, soft expression, believable presence, premium editorial quality.`);
+    s.push(`TALENT / CASTING: ${who}${skin ? `. ${skin}` : ''}${eyes ? `. ${eyes}` : ''}. Face must look photorealistic — natural facial asymmetry, real skin imperfections, grounded expression, believable editorial presence. No smoothed-out AI face, no uncanny valley.`);
   }
 
-  // Hair
+  // Hair — framed as styling direction
   if (hairStyle !== 'Unspecified' || hairColor !== 'Unspecified') {
     const hair = [
       hairStyle !== 'Unspecified' ? hairStyle : '',
       hairColor !== 'Unspecified' ? `in ${hairColor}` : '',
-    ].filter(Boolean).join(' ');
-    s.push(`HAIR: ${hair}. Detailed and textured with natural frizz, fine flyaway hairs, realistic strand separation, small curly loose ends. The hair should catch light naturally showing realistic depth and shine — never plastic, never overly perfect.`);
+    ].filter(Boolean).join(', ');
+    s.push(`HAIR STYLING: ${hair}. Render with full strand-level detail — individual hair texture, natural frizz, fine flyaways, realistic shine and depth. Hair should interact naturally with light and gravity. Never plastic, never helmet-like, never overly perfect.`);
   }
 
-  // Wardrobe & styling
+  // Wardrobe — framed as costume/styling notes
   const hasWardrobe = clothing !== 'Unspecified' || jewelry !== 'None' || features !== 'None';
   if (hasWardrobe) {
     const items = [
-      clothing !== 'Unspecified' ? `${clothing} — realistic fabric texture, believable folds, tension at seams, and natural light interaction` : '',
-      jewelry !== 'None' ? jewelry : '',
-      features !== 'None' ? features : '',
+      clothing !== 'Unspecified' ? `${clothing} — render fabric with realistic texture, natural folds, tension at seams, and accurate light response` : '',
+      jewelry !== 'None' ? `Accessories: ${jewelry} — render with accurate material finish, realistic reflections, true-to-life scale` : '',
+      features !== 'None' ? `Notable features: ${features} — render naturally, embedded in skin, following body contours` : '',
     ].filter(Boolean);
-    s.push(`WARDROBE & STYLING: ${items.join('. ')}. Everything should look expensive, editorial, and proportional — never cheap, never cartoonish.`);
+    s.push(`WARDROBE & ACCESSORIES: ${items.join('. ')}. All items must look expensive, real, and brand-accurate. No fake-looking materials, no floating accessories, no distorted logos.`);
   }
 
-  // Scene / location
+  // Location
   if (scene && scene !== 'None') {
-    s.push(`LOCATION: ${scene} setting. Luxury environment with polished surfaces, premium details, and refined atmosphere. Clean and controlled — expensive and aspirational without being cluttered.`);
+    s.push(`LOCATION: ${scene}. Premium environment with authentic architectural detail, polished surfaces, and controlled depth. Background should feel real and expensive — never stock-photo generic, never CGI.`);
   }
 
-  // User's creative direction
-  if (vision) s.push(`CREATIVE DIRECTION: ${vision}`);
+  // Creative direction from user
+  if (vision) s.push(`ART DIRECTION: ${vision}`);
 
-  // Mood & brand
+  // Mood & content type
   if (mood || contentType) {
-    s.push(`MOOD & BRAND: ${[mood, contentType].filter(Boolean).join(', ')} energy. The image should feel aspirational but believable — luxury without looking staged, forced, or overly commercial. Warm, intimate, and quietly expensive.`);
+    s.push(`CAMPAIGN FEEL: ${[contentType, mood].filter(Boolean).join(' — ')}. The image should feel like it belongs in a premium editorial spread or luxury brand campaign. Aspirational, believable, and polished — never staged or forced.`);
   }
 
   // Pose & composition
-  s.push('POSE & COMPOSITION: Natural, elegant editorial posture. Graceful and relaxed body language — never stiff, never exaggerated. Use premium editorial framing with intentional negative space, flattering three-quarter angle, natural proportions, and realistic anatomy. Suitable for a luxury campaign or high-end lifestyle magazine.');
+  s.push('POSE & COMPOSITION: Natural, confident posture appropriate for a premium lifestyle shoot. Candid-feeling but composed — editorial without being stiff. Flattering three-quarter or portrait angle. Intentional negative space. Realistic anatomy and natural proportions. Framing suitable for Instagram, campaign billboard, or magazine spread.');
 
   // Lighting
-  s.push('LIGHTING: Warm dimensional lighting with realistic shadows and highlights. Light wraps naturally around skin, creating believable depth and warmth. Refined color grading — warm amber highlights, rich skin tones, no flat lighting, no harsh flash, no muddy shadows.');
+  s.push('LIGHTING: Soft, dimensional natural or studio lighting. Light wraps realistically around the subject — highlights on cheekbones, shoulders, hair, and clothing. Believable shadow depth. Warm and refined color grading. No flat lighting, no harsh flash, no overexposed background, no muddy shadows.');
 
-  // Camera & realism
-  s.push('CAMERA: Photorealistic editorial photography on a high-end full-frame camera (Sony A1, Canon R5, or Hasselblad). 85mm portrait lens, shallow depth of field, natural bokeh, crisp subject detail, soft background separation. High dynamic range, realistic lens behavior, clean focus, natural skin rendering, visible fabric texture, fine hair detail.');
+  // Camera
+  s.push('CAMERA SPECS: Shot on Sony A1, Canon EOS R5, or equivalent professional full-frame camera. 50mm–85mm portrait lens. Shallow depth of field with natural bokeh on background. Crisp focus on subject face and styling details. High dynamic range. Realistic lens behavior — no AI softness, no lens distortion.');
 
-  // Quality controls
-  s.push('QUALITY: Ultra-realistic, 4K resolution, high-end commercial photography, premium editorial finish. Realistic skin texture with natural imperfections. No plastic skin, no waxy face, no over-smoothed beauty filter, no uncanny AI face, no distorted hands, no broken anatomy, no extra fingers, believable fabric physics, no floating elements, no oversaturated colors, no cartoonish luxury styling.');
+  // Quality
+  s.push('QUALITY REQUIREMENTS: Ultra-realistic photograph. 4K resolution. Professional commercial retouching — natural, not over-processed. Realistic skin texture and pores. Accurate fabric physics. Sharp accessory detail. Correct human anatomy. No distorted hands or fingers. No AI artifacts. No uncanny face. No floating elements. No oversaturated colors. No cheap or incorrect brand details.');
 
   return s.join('\n\n');
 }

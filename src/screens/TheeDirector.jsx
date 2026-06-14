@@ -124,7 +124,6 @@ const CLOTHING_VIBES = [
   { value: 'business power: tailored blazer, Saint Laurent, minimal', label: 'Business Power — tailored' },
   { value: 'resort glam: Zimmermann, flowy dress, sun hat', label: 'Resort Glam — Zimmermann' },
   { value: 'athleisure luxury: Skims, Lululemon, sleek sneakers', label: 'Athleisure — Skims / Lululemon' },
-  { value: 'boudoir: silk robe, lace, soft luxury intimates', label: 'Boudoir — silk + lace' },
   { value: 'denim elevated: custom denim, cropped jacket, boots', label: 'Elevated Denim' },
   { value: 'monochrome minimal: tonal outfit, clean lines, Celine', label: 'Monochrome Minimal — Celine' },
   { value: 'Y2K glam: low rise, butterfly clips, rhinestones', label: 'Y2K Glam' },

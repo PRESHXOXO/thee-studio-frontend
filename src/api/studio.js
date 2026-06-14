@@ -61,9 +61,11 @@ async function readSSE(response) {
 // creative_engine_input.change = 0
 // update_image_generator_status × 9 (for loop over 9 controls) = indices 1–9
 // build_director_button.click = 10
+// ... 38 more handlers ...
+// generate_image_button.click = 49
 const FN = {
   build_director_outputs: 10,
-  generate_image: 43,
+  generate_image: 49,
 };
 
 export async function buildDirectorOutputs({

@@ -5,32 +5,47 @@ import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { generateImage } from '../api/studio.js';
 
-const ENGINE_OPTIONS    = ['FLUX Schnell', 'OpenAI Image', 'Local ComfyUI'].map(v => ({ value: v, label: v }));
-const PERF_OPTIONS      = ['Fast', 'Balanced', 'Best'].map(v => ({ value: v, label: v }));
-const STYLE_OPTIONS     = ['Editorial', 'Beauty', 'UGC', 'Product'].map(v => ({ value: v, label: v }));
-const FORMAT_OPTIONS    = ['9:16', '4:5', '1:1', '3:4'].map(v => ({ value: v, label: v }));
-const QUALITY_OPTIONS   = ['Draft', 'High', 'Master'].map(v => ({ value: v, label: v }));
+const ENGINE_OPTIONS  = ['FLUX Schnell', 'OpenAI Image', 'Local ComfyUI'].map(v => ({ value: v, label: v }));
+const PERF_OPTIONS    = ['Fast', 'Balanced', 'Best'].map(v => ({ value: v, label: v }));
+const STYLE_OPTIONS   = ['Editorial', 'Beauty', 'UGC', 'Product'].map(v => ({ value: v, label: v }));
+const FORMAT_OPTIONS  = ['9:16', '4:5', '1:1', '3:4'].map(v => ({ value: v, label: v }));
+const QUALITY_OPTIONS = ['Draft', 'High', 'Master'].map(v => ({ value: v, label: v }));
 
 const FORMAT_DIMS = { '9:16': [576, 1024], '4:5': [640, 800], '1:1': [768, 768], '3:4': [768, 1024] };
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 };
 
-export function ImageGenerator() {
-  const [engine, setEngine]   = React.useState('FLUX Schnell');
-  const [perf, setPerf]       = React.useState('Balanced');
-  const [style, setStyle]     = React.useState('Editorial');
-  const [format, setFormat]   = React.useState('9:16');
-  const [quality, setQuality] = React.useState('High');
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError]     = React.useState('');
-  const [images, setImages]   = React.useState([]);
+const TEXTAREA = {
+  width: '100%', boxSizing: 'border-box', resize: 'vertical',
+  minHeight: 80, padding: '10px 12px',
+  background: 'var(--input-bg, #fff)', border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)',
+  lineHeight: 1.5, outline: 'none', fontFamily: 'inherit',
+};
+
+export function ImageGenerator({ initialPrompts }) {
+  const [engine, setEngine]           = React.useState('FLUX Schnell');
+  const [perf, setPerf]               = React.useState('Balanced');
+  const [style, setStyle]             = React.useState('Editorial');
+  const [format, setFormat]           = React.useState('9:16');
+  const [quality, setQuality]         = React.useState('High');
+  const [positivePrompt, setPositive] = React.useState('');
+  const [negativePrompt, setNegative] = React.useState('');
+  const [loading, setLoading]         = React.useState(false);
+  const [error, setError]             = React.useState('');
+  const [images, setImages]           = React.useState([]);
+
+  React.useEffect(() => {
+    if (initialPrompts?.positivePrompt) setPositive(initialPrompts.positivePrompt);
+    if (initialPrompts?.negativePrompt) setNegative(initialPrompts.negativePrompt);
+  }, [initialPrompts]);
 
   const handleGenerate = async () => {
     setError('');
     setLoading(true);
     setImages([]);
     try {
-      const [width, height] = FORMAT_DIMS[format] || [768, 1024];
+      const [width, height] = FORMAT_DIMS[format] || [576, 1024];
       const result = await generateImage({
         engine,
         performanceMode: perf,
@@ -38,12 +53,12 @@ export function ImageGenerator() {
         quality,
         width,
         height,
-        positivePrompt: '',
-        negativePrompt: '',
+        positivePrompt,
+        negativePrompt,
       });
       setImages(result.images || []);
-    } catch {
-      setError('Backend not connected. Start your Gradio app on port 7860 to generate.');
+    } catch (e) {
+      setError(e?.message || 'Generation failed. Make sure your Gradio app is running on port 7860.');
     } finally {
       setLoading(false);
     }
@@ -64,8 +79,8 @@ export function ImageGenerator() {
         </Button>
       </div>
 
-      {/* 5-control bar */}
-      <Card style={{ padding: '20px 24px' }}>
+      {/* Controls + prompts */}
+      <Card style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
           <div>
             <div style={LABEL}>Engine</div>
@@ -88,11 +103,32 @@ export function ImageGenerator() {
             <Select value={quality} onChange={setQuality} options={QUALITY_OPTIONS} />
           </div>
         </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div>
+            <div style={LABEL}>Positive Prompt</div>
+            <textarea
+              style={TEXTAREA}
+              value={positivePrompt}
+              onChange={e => setPositive(e.target.value)}
+              placeholder="Describe what you want to generate…"
+            />
+          </div>
+          <div>
+            <div style={LABEL}>Negative Prompt</div>
+            <textarea
+              style={TEXTAREA}
+              value={negativePrompt}
+              onChange={e => setNegative(e.target.value)}
+              placeholder="Describe what to avoid…"
+            />
+          </div>
+        </div>
       </Card>
 
       {error && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
 
-      {/* Canvas / Output */}
+      {/* Output canvas */}
       {images.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
           {images.map((src, i) => (

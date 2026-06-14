@@ -146,7 +146,10 @@ export function TheeDirector({ onNav }) {
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <Button
               variant="secondary"
-              onClick={() => onNav && onNav('images')}
+              onClick={() => onNav && onNav('images', {
+                positivePrompt: outputs?.positivePrompt || '',
+                negativePrompt: outputs?.negativePrompt || '',
+              })}
               style={{ flex: 1 }}
               disabled={!outputs?.positivePrompt}
             >

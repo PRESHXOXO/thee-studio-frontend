@@ -12,6 +12,7 @@ const FALLBACK_ENGINES = [
   'DreamShaper Classic',
   'Replicate FLUX Schnell',
   'Replicate FLUX Pro',
+  'Replicate NSFW XL',
   'OpenAI Image',
   'Prompt Only',
   'Uncensored Portrait XL',

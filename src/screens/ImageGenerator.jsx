@@ -60,6 +60,7 @@ export function ImageGenerator({ initialPrompts }) {
   const [negativePrompt, setNegative]     = React.useState('');
   const [loading, setLoading]             = React.useState(false);
   const [error, setError]                 = React.useState('');
+  const [status, setStatus]               = React.useState('');
   const [images, setImages]               = React.useState([]);
 
   // Load engine list from Gradio on mount; fall back to known list
@@ -81,6 +82,7 @@ export function ImageGenerator({ initialPrompts }) {
 
   const handleGenerate = async () => {
     setError('');
+    setStatus('');
     setLoading(true);
     setImages([]);
     try {
@@ -97,6 +99,7 @@ export function ImageGenerator({ initialPrompts }) {
         negativePrompt,
       });
       setImages(result.images || []);
+      if (result.status) setStatus(result.status);
     } catch (e) {
       setError(e?.message || 'Generation failed. Make sure your Gradio app is running on port 7860.');
     } finally {
@@ -176,7 +179,8 @@ export function ImageGenerator({ initialPrompts }) {
         </div>
       </Card>
 
-      {error && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
+      {error  && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
+      {status && !error && <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', margin: 0 }}>{status}</p>}
 
       {/* Output canvas */}
       {images.length > 0 ? (

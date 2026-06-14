@@ -68,6 +68,22 @@ const FN = {
   generate_image: 49,
 };
 
+// Fetch the Creative Engine dropdown choices live from the Gradio config.
+// Falls back to null if the backend is unreachable.
+export async function fetchEngineChoices() {
+  try {
+    const res = await fetch(`${BASE}/config`);
+    if (!res.ok) return null;
+    const config = await res.json();
+    for (const comp of config.components || []) {
+      if (comp.props?.label === 'Creative Engine' && comp.props?.choices) {
+        return comp.props.choices.map(c => (Array.isArray(c) ? c[0] : c));
+      }
+    }
+  } catch {}
+  return null;
+}
+
 export async function buildDirectorOutputs({
   vision = '',
   contentType = '',
@@ -92,21 +108,21 @@ export async function buildDirectorOutputs({
 }
 
 export async function generateImage({
-  engine = 'FLUX Schnell',
+  engine = '',
   performanceMode = 'Balanced',
   comfyServerUrl = 'http://127.0.0.1:8188',
   comfyWorkflowPath = '',
-  imageStyle = 'Editorial',
+  imageStyle = 'Editorial Portrait',
   positivePrompt = '',
   negativePrompt = '',
-  imageSize = '512x768',
+  imageSize = 'Vertical 9:16',
   quality = 'High',
   batchSize = 1,
   seed = -1,
   cfg = 7,
   steps = 20,
-  width = 512,
-  height = 768,
+  width = 832,
+  height = 1216,
 } = {}) {
   const data = await predict(FN.generate_image, [
     engine, performanceMode, comfyServerUrl, comfyWorkflowPath,

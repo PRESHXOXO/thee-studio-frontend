@@ -3,15 +3,25 @@ import { Card } from '../components/surfaces/Card.jsx';
 import { Select } from '../components/forms/Select.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { generateImage } from '../api/studio.js';
+import { generateImage, fetchEngineChoices } from '../api/studio.js';
 
-const ENGINE_OPTIONS  = ['FLUX Schnell', 'OpenAI Image', 'Local ComfyUI'].map(v => ({ value: v, label: v }));
-const PERF_OPTIONS    = ['Fast', 'Balanced', 'Best'].map(v => ({ value: v, label: v }));
-const STYLE_OPTIONS   = ['Editorial', 'Beauty', 'UGC', 'Product'].map(v => ({ value: v, label: v }));
-const FORMAT_OPTIONS  = ['9:16', '4:5', '1:1', '3:4'].map(v => ({ value: v, label: v }));
-const QUALITY_OPTIONS = ['Draft', 'High', 'Master'].map(v => ({ value: v, label: v }));
+// These match the backend constants exactly
+const PERF_OPTIONS    = ['Safe CPU', 'Fast Draft', 'Balanced', 'High Detail'].map(v => ({ value: v, label: v }));
+const STYLE_OPTIONS   = ['Editorial Portrait', 'Lifestyle Creator', 'Product Shot', 'Fashion Lookbook', 'Beauty Close-Up', 'Cinematic Scene'].map(v => ({ value: v, label: v }));
+const FORMAT_OPTIONS  = [
+  { value: 'Vertical 9:16',   label: 'Vertical 9:16' },
+  { value: 'Instagram 4:5',   label: 'Instagram 4:5' },
+  { value: 'Square 1:1',      label: 'Square 1:1' },
+  { value: 'Landscape 16:9',  label: 'Landscape 16:9' },
+];
+const QUALITY_OPTIONS = ['Draft', 'Standard', 'High'].map(v => ({ value: v, label: v }));
 
-const FORMAT_DIMS = { '9:16': [576, 1024], '4:5': [640, 800], '1:1': [768, 768], '3:4': [768, 1024] };
+const FORMAT_DIMS = {
+  'Vertical 9:16':  [832,  1216],
+  'Instagram 4:5':  [896,  1120],
+  'Square 1:1':     [1024, 1024],
+  'Landscape 16:9': [1216, 832],
+};
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 };
 
@@ -24,17 +34,32 @@ const TEXTAREA = {
 };
 
 export function ImageGenerator({ initialPrompts }) {
-  const [engine, setEngine]           = React.useState('FLUX Schnell');
-  const [perf, setPerf]               = React.useState('Balanced');
-  const [style, setStyle]             = React.useState('Editorial');
-  const [format, setFormat]           = React.useState('9:16');
-  const [quality, setQuality]         = React.useState('High');
-  const [positivePrompt, setPositive] = React.useState('');
-  const [negativePrompt, setNegative] = React.useState('');
-  const [loading, setLoading]         = React.useState(false);
-  const [error, setError]             = React.useState('');
-  const [images, setImages]           = React.useState([]);
+  const [engineOptions, setEngineOptions] = React.useState([]);
+  const [engine, setEngine]               = React.useState('');
+  const [perf, setPerf]                   = React.useState('Balanced');
+  const [style, setStyle]                 = React.useState('Editorial Portrait');
+  const [format, setFormat]               = React.useState('Vertical 9:16');
+  const [quality, setQuality]             = React.useState('High');
+  const [positivePrompt, setPositive]     = React.useState('');
+  const [negativePrompt, setNegative]     = React.useState('');
+  const [loading, setLoading]             = React.useState(false);
+  const [error, setError]                 = React.useState('');
+  const [images, setImages]               = React.useState([]);
 
+  // Load engine list from Gradio on mount
+  React.useEffect(() => {
+    fetchEngineChoices().then(choices => {
+      if (choices?.length) {
+        const opts = choices.map(c => ({ value: c, label: c }));
+        setEngineOptions(opts);
+        // Default to first non-"Setup Needed" engine
+        const ready = choices.find(c => !c.includes('Setup Needed') && !c.includes('Disabled'));
+        setEngine(ready || choices[0]);
+      }
+    });
+  }, []);
+
+  // Pre-fill prompts when coming from Director
   React.useEffect(() => {
     if (initialPrompts?.positivePrompt) setPositive(initialPrompts.positivePrompt);
     if (initialPrompts?.negativePrompt) setNegative(initialPrompts.negativePrompt);
@@ -45,11 +70,12 @@ export function ImageGenerator({ initialPrompts }) {
     setLoading(true);
     setImages([]);
     try {
-      const [width, height] = FORMAT_DIMS[format] || [576, 1024];
+      const [width, height] = FORMAT_DIMS[format] || [832, 1216];
       const result = await generateImage({
         engine,
         performanceMode: perf,
         imageStyle: style,
+        imageSize: format,
         quality,
         width,
         height,
@@ -64,6 +90,11 @@ export function ImageGenerator({ initialPrompts }) {
     }
   };
 
+  const aspectStyle = format === 'Vertical 9:16' ? '9/16'
+    : format === 'Instagram 4:5' ? '4/5'
+    : format === 'Square 1:1' ? '1/1'
+    : '16/9';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
 
@@ -74,7 +105,7 @@ export function ImageGenerator({ initialPrompts }) {
           <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 10px' }}>Image Generator</h1>
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 480 }}>Create studio-grade imagery with precision and style.</p>
         </div>
-        <Button variant="primary" loading={loading} onClick={handleGenerate}>
+        <Button variant="primary" loading={loading} onClick={handleGenerate} disabled={!engine}>
           <Icon name="sparkles" size={15} /> Generate
         </Button>
       </div>
@@ -84,7 +115,12 @@ export function ImageGenerator({ initialPrompts }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
           <div>
             <div style={LABEL}>Engine</div>
-            <Select value={engine} onChange={setEngine} options={ENGINE_OPTIONS} />
+            <Select
+              value={engine}
+              onChange={setEngine}
+              options={engineOptions}
+              placeholder={engineOptions.length ? 'Select engine…' : 'Loading…'}
+            />
           </div>
           <div>
             <div style={LABEL}>Performance</div>
@@ -141,7 +177,7 @@ export function ImageGenerator({ initialPrompts }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} style={{
-              aspectRatio: format === '9:16' ? '9/16' : format === '4:5' ? '4/5' : format === '3:4' ? '3/4' : '1/1',
+              aspectRatio: aspectStyle,
               borderRadius: 'var(--radius-lg)',
               background: loading ? 'var(--grad-portrait)' : 'var(--rose-glass)',
               border: '1px solid var(--border)',

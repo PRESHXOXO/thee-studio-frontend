@@ -102,6 +102,10 @@ export function ImageGenerator({ initialPrompts }) {
         ? engine
         : validEngines.find(v => !v.includes('Setup Needed')) || validEngines[0];
 
+      if (!safeEngine) {
+        throw new Error('No engine selected. Wait for the engine list to load, then try again.');
+      }
+
       const [width, height] = FORMAT_DIMS[format] || [832, 1216];
       const isOpenAI = safeEngine.toLowerCase().includes('openai');
       const finalPositive = isOpenAI ? sanitizeForOpenAI(positivePrompt) : positivePrompt;

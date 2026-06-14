@@ -71,12 +71,15 @@ export async function buildDirectorOutputs({
   contentType = '',
   mood = '',
   outputGoal = '',
-  character = '',
-  scene = '',
+  character = 'None',
+  scene = 'None',
   useIdentityLock = false,
 } = {}) {
   const data = await predict(FN.build_director_outputs, [
-    vision, contentType, mood, outputGoal, character, scene, useIdentityLock,
+    vision, contentType, mood, outputGoal,
+    character || 'None',
+    scene || 'None',
+    useIdentityLock,
   ]);
   return {
     positivePrompt:    data[0] || '',

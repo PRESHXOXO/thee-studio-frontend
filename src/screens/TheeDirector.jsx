@@ -231,6 +231,24 @@ export function TheeDirector({ onNav }) {
   const [error, setError]             = React.useState('');
   const [outputs, setOutputs]         = React.useState(null);
 
+  const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, missing fingers, broken anatomy, unnatural body proportions, stiff pose, flat lighting, harsh flash, oversaturated colors, cluttered background, cartoon styling, floating tattoos, fake jewelry, bad fabric physics, cropped limbs, generic photo, artificial smile, lifeless expression, overprocessed HDR, grainy, noisy, unrealistic skin color, washed-out skin, plastic hair, duplicate body parts, distorted face';
+
+  // Direct mode: bypasses Gradio backend, sends our structured brief straight to OpenAI/Replicate.
+  // Better quality for cloud engines — no detail lost to backend AI compression.
+  const handleDirectBuild = () => {
+    const positivePrompt = buildStructuredVision({
+      vision, gender, skinTone, hairStyle, hairColor,
+      eyeDetail, jewelry, clothing, features, mood, contentType, scene,
+    });
+    setOutputs({
+      positivePrompt,
+      negativePrompt: STANDARD_NEGATIVE,
+      recommendedEngine: 'OpenAI Image',
+      reason: 'Direct mode — structured brief sent straight to the engine, no backend compression.',
+    });
+  };
+
+  // Standard mode: sends to Gradio backend AI for refinement (better for local ComfyUI engines).
   const handleBuild = async () => {
     setError('');
     setLoading(true);
@@ -250,11 +268,9 @@ export function TheeDirector({ onNav }) {
         useIdentityLock: false,
       });
 
-      // Append comprehensive quality negative prompt to whatever the backend returns
-      const NEGATIVE_QUALITY = 'low resolution, blurry, soft focus on subject, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, uneven eyes, warped hands, extra fingers, missing fingers, broken anatomy, unnatural body proportions, twisted limbs, stiff pose, flat lighting, harsh flash, muddy shadows, oversaturated colors, cluttered background, cartoon styling, floating tattoos, tattoo distortion, fake jewelry, bad fabric physics, poor composition, cropped limbs, awkward framing, generic influencer photo, artificial smile, lifeless expression, overprocessed HDR, grainy image, noisy image, unrealistic skin color, washed-out skin tone, dull hair texture, plastic hair, duplicate body parts, distorted face';
       const enhancedNegative = result.negativePrompt
-        ? `${result.negativePrompt}, ${NEGATIVE_QUALITY}`
-        : NEGATIVE_QUALITY;
+        ? `${result.negativePrompt}, ${STANDARD_NEGATIVE}`
+        : STANDARD_NEGATIVE;
 
       setOutputs({ ...result, negativePrompt: enhancedNegative });
     } catch (e) {
@@ -304,8 +320,11 @@ export function TheeDirector({ onNav }) {
 
           {error && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
 
-          <Button variant="primary" loading={loading} onClick={handleBuild} style={{ width: '100%' }}>
-            <Icon name="wand-2" size={15} /> {loading ? 'Building…' : 'Build Prompts'}
+          <Button variant="primary" onClick={handleDirectBuild} style={{ width: '100%' }}>
+            <Icon name="zap" size={15} /> Direct Build — OpenAI / Cloud
+          </Button>
+          <Button variant="secondary" loading={loading} onClick={handleBuild} style={{ width: '100%' }}>
+            <Icon name="wand-2" size={15} /> {loading ? 'Building…' : 'AI Refine — Local / ComfyUI'}
           </Button>
         </Card>
 

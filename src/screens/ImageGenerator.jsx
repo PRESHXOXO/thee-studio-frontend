@@ -95,11 +95,18 @@ export function ImageGenerator({ initialPrompts }) {
     setLoading(true);
     setImages([]);
     try {
+      // Ensure the selected engine is actually in the live list before sending.
+      // If it's stale (e.g. from a previous session), fall back to first valid option.
+      const validEngines = engineOptions.map(o => o.value);
+      const safeEngine = validEngines.includes(engine)
+        ? engine
+        : validEngines.find(v => !v.includes('Setup Needed')) || validEngines[0];
+
       const [width, height] = FORMAT_DIMS[format] || [832, 1216];
-      const isOpenAI = engine.toLowerCase().includes('openai');
+      const isOpenAI = safeEngine.toLowerCase().includes('openai');
       const finalPositive = isOpenAI ? sanitizeForOpenAI(positivePrompt) : positivePrompt;
       const result = await generateImage({
-        engine,
+        engine: safeEngine,
         performanceMode: perf,
         imageStyle: style,
         imageSize: format,

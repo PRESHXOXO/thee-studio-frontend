@@ -12,14 +12,11 @@ const FALLBACK_ENGINES = [
   'DreamShaper Classic',
   'Replicate FLUX Schnell',
   'Replicate FLUX Pro',
-  'Replicate FLUX Ultra',
   'OpenAI Image',
   'Prompt Only',
+  'Thee Studio Cloud Preview — Setup Needed',
   'Photoreal Portrait — Setup Needed',
   'Editorial Beauty — Setup Needed',
-  'Fashion Campaign — Setup Needed',
-  'Product Shot — Setup Needed',
-  'Cinematic Still — Setup Needed',
 ];
 
 // These match the backend constants exactly

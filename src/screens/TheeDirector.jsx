@@ -300,8 +300,8 @@ export function TheeDirector({ onNav }) {
     setOutputs({
       positivePrompt,
       negativePrompt: STANDARD_NEGATIVE,
-      recommendedEngine: 'Replicate FLUX Ultra',
-      reason: 'Natural language format optimized for FLUX Pro/Ultra. Backend uses raw mode + safety_tolerance 5 for unrestricted editorial output.',
+      recommendedEngine: 'Replicate FLUX Pro',
+      reason: 'Natural language format optimized for FLUX Pro. Backend uses prompt_upsampling + safety_tolerance 5 for unrestricted editorial output.',
     });
   };
 

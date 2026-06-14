@@ -5,6 +5,22 @@ import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { generateImage, fetchEngineChoices } from '../api/studio.js';
 
+// Fallback engine list — matches the app.py YAML engine definitions.
+// Used only when the live Gradio config fetch fails.
+const FALLBACK_ENGINES = [
+  'Fast Draft',
+  'DreamShaper Classic',
+  'Photoreal Portrait — Setup Needed',
+  'Editorial Beauty — Setup Needed',
+  'Fashion Campaign — Setup Needed',
+  'Product Shot — Setup Needed',
+  'Cinematic Still — Setup Needed',
+  'Sienna Cloud Preview — Setup Needed',
+  'Replicate FLUX Schnell',
+  'OpenAI Image',
+  'Prompt Only',
+];
+
 // These match the backend constants exactly
 const PERF_OPTIONS    = ['Safe CPU', 'Fast Draft', 'Balanced', 'High Detail'].map(v => ({ value: v, label: v }));
 const STYLE_OPTIONS   = ['Editorial Portrait', 'Lifestyle Creator', 'Product Shot', 'Fashion Lookbook', 'Beauty Close-Up', 'Cinematic Scene'].map(v => ({ value: v, label: v }));
@@ -46,16 +62,14 @@ export function ImageGenerator({ initialPrompts }) {
   const [error, setError]                 = React.useState('');
   const [images, setImages]               = React.useState([]);
 
-  // Load engine list from Gradio on mount
+  // Load engine list from Gradio on mount; fall back to known list
   React.useEffect(() => {
     fetchEngineChoices().then(choices => {
-      if (choices?.length) {
-        const opts = choices.map(c => ({ value: c, label: c }));
-        setEngineOptions(opts);
-        // Default to first non-"Setup Needed" engine
-        const ready = choices.find(c => !c.includes('Setup Needed') && !c.includes('Disabled'));
-        setEngine(ready || choices[0]);
-      }
+      const list = (choices?.length ? choices : FALLBACK_ENGINES);
+      const opts = list.map(c => ({ value: c, label: c }));
+      setEngineOptions(opts);
+      const ready = list.find(c => !c.includes('Setup Needed') && !c.includes('Disabled'));
+      setEngine(ready || list[0]);
     });
   }, []);
 

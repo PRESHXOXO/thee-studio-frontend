@@ -68,19 +68,40 @@ const FN = {
   generate_image: 49,
 };
 
+// Engine names that identify this dropdown by content when label matching fails.
+const ENGINE_KEYWORDS = ['Draft', 'DreamShaper', 'Portrait', 'Beauty', 'Campaign', 'Shot', 'Still', 'FLUX', 'OpenAI', 'Replicate', 'Cloud'];
+
 // Fetch the Creative Engine dropdown choices live from the Gradio config.
-// Falls back to null if the backend is unreachable.
 export async function fetchEngineChoices() {
   try {
-    const res = await fetch(`${BASE}/config`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(`${BASE}/config`, { signal: controller.signal });
+    clearTimeout(timer);
     if (!res.ok) return null;
     const config = await res.json();
-    for (const comp of config.components || []) {
-      if (comp.props?.label === 'Creative Engine' && comp.props?.choices) {
-        return comp.props.choices.map(c => (Array.isArray(c) ? c[0] : c));
+    const components = config.components || [];
+
+    // Strategy 1: match by label
+    for (const comp of components) {
+      const props = comp.props || {};
+      if (props.label === 'Creative Engine' && Array.isArray(props.choices) && props.choices.length) {
+        return props.choices.map(c => (Array.isArray(c) ? c[0] : c));
       }
     }
-  } catch {}
+
+    // Strategy 2: find by content — dropdown whose choices look like engine names
+    for (const comp of components) {
+      const choices = comp.props?.choices;
+      if (!Array.isArray(choices) || choices.length < 3) continue;
+      const vals = choices.map(c => (Array.isArray(c) ? c[0] : String(c)));
+      if (vals.filter(v => ENGINE_KEYWORDS.some(kw => v.includes(kw))).length >= 2) {
+        return vals;
+      }
+    }
+  } catch (e) {
+    console.warn('fetchEngineChoices:', e?.message);
+  }
   return null;
 }
 

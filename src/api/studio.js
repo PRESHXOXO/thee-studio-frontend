@@ -24,15 +24,11 @@ export function sanitizeForOpenAI(prompt) {
   return safe;
 }
 
-async function predict(fnIndexOrName, data) {
-  const body = typeof fnIndexOrName === 'string'
-    ? { api_name: fnIndexOrName, data, session_hash: SESSION_HASH }
-    : { fn_index: fnIndexOrName, data, session_hash: SESSION_HASH };
-
+async function predict(fnIndex, data) {
   const res = await fetch(`${BASE}/run/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ fn_index: fnIndex, data, session_hash: SESSION_HASH }),
   });
 
   if (!res.ok) {
@@ -157,9 +153,26 @@ export async function buildDirectorOutputs({
 
 // Sends a base64 image data URL to the backend vision model and returns
 // structured character field data ({ face, hair, body, wardrobe, tone, personality, niche }).
+// Uses /run/analyze_character — in Gradio 6.x the URL path IS the api_name.
 export async function analyzeCharacterImage(imageDataUrl) {
-  const data = await predict('/analyze_character', [imageDataUrl]);
-  const jsonStr = data[0] || '{}';
+  const res = await fetch(`${BASE}/run/analyze_character`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [imageDataUrl], session_hash: SESSION_HASH }),
+  });
+
+  if (!res.ok) {
+    let detail = '';
+    try { detail = await res.text(); } catch {}
+    throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  const raw = contentType.includes('text/event-stream')
+    ? await readSSE(res)
+    : (await res.json()).data;
+
+  const jsonStr = raw[0] || '{}';
   const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
   if (parsed.error) throw new Error(parsed.error);
   return parsed;

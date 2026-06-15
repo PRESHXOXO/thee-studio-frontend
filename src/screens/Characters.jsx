@@ -49,9 +49,11 @@ function saveCharacters(list) {
 export function Characters({ initialCharacter }) {
   const [characters, setCharacters] = React.useState(loadCharacters);
   const [activeId, setActiveId]     = React.useState(null);
-  const [editing, setEditing]       = React.useState(null); // { name, image, fields:{} }
+  const [editing, setEditing]       = React.useState(null);
   const [analyzing, setAnalyzing]   = React.useState(false);
   const [analyzeError, setAnalyzeError] = React.useState('');
+  const [saveError, setSaveError]   = React.useState('');
+  const [saved, setSaved]           = React.useState(false);
   const fileInputRef                = React.useRef(null);
 
   // When an image is imported from Studio Home, compress it then kick off analysis
@@ -106,29 +108,43 @@ export function Characters({ initialCharacter }) {
     setEditing({ name: 'New Creator', image: null, fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])) });
     setActiveId(null);
     setAnalyzeError('');
+    setSaveError('');
   };
 
   const handleEdit = (char) => {
     setEditing({ name: char.name, image: char.image, fields: { ...char.fields } });
     setActiveId(char.id);
     setAnalyzeError('');
+    setSaveError('');
   };
 
   const handleSave = () => {
     if (!editing) return;
+    setSaveError('');
     const updated = activeId != null
       ? characters.map(c => c.id === activeId ? { ...c, ...editing } : c)
       : [...characters, { id: Date.now(), ...editing }];
     try {
       saveCharacters(updated);
-    } catch (e) {
-      setAnalyzeError(e.message);
-      return;
+    } catch {
+      // QuotaExceededError — strip images from older characters to make room
+      try {
+        const slim = updated.map((c, i) =>
+          i < updated.length - 1 ? { ...c, image: null } : c
+        );
+        saveCharacters(slim);
+        setCharacters(slim);
+      } catch (e2) {
+        setSaveError('Storage full — delete some characters and try again.');
+        return;
+      }
     }
     setCharacters(updated);
-    setActiveId(activeId ?? updated[updated.length - 1].id);
+    const savedId = activeId ?? updated[updated.length - 1].id;
+    setActiveId(savedId);
     setEditing(null);
-    setAnalyzeError('');
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
   const handleDelete = (id) => {
@@ -172,15 +188,25 @@ export function Characters({ initialCharacter }) {
               <Icon name="sparkles" size={14} /> Analyzing…
             </span>
           )}
-          {editing && <Button variant="primary" onClick={handleSave} disabled={analyzing}><Icon name="save" size={15} /> Save Creator</Button>}
+          {saved && (
+            <span style={{ font: 'var(--text-sm)', color: 'var(--accent-deep)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="check" size={14} /> Saved!
+            </span>
+          )}
+          {editing && <Button variant="primary" onClick={handleSave}><Icon name="save" size={15} /> Save Creator</Button>}
           {!editing && <Button variant="secondary" onClick={handleNew}><Icon name="plus" size={15} /> New Creator</Button>}
-          {editing && <Button variant="secondary" onClick={() => { setEditing(null); setAnalyzeError(''); }}>Cancel</Button>}
+          {editing && <Button variant="secondary" onClick={() => { setEditing(null); setAnalyzeError(''); setSaveError(''); }}>Cancel</Button>}
         </div>
       </div>
 
       {analyzeError && (
         <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>
-          AI analysis failed: {analyzeError}. You can still fill in the fields manually.
+          Analysis: {analyzeError} — fields can still be filled manually.
+        </p>
+      )}
+      {saveError && (
+        <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>
+          Save failed: {saveError}
         </p>
       )}
 

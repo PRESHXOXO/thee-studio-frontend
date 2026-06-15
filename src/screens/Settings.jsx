@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
+import { saveApiKey } from '../api/studio.js';
 
 const ENGINES = [
   {
@@ -67,6 +68,67 @@ function EngineRow({ engine, isActive, onSelect }) {
   );
 }
 
+function ApiKeySection() {
+  const [key, setKey] = React.useState('');
+  const [status, setStatus] = React.useState(null); // null | 'saving' | 'ok' | 'error'
+  const [errorMsg, setErrorMsg] = React.useState('');
+
+  async function handleSave() {
+    if (!key.trim()) return;
+    setStatus('saving');
+    setErrorMsg('');
+    try {
+      await saveApiKey(key.trim());
+      setStatus('ok');
+      setKey('');
+    } catch (e) {
+      setStatus('error');
+      setErrorMsg(e.message);
+    }
+  }
+
+  return (
+    <Card style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div>
+        <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>API Keys</div>
+        <div style={{ font: '600 1rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>OpenAI API Key</div>
+        <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 4 }}>Required for image generation and AI character building.</div>
+      </div>
+
+      {status === 'ok' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, font: 'var(--text-sm)', color: 'var(--status-ready)', background: 'var(--status-ready-bg)', padding: '10px 14px', borderRadius: 'var(--radius-md)' }}>
+          <Icon name="check-circle" size={15} /> Key saved — you're good to go.
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div style={{ font: 'var(--text-sm)', color: 'var(--status-warn)', background: 'var(--status-warn-bg)', padding: '10px 14px', borderRadius: 'var(--radius-md)' }}>
+          {errorMsg}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <input
+          type="password"
+          value={key}
+          onChange={e => { setKey(e.target.value); setStatus(null); }}
+          onKeyDown={e => e.key === 'Enter' && handleSave()}
+          placeholder="sk-..."
+          style={{
+            flex: 1, padding: '10px 14px', borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-default)', background: 'var(--surface-input, var(--cream-light))',
+            font: 'var(--text-sm)', color: 'var(--text-strong)', outline: 'none',
+            fontFamily: 'monospace', letterSpacing: '0.05em',
+          }}
+        />
+        <Button variant="primary" onClick={handleSave} disabled={!key.trim() || status === 'saving'}>
+          {status === 'saving' ? 'Saving…' : 'Save'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export function Settings() {
   const [activeEngine, setActiveEngine] = React.useState('openai');
   const engine = ENGINES.find(e => e.id === activeEngine);
@@ -86,6 +148,8 @@ export function Settings() {
           <Icon name="plus" size={15} /> Add Engine
         </Button>
       </div>
+
+      <ApiKeySection />
 
       {/* 2-column layout */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 20, alignItems: 'start' }}>

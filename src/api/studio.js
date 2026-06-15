@@ -89,11 +89,50 @@ async function readSSE(response) {
           return event.output?.data ?? [];
         }
       } catch (e) {
-        if (e.message !== 'Unexpected token') throw e;
+        if (e.message && !e.message.startsWith('Unexpected token')) throw e;
       }
     }
   }
   throw new Error('Stream ended without completion');
+}
+
+// Calls a named Gradio endpoint, handling both Gradio 4.x (/run/) and 5.x (/call/) formats.
+async function callNamedEndpoint(apiName, data) {
+  // Try Gradio 4.x format first
+  const res = await fetch(`${BASE}/run/${apiName}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data, session_hash: SESSION_HASH }),
+  });
+
+  if (res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    return contentType.includes('text/event-stream')
+      ? await readSSE(res)
+      : (await res.json()).data;
+  }
+
+  // If /run/ returned 4xx/5xx, try Gradio 5.x /call/ format
+  if (res.status >= 400) {
+    const callRes = await fetch(`${BASE}/call/${apiName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data }),
+    });
+    if (!callRes.ok) {
+      let detail = '';
+      try { detail = await callRes.text(); } catch {}
+      throw new Error(`HTTP ${callRes.status}: ${detail.slice(0, 300)}`);
+    }
+    const { event_id } = await callRes.json();
+    const pollRes = await fetch(`${BASE}/call/${apiName}/${event_id}`);
+    if (!pollRes.ok) throw new Error(`HTTP ${pollRes.status}`);
+    return await readSSE(pollRes);
+  }
+
+  let detail = '';
+  try { detail = await res.text(); } catch {}
+  throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
 }
 
 // fn_index map (order of .click/.change registrations in app.py)
@@ -171,26 +210,10 @@ export async function buildDirectorOutputs({
 // structured character field data ({ face, hair, body, wardrobe, tone, personality, niche }).
 // Uses /run/analyze_character — in Gradio 6.x the URL path IS the api_name.
 export async function characterGenerate({ engineId, positivePrompt, negativePrompt, characterImage, imageSize = 'Vertical 9:16', batchSize = 1 }) {
-  const res = await fetch(`${BASE}/run/character_generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      data: [
-        JSON.stringify({ engineId, positivePrompt, negativePrompt, imageSize, batchSize }),
-        characterImage,
-      ],
-      session_hash: SESSION_HASH,
-    }),
-  });
-  if (!res.ok) {
-    let detail = '';
-    try { detail = await res.text(); } catch {}
-    throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
-  }
-  const contentType = res.headers.get('content-type') || '';
-  const raw = contentType.includes('text/event-stream')
-    ? await readSSE(res)
-    : (await res.json()).data;
+  const raw = await callNamedEndpoint('character_generate', [
+    JSON.stringify({ engineId, positivePrompt, negativePrompt, imageSize, batchSize }),
+    characterImage,
+  ]);
   const jsonStr = raw[0] || '{}';
   const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
   if (parsed.error) throw new Error(parsed.error);
@@ -202,23 +225,7 @@ export async function characterGenerate({ engineId, positivePrompt, negativeProm
 }
 
 export async function analyzeCharacterImage(imageDataUrl) {
-  const res = await fetch(`${BASE}/run/analyze_character`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: [imageDataUrl], session_hash: SESSION_HASH }),
-  });
-
-  if (!res.ok) {
-    let detail = '';
-    try { detail = await res.text(); } catch {}
-    throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
-  }
-
-  const contentType = res.headers.get('content-type') || '';
-  const raw = contentType.includes('text/event-stream')
-    ? await readSSE(res)
-    : (await res.json()).data;
-
+  const raw = await callNamedEndpoint('analyze_character', [imageDataUrl]);
   const jsonStr = raw[0] || '{}';
   const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
   if (parsed.error) throw new Error(parsed.error);
@@ -226,62 +233,39 @@ export async function analyzeCharacterImage(imageDataUrl) {
 }
 
 export async function generateCharacterSeed(params) {
-  const res = await fetch(`${BASE}/run/character_seed_generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: [JSON.stringify(params)], session_hash: SESSION_HASH }),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const contentType = res.headers.get('content-type') || '';
-  const raw = contentType.includes('text/event-stream') ? await readSSE(res) : (await res.json()).data;
+  const raw = await callNamedEndpoint('character_seed_generate', [JSON.stringify(params)]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
   return parsed; // { image, faceAnchor }
 }
 
 export async function generateCharacterVariations(params) {
-  const res = await fetch(`${BASE}/run/character_variations_generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: [JSON.stringify(params)], session_hash: SESSION_HASH }),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const contentType = res.headers.get('content-type') || '';
-  const raw = contentType.includes('text/event-stream') ? await readSSE(res) : (await res.json()).data;
+  const raw = await callNamedEndpoint('character_variations_generate', [JSON.stringify(params)]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
   return parsed; // { images: [...] }
 }
 
 export async function describeOutfitImage(imageDataUrl) {
-  const res = await fetch(`${BASE}/run/outfit_describe`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: [imageDataUrl], session_hash: SESSION_HASH }),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const contentType = res.headers.get('content-type') || '';
-  const raw = contentType.includes('text/event-stream') ? await readSSE(res) : (await res.json()).data;
+  const raw = await callNamedEndpoint('outfit_describe', [imageDataUrl]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
   return parsed.outfitDescription || '';
 }
 
 export async function extractFaceAnchor(imageDataUrl) {
-  const res = await fetch(`${BASE}/run/face_anchor_extract`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: [imageDataUrl], session_hash: SESSION_HASH }),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const contentType = res.headers.get('content-type') || '';
-  const raw = contentType.includes('text/event-stream')
-    ? await readSSE(res)
-    : (await res.json()).data;
+  const raw = await callNamedEndpoint('face_anchor_extract', [imageDataUrl]);
   const jsonStr = raw[0] || '{}';
   const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
   if (parsed.error) throw new Error(parsed.error);
   return parsed.faceAnchor || '';
+}
+
+export async function saveApiKey(key) {
+  const raw = await callNamedEndpoint('save_api_key', [key]);
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed;
 }
 
 export async function generateImage({

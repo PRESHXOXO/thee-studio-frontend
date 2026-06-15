@@ -24,11 +24,15 @@ export function sanitizeForOpenAI(prompt) {
   return safe;
 }
 
-async function predict(fnIndex, data) {
+async function predict(fnIndexOrName, data) {
+  const body = typeof fnIndexOrName === 'string'
+    ? { api_name: fnIndexOrName, data, session_hash: SESSION_HASH }
+    : { fn_index: fnIndexOrName, data, session_hash: SESSION_HASH };
+
   const res = await fetch(`${BASE}/run/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fn_index: fnIndex, data, session_hash: SESSION_HASH }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
@@ -154,56 +158,11 @@ export async function buildDirectorOutputs({
 // Sends a base64 image data URL to the backend vision model and returns
 // structured character field data ({ face, hair, body, wardrobe, tone, personality, niche }).
 export async function analyzeCharacterImage(imageDataUrl) {
-  const res = await fetch(`${BASE}/call/analyze_character`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: [imageDataUrl] }),
-  });
-
-  if (!res.ok) {
-    let detail = '';
-    try { detail = await res.text(); } catch {}
-    throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
-  }
-
-  const { event_id } = await res.json();
-  if (!event_id) throw new Error('No event_id returned from analyze_character');
-
-  // Stream the SSE result
-  const stream = await fetch(`${BASE}/call/analyze_character/${event_id}`);
-  if (!stream.ok) throw new Error(`Stream HTTP ${stream.status}`);
-
-  const reader = stream.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const raw = line.slice(6).trim();
-        if (!raw || raw === '[DONE]') continue;
-        try {
-          const event = JSON.parse(raw);
-          if (event.msg === 'process_completed') {
-            const jsonStr = event.output?.data?.[0] || '{}';
-            const parsed = JSON.parse(jsonStr);
-            if (parsed.error) throw new Error(parsed.error);
-            return parsed;
-          }
-        } catch (e) {
-          if (!e.message.startsWith('Unexpected token')) throw e;
-        }
-      }
-    }
-  }
-  throw new Error('Stream ended without completion');
+  const data = await predict('/analyze_character', [imageDataUrl]);
+  const jsonStr = data[0] || '{}';
+  const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed;
 }
 
 export async function generateImage({

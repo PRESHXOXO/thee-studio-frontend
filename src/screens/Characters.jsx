@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
+import { analyzeCharacterImage } from '../api/studio.js';
 
 const FIELD_DEFS = [
   { id: 'face',        icon: 'scan-face',    label: 'Face',          placeholder: 'e.g. High cheekbones, almond eyes, soft heart shape' },
@@ -27,29 +28,63 @@ export function Characters({ initialCharacter }) {
   const [characters, setCharacters] = React.useState(loadCharacters);
   const [activeId, setActiveId]     = React.useState(null);
   const [editing, setEditing]       = React.useState(null); // { name, image, fields:{} }
+  const [analyzing, setAnalyzing]   = React.useState(false);
+  const [analyzeError, setAnalyzeError] = React.useState('');
   const fileInputRef                = React.useRef(null);
 
   // When an image is imported from Studio Home, start creating a new character
+  // and immediately kick off AI analysis
   React.useEffect(() => {
     if (!initialCharacter) return;
-    setEditing({
+    const newEditing = {
       name: initialCharacter.name || 'New Creator',
       image: initialCharacter.image || null,
       fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])),
-    });
+    };
+    setEditing(newEditing);
     setActiveId(null);
+
+    if (initialCharacter.image) {
+      runAnalysis(initialCharacter.image, newEditing);
+    }
   }, [initialCharacter]);
+
+  const runAnalysis = async (imageDataUrl, currentEditing) => {
+    setAnalyzing(true);
+    setAnalyzeError('');
+    try {
+      const result = await analyzeCharacterImage(imageDataUrl);
+      setEditing(ed => ({
+        ...(ed || currentEditing),
+        fields: {
+          face:        result.face        || ed?.fields?.face        || '',
+          hair:        result.hair        || ed?.fields?.hair        || '',
+          body:        result.body        || ed?.fields?.body        || '',
+          wardrobe:    result.wardrobe    || ed?.fields?.wardrobe    || '',
+          tone:        result.tone        || ed?.fields?.tone        || '',
+          personality: result.personality || ed?.fields?.personality || '',
+          niche:       result.niche       || ed?.fields?.niche       || '',
+        },
+      }));
+    } catch (e) {
+      setAnalyzeError(e.message || 'Analysis failed');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   const active = activeId != null ? characters.find(c => c.id === activeId) : null;
 
   const handleNew = () => {
     setEditing({ name: 'New Creator', image: null, fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])) });
     setActiveId(null);
+    setAnalyzeError('');
   };
 
   const handleEdit = (char) => {
     setEditing({ name: char.name, image: char.image, fields: { ...char.fields } });
     setActiveId(char.id);
+    setAnalyzeError('');
   };
 
   const handleSave = () => {
@@ -61,6 +96,7 @@ export function Characters({ initialCharacter }) {
     setCharacters(updated);
     setActiveId(activeId ?? updated[updated.length - 1].id);
     setEditing(null);
+    setAnalyzeError('');
   };
 
   const handleDelete = (id) => {
@@ -74,7 +110,11 @@ export function Characters({ initialCharacter }) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => setEditing(ed => ({ ...ed, image: ev.target.result }));
+    reader.onload = ev => {
+      const imageDataUrl = ev.target.result;
+      setEditing(ed => ({ ...ed, image: imageDataUrl }));
+      runAnalysis(imageDataUrl, editing);
+    };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
@@ -93,12 +133,23 @@ export function Characters({ initialCharacter }) {
           <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 10px' }}>Character Studio</h1>
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 480 }}>Craft consistent, iconic identities for your AI creations.</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {editing && <Button variant="primary" onClick={handleSave}><Icon name="save" size={15} /> Save Creator</Button>}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {analyzing && (
+            <span style={{ font: 'var(--text-sm)', color: 'var(--accent-deep)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="sparkles" size={14} /> Analyzing…
+            </span>
+          )}
+          {editing && <Button variant="primary" onClick={handleSave} disabled={analyzing}><Icon name="save" size={15} /> Save Creator</Button>}
           {!editing && <Button variant="secondary" onClick={handleNew}><Icon name="plus" size={15} /> New Creator</Button>}
-          {editing && <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>}
+          {editing && <Button variant="secondary" onClick={() => { setEditing(null); setAnalyzeError(''); }}>Cancel</Button>}
         </div>
       </div>
+
+      {analyzeError && (
+        <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>
+          AI analysis failed: {analyzeError}. You can still fill in the fields manually.
+        </p>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: characters.length ? '200px 1fr 180px' : '200px 1fr', gap: 20, alignItems: 'start' }}>
 
@@ -117,8 +168,23 @@ export function Characters({ initialCharacter }) {
                 </div>
               )
             }
+            {/* Analysis overlay */}
+            {analyzing && (
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#fff' }}>
+                <Icon name="sparkles" size={28} strokeWidth={1.5} />
+                <span style={{ font: 'var(--text-sm)', fontWeight: 600 }}>Reading creator…</span>
+              </div>
+            )}
           </div>
           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
+
+          {/* Re-analyze button (editing mode, image exists, not currently analyzing) */}
+          {editing && editing.image && !analyzing && (
+            <Button variant="secondary" onClick={() => runAnalysis(editing.image, editing)} style={{ width: '100%' }}>
+              <Icon name="sparkles" size={13} /> Re-analyze
+            </Button>
+          )}
+
           {editing
             ? <input value={editing.name} onChange={e => setEditing(ed => ({ ...ed, name: e.target.value }))} style={{ ...INPUT_STYLE, textAlign: 'center', fontWeight: 600 }} />
             : <div style={{ textAlign: 'center' }}>
@@ -147,8 +213,9 @@ export function Characters({ initialCharacter }) {
                 ? <input
                     value={editing.fields[f.id] || ''}
                     onChange={e => setEditing(ed => ({ ...ed, fields: { ...ed.fields, [f.id]: e.target.value } }))}
-                    placeholder={f.placeholder}
-                    style={INPUT_STYLE}
+                    placeholder={analyzing ? 'Analyzing…' : f.placeholder}
+                    style={{ ...INPUT_STYLE, opacity: analyzing ? 0.5 : 1 }}
+                    disabled={analyzing}
                   />
                 : <div style={{ font: 'var(--text-sm)', color: displayChar?.fields?.[f.id] ? 'var(--text-body)' : 'var(--text-faint)', lineHeight: 1.5 }}>
                     {displayChar?.fields?.[f.id] || '—'}
@@ -165,7 +232,7 @@ export function Characters({ initialCharacter }) {
             {characters.map(c => (
               <div
                 key={c.id}
-                onClick={() => { setActiveId(c.id); setEditing(null); }}
+                onClick={() => { setActiveId(c.id); setEditing(null); setAnalyzeError(''); }}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--radius-md)', background: activeId === c.id ? 'var(--rose-glass)' : 'var(--white)', border: `1px solid ${activeId === c.id ? 'var(--border-strong)' : 'var(--border)'}`, cursor: 'pointer' }}
               >
                 <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: 'var(--grad-portrait)', overflow: 'hidden', flexShrink: 0 }}>

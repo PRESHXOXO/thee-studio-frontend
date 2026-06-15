@@ -5,9 +5,12 @@ import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { generateImage, fetchEngineChoices, sanitizeForOpenAI } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
+import {
+  CONTENT_TYPES, MOODS, LOCATIONS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS,
+  EYE_DETAILS, JEWELRY_OPTIONS, CLOTHING_VIBES, SPECIAL_FEATURES, GENDERS,
+  STANDARD_NEGATIVE, buildStructuredVision, buildFluxVision,
+} from '../lib/promptData.js';
 
-// Fallback engine list — matches the app.py YAML engine definitions.
-// Used only when the live Gradio config fetch fails.
 const FALLBACK_ENGINES = [
   'Fast Draft',
   'DreamShaper Classic',
@@ -22,7 +25,6 @@ const FALLBACK_ENGINES = [
   'Editorial Beauty — Setup Needed',
 ];
 
-// These match the backend constants exactly
 const PERF_OPTIONS    = ['Safe CPU', 'Fast Draft', 'Balanced', 'High Detail'].map(v => ({ value: v, label: v }));
 const STYLE_OPTIONS   = ['Editorial Portrait', 'Lifestyle Creator', 'Product Shot', 'Fashion Lookbook', 'Beauty Close-Up', 'Cinematic Scene'].map(v => ({ value: v, label: v }));
 const FORMAT_OPTIONS  = [
@@ -50,6 +52,174 @@ const TEXTAREA = {
   lineHeight: 1.5, outline: 'none', fontFamily: 'inherit',
 };
 
+function loadCharacters() {
+  try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
+}
+
+function PromptBuilder({ engine, onApply }) {
+  const [open, setOpen]           = React.useState(false);
+  const [characters, setChars]    = React.useState(loadCharacters);
+  const [charId, setCharId]       = React.useState('none');
+  const [contentType, setContent] = React.useState('Portrait');
+  const [mood, setMood]           = React.useState('Clean');
+  const [scene, setScene]         = React.useState('None');
+  const [gender, setGender]       = React.useState('Unspecified');
+  const [skinTone, setSkin]       = React.useState('Unspecified');
+  const [hairStyle, setHairStyle] = React.useState('Unspecified');
+  const [hairColor, setHairColor] = React.useState('Unspecified');
+  const [eyeDetail, setEye]       = React.useState('Unspecified');
+  const [jewelry, setJewelry]     = React.useState('None');
+  const [clothing, setClothing]   = React.useState('Unspecified');
+  const [features, setFeatures]   = React.useState('None');
+  const [vision, setVision]       = React.useState('');
+
+  React.useEffect(() => {
+    if (open) setChars(loadCharacters());
+  }, [open]);
+
+  const selectedChar = characters.find(c => c.id === charId) || null;
+  const isFlux = engine?.toLowerCase().includes('flux');
+
+  const charOptions = [
+    { value: 'none', label: 'No Character — build subject from scratch' },
+    ...characters.map(c => ({ value: c.id, label: c.name })),
+  ];
+
+  const handleBuild = () => {
+    const params = {
+      vision, gender, skinTone, hairStyle, hairColor, eyeDetail,
+      jewelry, clothing, features, mood, contentType, scene,
+      character: selectedChar,
+    };
+    const positive = isFlux ? buildFluxVision(params) : buildStructuredVision(params);
+    onApply({ positive, negative: STANDARD_NEGATIVE });
+  };
+
+  return (
+    <Card style={{ padding: 0, overflow: 'hidden' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '14px 20px', textAlign: 'left',
+        }}
+      >
+        <div style={{
+          width: 30, height: 30, borderRadius: 'var(--radius)',
+          background: 'var(--rose-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--accent-deep)', flexShrink: 0,
+        }}>
+          <Icon name="wand-2" size={15} strokeWidth={1.75} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ font: '600 0.85rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Prompt Builder</div>
+          <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 2 }}>
+            {open ? 'Configure your shoot — build a rich structured prompt in one click' : 'Click to open the structured prompt builder'}
+          </div>
+        </div>
+        <Icon name={open ? 'chevron-up' : 'chevron-down'} size={16} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+      </button>
+
+      {open && (
+        <div style={{ borderTop: '1px solid var(--border)', padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Character or Subject */}
+          <div>
+            <div style={LABEL}>Character</div>
+            <Select value={charId} onChange={setCharId} options={charOptions} />
+          </div>
+
+          {/* Subject fields — only when no character */}
+          {!selectedChar && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+              <div>
+                <div style={LABEL}>Gender</div>
+                <Select value={gender} onChange={setGender} options={GENDERS} />
+              </div>
+              <div>
+                <div style={LABEL}>Skin Tone</div>
+                <Select value={skinTone} onChange={setSkin} options={SKIN_TONES} />
+              </div>
+              <div>
+                <div style={LABEL}>Eye Detail</div>
+                <Select value={eyeDetail} onChange={setEye} options={EYE_DETAILS} />
+              </div>
+              <div>
+                <div style={LABEL}>Special Feature</div>
+                <Select value={features} onChange={setFeatures} options={SPECIAL_FEATURES} />
+              </div>
+            </div>
+          )}
+
+          {/* Hair — only when no character */}
+          {!selectedChar && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <div style={LABEL}>Hair Style</div>
+                <Select value={hairStyle} onChange={setHairStyle} options={HAIR_STYLES} />
+              </div>
+              <div>
+                <div style={LABEL}>Hair Color</div>
+                <Select value={hairColor} onChange={setHairColor} options={HAIR_COLORS} />
+              </div>
+            </div>
+          )}
+
+          {/* Shoot settings */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            <div>
+              <div style={LABEL}>Content Type</div>
+              <Select value={contentType} onChange={setContent} options={CONTENT_TYPES} />
+            </div>
+            <div>
+              <div style={LABEL}>Mood</div>
+              <Select value={mood} onChange={setMood} options={MOODS} />
+            </div>
+            <div>
+              <div style={LABEL}>Scene / Location</div>
+              <Select value={scene} onChange={setScene} options={LOCATIONS} />
+            </div>
+          </div>
+
+          {/* Outfit */}
+          <div>
+            <div style={LABEL}>Outfit</div>
+            <Select value={clothing} onChange={setClothing} options={CLOTHING_VIBES} />
+          </div>
+
+          {/* Jewelry */}
+          <div>
+            <div style={LABEL}>Jewelry & Accessories</div>
+            <Select value={jewelry} onChange={setJewelry} options={JEWELRY_OPTIONS} />
+          </div>
+
+          {/* Vision / art direction */}
+          <div>
+            <div style={LABEL}>Art Direction / Vision</div>
+            <textarea
+              style={{ ...TEXTAREA, minHeight: 60 }}
+              value={vision}
+              onChange={e => setVision(e.target.value)}
+              placeholder="Any specific direction, angle, lighting, or campaign brief notes…"
+            />
+          </div>
+
+          {/* Action row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Button variant="primary" onClick={handleBuild} style={{ flexShrink: 0 }}>
+              <Icon name="wand-2" size={14} /> Build Prompt
+            </Button>
+            <span style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>
+              {isFlux ? 'FLUX-style prompt' : 'Structured editorial prompt'} · fills both prompt fields
+            </span>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function ImageGenerator({ initialPrompts }) {
   const [engineOptions, setEngineOptions] = React.useState([]);
   const [engine, setEngine]               = React.useState('');
@@ -64,7 +234,6 @@ export function ImageGenerator({ initialPrompts }) {
   const [status, setStatus]               = React.useState('');
   const [images, setImages]               = React.useState([]);
 
-  // Load engine list from Gradio on mount; fall back to known list
   React.useEffect(() => {
     fetchEngineChoices().then(choices => {
       const list = (choices?.length ? choices : FALLBACK_ENGINES);
@@ -75,8 +244,6 @@ export function ImageGenerator({ initialPrompts }) {
     });
   }, []);
 
-  // When the live engine list loads, validate the current selection is still in it.
-  // Prevents a stale engine value (e.g. from a previous session) from slipping through.
   React.useEffect(() => {
     if (!engineOptions.length || !engine) return;
     const valid = engineOptions.some(o => o.value === engine);
@@ -86,7 +253,6 @@ export function ImageGenerator({ initialPrompts }) {
     }
   }, [engineOptions]);
 
-  // Pre-fill prompts when coming from Director
   React.useEffect(() => {
     if (initialPrompts?.positivePrompt) setPositive(initialPrompts.positivePrompt);
     if (initialPrompts?.negativePrompt) setNegative(initialPrompts.negativePrompt);
@@ -98,8 +264,6 @@ export function ImageGenerator({ initialPrompts }) {
     setLoading(true);
     setImages([]);
     try {
-      // Ensure the selected engine is actually in the live list before sending.
-      // If it's stale (e.g. from a previous session), fall back to first valid option.
       const validEngines = engineOptions.map(o => o.value);
       const safeEngine = validEngines.includes(engine)
         ? engine
@@ -211,6 +375,9 @@ export function ImageGenerator({ initialPrompts }) {
           </div>
         </div>
       </Card>
+
+      {/* Prompt Builder */}
+      <PromptBuilder engine={engine} onApply={({ positive, negative }) => { setPositive(positive); setNegative(negative); }} />
 
       {error  && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
       {status && !error && <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', margin: 0 }}>{status}</p>}

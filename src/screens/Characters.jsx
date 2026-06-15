@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { analyzeCharacterImage, characterGenerate } from '../api/studio.js';
+import { analyzeCharacterImage, characterGenerate, extractFaceAnchor } from '../api/studio.js';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
 
 const FIELD_DEFS = [
@@ -72,22 +72,29 @@ const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over
 function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverride = null) {
   const f = char.fields || {};
   const parts = [];
-  parts.push('Ultra-realistic 4K commercial lifestyle photography for a premium content creator brand.');
-  if (identityLocked) {
-    parts.push('IDENTITY LOCK ACTIVE: Preserve the exact facial features, skin tone, hair, and body of this specific creator. Do not alter their identity. Only their outfit and location should change.');
+
+  // Face anchor goes FIRST — highest token weight
+  if (char.faceAnchor) {
+    parts.push(`FACE LOCK — ${char.name} (NON-NEGOTIABLE): ${char.faceAnchor} This person's face is fixed. Do not drift, average, or alter their facial features under any circumstances. The reference image shows this exact person.`);
+  } else {
+    parts.push(`TALENT IDENTITY — ${char.name}: ${[f.face, f.tone].filter(Boolean).join('. ')}. Preserve this creator's exact face. Do not alter their identity.`);
   }
-  const talentParts = [f.face, f.tone].filter(Boolean).join('. ');
-  if (talentParts) parts.push(`TALENT: ${talentParts}`);
+
+  parts.push('Ultra-realistic 4K commercial lifestyle photography for a premium content creator brand. The subject must look like the same real person as in the reference image.');
+
+  if (identityLocked) {
+    parts.push('IDENTITY LOCK ACTIVE: Only the outfit and location change. Face, skin, hair, and body are identical to the reference. No reinterpretation of the person\'s appearance.');
+  }
+
   if (f.hair)        parts.push(`HAIR: ${f.hair}`);
   if (f.body)        parts.push(`BUILD: ${f.body}`);
-  // Outfit override takes priority over character's default wardrobe
   const wardrobe = outfitOverride || f.wardrobe;
   if (wardrobe)      parts.push(`OUTFIT: ${wardrobe}`);
   if (f.personality) parts.push(`ENERGY: ${f.personality}`);
   if (f.niche)       parts.push(`CONTENT CONTEXT: ${f.niche}`);
   if (sceneName)     parts.push(`SCENE: ${sceneName}`);
   if (mood)          parts.push(`MOOD: ${mood}`);
-  parts.push('Photorealistic editorial photograph. Natural dimensional lighting. Professional commercial retouching. No AI artifacts. No distorted anatomy. Ultra-detailed 4K. Luxury campaign quality.');
+  parts.push('Photorealistic editorial photograph. Natural dimensional lighting. Professional commercial retouching. No AI artifacts. No distorted anatomy. Ultra-detailed 4K. Luxury campaign quality. Fully clothed, brand-appropriate content.');
   return parts.join('\n\n');
 }
 
@@ -267,6 +274,17 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
             <Icon name="fingerprint" size={13} />
           </div>
         )}
+        {char.faceAnchor && (
+          <div title="Face Lock active — AI has memorized this creator's facial geometry" style={{
+            position: 'absolute', top: 8, right: 8,
+            background: 'var(--accent-deep)', color: '#fff',
+            borderRadius: 'var(--radius-pill)', padding: '2px 6px',
+            font: '700 0.6rem/1 var(--font-ui)', letterSpacing: '0.04em',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+          }}>
+            FACE LOCK
+          </div>
+        )}
         {getAllImages(char).length > 1 && (
           <div style={{
             position: 'absolute', bottom: 8, right: 8,
@@ -357,9 +375,14 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     setAnalyzing(true);
     setAnalyzeError('');
     try {
-      const result = await analyzeCharacterImage(imageDataUrl);
+      // Run both in parallel — general fields + precise face anchor
+      const [result, faceAnchor] = await Promise.all([
+        analyzeCharacterImage(imageDataUrl),
+        extractFaceAnchor(imageDataUrl).catch(() => ''),
+      ]);
       setEditing(ed => ({
         ...(ed || currentEditing),
+        faceAnchor: faceAnchor || ed?.faceAnchor || '',
         fields: {
           face:        result.face        || ed?.fields?.face        || '',
           hair:        result.hair        || ed?.fields?.hair        || '',
@@ -438,7 +461,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     const refImages = char.refImages?.length
       ? char.refImages
       : char.image ? [char.image] : [];
-    setEditing({ name: char.name, refImages, fields: { ...char.fields } });
+    setEditing({ name: char.name, refImages, faceAnchor: char.faceAnchor || '', fields: { ...char.fields } });
     setActiveId(char.id);
     setAnalyzeError('');
     setSaveError('');

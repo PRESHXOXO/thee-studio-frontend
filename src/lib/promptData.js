@@ -165,13 +165,20 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', ski
 
   if (character) {
     const f = character.fields || {};
-    const cp = [];
-    if (f.face)        cp.push(`Face: ${f.face}`);
-    if (f.tone)        cp.push(`Skin: ${f.tone}`);
-    if (f.hair)        cp.push(`Hair: ${f.hair}`);
-    if (f.body)        cp.push(`Build: ${f.body}`);
-    if (f.personality) cp.push(`Energy: ${f.personality}`);
-    if (cp.length) s.push(`TALENT IDENTITY — ${character.name}: ${cp.join('. ')}. Preserve this creator's face, skin tone, hair, and body. Do not alter their identity.`);
+    // Face anchor is placed FIRST for maximum token weight
+    if (character.faceAnchor) {
+      s.unshift(`FACE LOCK — ${character.name} (NON-NEGOTIABLE): ${character.faceAnchor} This person's face is fixed. Do not drift, reinterpret, or average their features. Match the reference image exactly.`);
+    } else {
+      const cp = [];
+      if (f.face) cp.push(`Face: ${f.face}`);
+      if (f.tone) cp.push(`Skin: ${f.tone}`);
+      if (cp.length) s.push(`TALENT IDENTITY — ${character.name}: ${cp.join('. ')}. Preserve this creator's exact face and skin tone. Do not alter their identity.`);
+    }
+    const cp2 = [];
+    if (f.hair)        cp2.push(`Hair: ${f.hair}`);
+    if (f.body)        cp2.push(`Build: ${f.body}`);
+    if (f.personality) cp2.push(`Energy: ${f.personality}`);
+    if (cp2.length) s.push(cp2.join('. ') + '.');
     const outfitUsed = (clothing && clothing !== 'Unspecified') ? clothing : f.wardrobe;
     if (outfitUsed) s.push(`OUTFIT FOR THIS SHOOT: ${outfitUsed}. Dress them in this specifically — override any default styling assumptions.`);
   } else {

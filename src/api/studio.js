@@ -225,6 +225,23 @@ export async function analyzeCharacterImage(imageDataUrl) {
   return parsed;
 }
 
+export async function extractFaceAnchor(imageDataUrl) {
+  const res = await fetch(`${BASE}/run/face_anchor_extract`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [imageDataUrl], session_hash: SESSION_HASH }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const contentType = res.headers.get('content-type') || '';
+  const raw = contentType.includes('text/event-stream')
+    ? await readSSE(res)
+    : (await res.json()).data;
+  const jsonStr = raw[0] || '{}';
+  const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed.faceAnchor || '';
+}
+
 export async function generateImage({
   engine = '',
   performanceMode = 'Balanced',

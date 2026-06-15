@@ -17,11 +17,33 @@ const FIELD_DEFS = [
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6, display: 'block' };
 const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--input-bg, #fff)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
 
+// Shrink portrait images before storing so they don't blow the 5MB localStorage cap.
+function compressImage(dataUrl, maxPx = 480, quality = 0.82) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl); // fallback: keep original
+    img.src = dataUrl;
+  });
+}
+
 function loadCharacters() {
   try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
 }
 function saveCharacters(list) {
-  localStorage.setItem('ts_characters', JSON.stringify(list));
+  try {
+    localStorage.setItem('ts_characters', JSON.stringify(list));
+  } catch (e) {
+    // QuotaExceededError — shouldn't happen after compression, but surface it
+    throw new Error('Storage full — try removing unused characters first.');
+  }
 }
 
 export function Characters({ initialCharacter }) {
@@ -32,21 +54,26 @@ export function Characters({ initialCharacter }) {
   const [analyzeError, setAnalyzeError] = React.useState('');
   const fileInputRef                = React.useRef(null);
 
-  // When an image is imported from Studio Home, start creating a new character
-  // and immediately kick off AI analysis
+  // When an image is imported from Studio Home, compress it then kick off analysis
   React.useEffect(() => {
     if (!initialCharacter) return;
-    const newEditing = {
-      name: initialCharacter.name || 'New Creator',
-      image: initialCharacter.image || null,
-      fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])),
+    const init = async () => {
+      const compressed = initialCharacter.image
+        ? await compressImage(initialCharacter.image)
+        : null;
+      const newEditing = {
+        name: initialCharacter.name || 'New Creator',
+        image: compressed,
+        fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])),
+      };
+      setEditing(newEditing);
+      setActiveId(null);
+      if (initialCharacter.image) {
+        // Send original (full-res) to vision API for best accuracy
+        runAnalysis(initialCharacter.image, newEditing);
+      }
     };
-    setEditing(newEditing);
-    setActiveId(null);
-
-    if (initialCharacter.image) {
-      runAnalysis(initialCharacter.image, newEditing);
-    }
+    init();
   }, [initialCharacter]);
 
   const runAnalysis = async (imageDataUrl, currentEditing) => {
@@ -92,7 +119,12 @@ export function Characters({ initialCharacter }) {
     const updated = activeId != null
       ? characters.map(c => c.id === activeId ? { ...c, ...editing } : c)
       : [...characters, { id: Date.now(), ...editing }];
-    saveCharacters(updated);
+    try {
+      saveCharacters(updated);
+    } catch (e) {
+      setAnalyzeError(e.message);
+      return;
+    }
     setCharacters(updated);
     setActiveId(activeId ?? updated[updated.length - 1].id);
     setEditing(null);
@@ -110,10 +142,11 @@ export function Characters({ initialCharacter }) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => {
-      const imageDataUrl = ev.target.result;
-      setEditing(ed => ({ ...ed, image: imageDataUrl }));
-      runAnalysis(imageDataUrl, editing);
+    reader.onload = async ev => {
+      const original = ev.target.result;
+      const compressed = await compressImage(original);
+      setEditing(ed => ({ ...ed, image: compressed }));
+      runAnalysis(original, editing); // full-res for vision accuracy
     };
     reader.readAsDataURL(file);
     e.target.value = '';

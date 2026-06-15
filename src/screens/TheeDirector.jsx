@@ -126,21 +126,39 @@ const JEWELRY_OPTIONS = [
 
 const CLOTHING_VIBES = [
   { value: 'Unspecified', label: 'Unspecified' },
-  { value: 'luxury casual: Bottega Veneta bag, linen co-ord set',                                                              label: 'Luxury Casual — Bottega' },
-  { value: 'high fashion editorial: Balenciaga, sharp structured silhouette',                                                  label: 'High Fashion — Balenciaga' },
-  { value: 'streetwear luxury: Off-White, Fear of God, oversized',                                                             label: 'Streetwear Luxury' },
-  { value: 'date night: satin slip dress, Louboutin heels',                                                                    label: 'Date Night — satin + heels' },
-  { value: 'business power: tailored blazer, Saint Laurent, minimal',                                                          label: 'Business Power — tailored' },
-  { value: 'resort glam: Zimmermann, flowy dress, sun hat',                                                                    label: 'Resort Glam — Zimmermann' },
-  { value: 'athleisure luxury: Skims, Lululemon, sleek sneakers',                                                              label: 'Athleisure — Skims' },
-  { value: 'denim elevated: custom denim, cropped jacket, boots',                                                              label: 'Elevated Denim' },
-  { value: 'monochrome minimal: tonal outfit, clean lines, Celine',                                                            label: 'Monochrome Minimal — Celine' },
-  { value: 'Y2K glam: low rise, butterfly clips, rhinestones',                                                                 label: 'Y2K Glam' },
-  { value: 'old money: cashmere, equestrian, Ralph Lauren',                                                                    label: 'Old Money — cashmere' },
-  { value: 'intimate editorial: silk robe, sheer lace bodysuit, soft natural confidence, tasteful editorial pose',             label: 'Intimate Editorial' },
-  { value: 'lingerie editorial: designer lingerie set, Savage X Fenty or La Perla, tasteful boudoir-inspired editorial',      label: 'Lingerie Editorial' },
-  { value: 'swimwear luxury: high-end bikini or one-piece, resort lifestyle, body confidence',                                 label: 'Swimwear — resort luxury' },
-  { value: 'barely-there: minimal coverage, body-conscious editorial, luxury lifestyle',                                       label: 'Barely There — editorial' },
+  // Everyday
+  { value: 'casual: fitted white tee, high-waist dark jeans, clean sneakers, minimal accessories',                            label: 'Casual — jeans + tee' },
+  { value: 'athleisure: matching athletic set, sports bra, biker shorts, sleek sneakers',                                     label: 'Athleisure — athletic set' },
+  { value: 'Skims set: bodysuit, cycling shorts, oversized hoodie, clean sneakers, gold hoops',                               label: 'Elevated Athleisure — Skims' },
+  { value: 'flowy floral mini sundress, strappy sandals, dainty gold jewelry, sunglasses',                                    label: 'Sundress — casual chic' },
+  { value: 'linen coord set, strappy mules, sun hat, gold necklace — elevated summer daytime',                                label: 'Summer Brunch — linen' },
+  { value: 'vintage denim jacket, straight-leg jeans, fitted white tee, ankle boots',                                         label: 'Elevated Denim' },
+  // Going out
+  { value: 'satin slip dress, strappy stiletto heels, diamond studs, sleek clutch — sensual but elegant',                     label: 'Date Night — satin slip' },
+  { value: 'fitted little black dress, pointed-toe pumps, minimal gold jewelry — classic and polished',                       label: 'LBD — classic' },
+  { value: 'chic tailored blazer over a bodysuit, wide-leg trousers, heels, bold statement earrings',                         label: 'Night Out — blazer moment' },
+  { value: 'crystal-embellished mini dress, platform stilettos, full glam makeup, bold jewelry',                              label: 'Club Ready — crystal mini' },
+  { value: 'sequin mini dress, heels, bold lip, statement jewelry — high-energy glam',                                        label: 'Party Glam — sequin' },
+  // Professional
+  { value: 'fitted blazer, tailored trousers, silk blouse, block heels — polished and professional',                          label: 'Business Casual — blazer' },
+  { value: 'structured monochrome suit, no undershirt, pointed pumps, minimal accessories — commanding',                      label: 'Power Suit — monochrome' },
+  { value: 'pencil skirt, tucked silk blouse, pointed heels, structured bag — corporate chic',                                label: 'Corporate Chic — pencil skirt' },
+  // Fashion / Editorial
+  { value: 'streetwear luxury: Off-White or Fear of God, cargo pants, chunky sneakers, oversized hoodie',                     label: 'Streetwear Luxury' },
+  { value: 'high fashion editorial: Balenciaga, avant-garde structured silhouette, fashion week styling',                      label: 'High Fashion — editorial' },
+  { value: 'cashmere knit, wide-leg cream trousers, loafers, structured bag — quiet luxury old money',                        label: 'Old Money — quiet luxury' },
+  { value: 'head-to-toe tonal look, Celine aesthetic, clean lines, one color palette, minimal accessories',                   label: 'Monochrome Minimal — Celine' },
+  { value: 'Bottega Veneta bag, linen coord set, designer slides, gold jewelry — effortless expensive',                       label: 'Luxury Casual — Bottega' },
+  // Scene-specific
+  { value: 'Zimmermann flowy maxi dress, woven sun hat, strappy sandals, gold jewelry — resort lifestyle',                    label: 'Resort Glam — Zimmermann' },
+  { value: 'designer bikini, sheer sarong wrap, oversized sunglasses, gold body jewelry',                                     label: 'Beach — designer bikini' },
+  { value: 'luxury one-piece swimsuit, designer slides, oversized beach hat, linen cover-up',                                 label: 'Poolside — luxury one-piece' },
+  { value: 'oversized tailored coat, ribbed turtleneck, knee-high boots, structured bag — cold weather editorial',            label: 'Winter Coat Moment' },
+  { value: 'Y2K revival: low-rise jeans, rhinestone crop top, butterfly clips, platform sandals',                             label: 'Y2K Glam — revival' },
+  // Editorial/Special
+  { value: 'silk robe, sheer lace bodysuit, soft natural confidence, tasteful editorial boudoir-inspired pose',               label: 'Boudoir Editorial — silk robe' },
+  { value: 'designer lingerie set, Savage X Fenty or La Perla, tasteful editorial styling',                                   label: 'Lingerie Editorial' },
+  { value: 'high-end bikini or one-piece, resort lifestyle shoot, body confidence, luxury vacation',                          label: 'Swimwear — resort luxury' },
 ];
 
 const SPECIAL_FEATURES = [

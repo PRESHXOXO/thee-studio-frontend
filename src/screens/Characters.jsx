@@ -39,20 +39,50 @@ const QUICK_SCENES = [
 const QUICK_MOODS = ['Clean', 'Luxury', 'Bold', 'Romantic', 'Editorial', 'Cinematic', 'Soft', 'Playful'];
 const BATCH_OPTIONS = [1, 2, 4];
 
+// Outfit override — first entry means "use character's wardrobe field"
+const QUICK_OUTFITS = [
+  { id: 'default',          label: "Creator's Style",        prompt: null },
+  { id: 'casual',           label: 'Casual',                 prompt: 'fitted white tee, high-waist dark jeans, clean white sneakers, minimal accessories' },
+  { id: 'athleisure',       label: 'Athleisure',             prompt: 'matching athletic set, sports bra, biker shorts, sleek sneakers, gym bag' },
+  { id: 'elevated_ath',     label: 'Skims Set',              prompt: 'Skims bodysuit, cycling shorts, oversized hoodie, clean sneakers, gold hoops' },
+  { id: 'sundress',         label: 'Sundress',               prompt: 'flowy floral mini sundress, strappy sandals, dainty gold jewelry, sunglasses' },
+  { id: 'brunch',           label: 'Brunch',                 prompt: 'linen coord set, strappy mules, sun hat, gold necklace — elevated summer daytime' },
+  { id: 'denim',            label: 'Denim',                  prompt: 'vintage denim jacket, straight-leg jeans, fitted white tee, white sneakers or ankle boots' },
+  { id: 'streetwear',       label: 'Streetwear',             prompt: 'streetwear luxury: cargo pants, oversized graphic hoodie, chunky sneakers, cap' },
+  { id: 'date_night',       label: 'Date Night',             prompt: 'satin slip dress, strappy stiletto heels, diamond studs, sleek clutch — sensual but elegant' },
+  { id: 'lbd',              label: 'LBD',                    prompt: 'fitted little black dress, pointed-toe pumps, minimal gold jewelry — classic and polished' },
+  { id: 'night_out',        label: 'Night Out',              prompt: 'chic tailored blazer over a bodysuit, wide-leg trousers, heels, bold earrings' },
+  { id: 'club',             label: 'Club Ready',             prompt: 'crystal-embellished mini dress, platform stilettos, full glam makeup, bold jewelry' },
+  { id: 'biz_casual',       label: 'Business Casual',        prompt: 'fitted blazer, tailored trousers, silk blouse, block heels — polished and professional' },
+  { id: 'power_suit',       label: 'Power Suit',             prompt: 'structured monochrome suit, no undershirt, pointed pumps, minimal accessories — commanding' },
+  { id: 'high_fashion',     label: 'High Fashion',           prompt: 'avant-garde editorial look: Balenciaga, sharp structured silhouette, editorial styling' },
+  { id: 'old_money',        label: 'Old Money',              prompt: 'cashmere knit, wide-leg cream trousers, loafers, structured bag — quiet luxury' },
+  { id: 'monochrome',       label: 'Monochrome',             prompt: 'head-to-toe tonal look, Celine aesthetic, clean lines, one color, minimal accessories' },
+  { id: 'luxury_casual',    label: 'Luxury Casual',          prompt: 'Bottega Veneta bag, linen coord set, slides, gold jewelry — effortless expensive' },
+  { id: 'resort',           label: 'Resort',                 prompt: 'Zimmermann flowy maxi dress, woven sun hat, strappy sandals, gold jewelry' },
+  { id: 'beach',            label: 'Beach',                  prompt: 'designer bikini, sheer sarong wrap, oversized sunglasses, gold accessories' },
+  { id: 'pool',             label: 'Poolside',               prompt: 'luxury one-piece swimsuit, designer slides, oversized beach hat, linen cover-up' },
+  { id: 'cozy_winter',      label: 'Winter Coat',            prompt: 'oversized tailored coat, turtleneck, knee-high boots, structured bag — cold weather editorial' },
+  { id: 'y2k',              label: 'Y2K',                    prompt: 'Y2K revival: low-rise jeans, rhinestone crop top, butterfly clips, platform sandals' },
+  { id: 'boudoir',          label: 'Boudoir Editorial',      prompt: 'silk robe, sheer lace bodysuit, soft natural confidence — tasteful editorial boudoir-inspired' },
+];
+
 const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, broken anatomy, flat lighting, harsh flash, oversaturated colors, generic photo, artificial smile, overprocessed HDR, grainy, noisy';
 
-function buildCharacterPrompt(char, sceneName, mood, identityLocked) {
+function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverride = null) {
   const f = char.fields || {};
   const parts = [];
   parts.push('Ultra-realistic 4K commercial lifestyle photography for a premium content creator brand.');
   if (identityLocked) {
-    parts.push('IDENTITY LOCK ACTIVE: Preserve the exact physical appearance, hair, skin tone, and wardrobe of this specific creator. Do not generalize, alter, or reinterpret any of these traits.');
+    parts.push('IDENTITY LOCK ACTIVE: Preserve the exact facial features, skin tone, hair, and body of this specific creator. Do not alter their identity. Only their outfit and location should change.');
   }
   const talentParts = [f.face, f.tone].filter(Boolean).join('. ');
   if (talentParts) parts.push(`TALENT: ${talentParts}`);
   if (f.hair)        parts.push(`HAIR: ${f.hair}`);
   if (f.body)        parts.push(`BUILD: ${f.body}`);
-  if (f.wardrobe)    parts.push(`WARDROBE: ${f.wardrobe}`);
+  // Outfit override takes priority over character's default wardrobe
+  const wardrobe = outfitOverride || f.wardrobe;
+  if (wardrobe)      parts.push(`OUTFIT: ${wardrobe}`);
   if (f.personality) parts.push(`ENERGY: ${f.personality}`);
   if (f.niche)       parts.push(`CONTENT CONTEXT: ${f.niche}`);
   if (sceneName)     parts.push(`SCENE: ${sceneName}`);
@@ -271,6 +301,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   // Quick Shoot state
   const [quickScene,  setQuickScene]  = React.useState('none');
   const [quickMood,   setQuickMood]   = React.useState('Clean');
+  const [quickOutfit, setQuickOutfit] = React.useState('default');
   const [quickEngine, setQuickEngine] = React.useState('openai_image');
   const [quickBatch,  setQuickBatch]  = React.useState(1);
   const [activeRef,   setActiveRef]   = React.useState(0); // index into getAllImages
@@ -357,7 +388,8 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     if (!active) return;
     const allImages = getAllImages(active);
     const sceneName = quickScene === 'none' ? '' : QUICK_SCENES.find(s => s.id === quickScene)?.name || '';
-    const positivePrompt = buildCharacterPrompt(active, sceneName, quickMood, !!active.locked);
+    const outfitPrompt = QUICK_OUTFITS.find(o => o.id === quickOutfit)?.prompt || null;
+    const positivePrompt = buildCharacterPrompt(active, sceneName, quickMood, !!active.locked, outfitPrompt);
 
     if (!allImages.length) {
       onNav && onNav('images', { positivePrompt, negativePrompt: STANDARD_NEGATIVE });
@@ -703,6 +735,33 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
                 </PillButton>
               ))}
             </div>
+          </div>
+
+          {/* Outfit */}
+          <div>
+            <div style={{ ...LABEL, marginBottom: 10 }}>
+              Outfit
+              {quickOutfit !== 'default' && (
+                <button
+                  onClick={() => setQuickOutfit('default')}
+                  style={{ marginLeft: 10, font: '500 0.72rem/1 var(--font-ui)', color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  reset
+                </button>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+              {QUICK_OUTFITS.map(o => (
+                <PillButton key={o.id} active={quickOutfit === o.id} onClick={() => setQuickOutfit(o.id)} style={{ flexShrink: 0 }}>
+                  {o.label}
+                </PillButton>
+              ))}
+            </div>
+            {quickOutfit !== 'default' && (
+              <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', marginTop: 6, lineHeight: 1.4 }}>
+                {QUICK_OUTFITS.find(o => o.id === quickOutfit)?.prompt}
+              </div>
+            )}
           </div>
 
           {/* Mood */}

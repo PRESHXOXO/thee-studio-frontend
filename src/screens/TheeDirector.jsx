@@ -242,6 +242,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
     clothing: selectedChar && outfitOverride !== 'Unspecified' ? outfitOverride : clothing,
     features, mood, contentType, scene,
     character: selectedChar,
+    niche: selectedChar?.fields?.niche || '',
     // Shoot-specific overrides (only applied when character selected)
     shootHairStyle: selectedChar ? shootHairStyle : 'Unspecified',
     shootHairColor: selectedChar ? shootHairColor : 'Unspecified',
@@ -420,7 +421,18 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
         body:        '',
         personality: vision || '',
         wardrobe:    clothing !== 'Unspecified' ? clothing : (outfitOverride !== 'Unspecified' ? outfitOverride : ''),
+        niche:       '',
       },
+      // Preserve full shoot context so it can be reloaded
+      savedVision:      vision || '',
+      savedMood:        mood,
+      savedScene:       scene,
+      savedContentType: contentType,
+      savedShootHair:   shootHairStyle !== 'Unspecified' ? shootHairStyle : '',
+      savedShootHairColor: shootHairColor !== 'Unspecified' ? shootHairColor : '',
+      savedShootJewelry:   shootJewelry !== 'None' ? shootJewelry : '',
+      savedOutfitOverride: outfitOverride !== 'Unspecified' ? outfitOverride : '',
+      savedOutfitPhotoDesc: outfitPhotoDesc || '',
     };
     try {
       const existing = JSON.parse(localStorage.getItem('ts_characters') || '[]');

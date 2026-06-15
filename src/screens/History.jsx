@@ -88,7 +88,7 @@ function HistoryCard({ entry, onCopy }) {
   );
 }
 
-export function History({ onNav }) {
+export function History() {
   const [history, setHistory] = React.useState(loadHistory);
 
   const handleClear = () => {

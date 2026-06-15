@@ -2,13 +2,15 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 
-const SAMPLE_REFS = [
-  { id: 1, creator: 'Luna Reyes',    caption: 'Rooftop pose',    tag: 'Lighting ref' },
-  { id: 2, creator: 'Aaliyah Brown', caption: 'Clean girl',      tag: 'Wardrobe' },
-  { id: 3, creator: 'Zariah Cole',   caption: 'Gold beauty',     tag: 'Hair detail' },
-  { id: 4, creator: 'Imani Foster',  caption: 'Runway',          tag: 'Color story' },
-  { id: 5, creator: 'Nia Sinclair',  caption: 'UGC set',         tag: 'Lifestyle' },
-];
+const REF_KEY = 'ts_references';
+
+function loadRefs() {
+  try { return JSON.parse(localStorage.getItem(REF_KEY) || '[]'); } catch { return []; }
+}
+
+function saveRefs(refs) {
+  try { localStorage.setItem(REF_KEY, JSON.stringify(refs)); } catch {}
+}
 
 function RefCard({ item, selected, onSelect }) {
   return (
@@ -70,7 +72,7 @@ function UploadCard({ onUpload }) {
 }
 
 export function References({ onNav }) {
-  const [refs, setRefs] = React.useState(SAMPLE_REFS);
+  const [refs, setRefs] = React.useState(loadRefs);
   const [selected, setSelected] = React.useState(new Set());
 
   const toggleSelect = (id) => {
@@ -83,13 +85,17 @@ export function References({ onNav }) {
 
   const handleUpload = (files) => {
     const newRefs = files.map((file, i) => ({
-      id: Date.now() + i,
+      id: `ref_${Date.now()}_${i}`,
       src: URL.createObjectURL(file),
       creator: 'My Reference',
       caption: file.name.replace(/\.[^.]+$/, ''),
       tag: 'Uploaded',
     }));
-    setRefs(prev => [...prev, ...newRefs]);
+    setRefs(prev => {
+      const updated = [...prev, ...newRefs];
+      saveRefs(updated);
+      return updated;
+    });
   };
 
   return (
@@ -124,12 +130,24 @@ export function References({ onNav }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14 }}>
-        {refs.map(item => (
-          <RefCard key={item.id} item={item} selected={selected.has(item.id)} onSelect={toggleSelect} />
-        ))}
-        <UploadCard onUpload={handleUpload} />
-      </div>
+      {refs.length === 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '64px 24px', border: '2px dashed var(--border-strong)', borderRadius: 'var(--radius-lg)', color: 'var(--text-faint)' }}>
+          <Icon name="image" size={36} strokeWidth={1} />
+          <div style={{ font: '600 1rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>No references yet</div>
+          <div style={{ font: 'var(--text-sm)', color: 'var(--text-faint)', textAlign: 'center', maxWidth: 320 }}>Upload reference images to build your visual library. They'll be saved here for future shoots.</div>
+          <Button variant="primary" onClick={() => document.getElementById('ref-upload-empty').click()}>
+            <Icon name="plus" size={14} /> Add Reference
+            <input id="ref-upload-empty" type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => handleUpload(Array.from(e.target.files))} />
+          </Button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14 }}>
+          {refs.map(item => (
+            <RefCard key={item.id} item={item} selected={selected.has(item.id)} onSelect={toggleSelect} />
+          ))}
+          <UploadCard onUpload={handleUpload} />
+        </div>
+      )}
 
     </div>
   );

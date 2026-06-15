@@ -9,7 +9,7 @@ const ENGINES = [
     id: 'openai',
     name: 'OpenAI Image',
     desc: 'Cloud · best for clean studio beauty',
-    status: 'connected',
+    status: 'dynamic', // resolved at render time from localStorage
     icon: 'cloud',
   },
   {
@@ -79,6 +79,7 @@ function ApiKeySection() {
     setErrorMsg('');
     try {
       await saveApiKey(key.trim());
+      localStorage.setItem('ts_api_configured', '1');
       setStatus('ok');
       setKey('');
     } catch (e) {
@@ -129,9 +130,15 @@ function ApiKeySection() {
   );
 }
 
+function resolveEngineStatus(engine) {
+  if (engine.status !== 'dynamic') return engine.status;
+  return localStorage.getItem('ts_api_configured') === '1' ? 'connected' : 'needs-setup';
+}
+
 export function Settings() {
   const [activeEngine, setActiveEngine] = React.useState('openai');
-  const engine = ENGINES.find(e => e.id === activeEngine);
+  const engineDef = ENGINES.find(e => e.id === activeEngine);
+  const engine = engineDef ? { ...engineDef, status: resolveEngineStatus(engineDef) } : engineDef;
   const s = STATUS_CONFIG[engine?.status || 'idle'];
 
   return (
@@ -144,7 +151,7 @@ export function Settings() {
           <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 10px' }}>Engine Library</h1>
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 480 }}>Connect and tune the engines that power your studio.</p>
         </div>
-        <Button variant="primary" onClick={() => {}}>
+        <Button variant="primary" onClick={() => {}} title="Coming soon" style={{ opacity: 0.5, cursor: 'not-allowed' }}>
           <Icon name="plus" size={15} /> Add Engine
         </Button>
       </div>
@@ -158,7 +165,7 @@ export function Settings() {
         <Card style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '16px' }}>
           <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '4px 4px 12px', margin: 0 }}>Active Engines</div>
           {ENGINES.map(e => (
-            <EngineRow key={e.id} engine={e} isActive={activeEngine === e.id} onSelect={setActiveEngine} />
+            <EngineRow key={e.id} engine={{ ...e, status: resolveEngineStatus(e) }} isActive={activeEngine === e.id} onSelect={setActiveEngine} />
           ))}
         </Card>
 
@@ -185,9 +192,9 @@ export function Settings() {
           </p>
 
           <div style={{ display: 'flex', gap: 8 }}>
-            {engine?.status === 'needs-setup' && <Button variant="primary" onClick={() => {}}>Configure</Button>}
-            {engine?.status === 'connected' && <Button variant="secondary" onClick={() => {}}>Disconnect</Button>}
-            {engine?.status === 'idle' && <Button variant="secondary" onClick={() => {}}>Enable</Button>}
+            {engine?.status === 'needs-setup' && <Button variant="primary" onClick={() => {}} title="Coming soon" style={{ opacity: 0.5, cursor: 'not-allowed' }}>Configure</Button>}
+            {engine?.status === 'connected' && <Button variant="secondary" onClick={() => {}} title="Coming soon" style={{ opacity: 0.5, cursor: 'not-allowed' }}>Disconnect</Button>}
+            {engine?.status === 'idle' && <Button variant="secondary" onClick={() => {}} title="Coming soon" style={{ opacity: 0.5, cursor: 'not-allowed' }}>Enable</Button>}
           </div>
         </Card>
 

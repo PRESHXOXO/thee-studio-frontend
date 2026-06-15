@@ -6,7 +6,7 @@ import { Input } from '../components/forms/Input.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { PromptOutput } from '../components/feedback/PromptOutput.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { buildDirectorOutputs, generateImage, characterGenerate, sanitizeForOpenAI } from '../api/studio.js';
+import { buildDirectorOutputs, generateImage, characterGenerate, sanitizeForOpenAI, describeOutfitImage } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
 import {
   CONTENT_TYPES, MOODS, LOCATIONS, GENDERS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS,
@@ -210,6 +210,16 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
 
   const [buildMode,    setBuildMode]    = React.useState('openai');
   const [outfitOverride, setOutfitOverride] = React.useState('Unspecified');
+
+  // Shoot-specific styling (active when character is selected)
+  const [shootHairStyle,     setShootHairStyle]     = React.useState('Unspecified');
+  const [shootHairColor,     setShootHairColor]     = React.useState('Unspecified');
+  const [shootJewelry,       setShootJewelry]       = React.useState('None');
+  const [outfitPhotoUrl,     setOutfitPhotoUrl]     = React.useState('');
+  const [outfitPhotoDesc,    setOutfitPhotoDesc]    = React.useState('');
+  const [outfitPhotoAnalyzing, setOutfitPhotoAnalyzing] = React.useState(false);
+  const outfitFileRef = React.useRef(null);
+
   const [loading,      setLoading]      = React.useState(false);
   const [error,        setError]        = React.useState('');
   const [outputs,      setOutputs]      = React.useState(null);
@@ -229,11 +239,43 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
   const formParams = () => ({
     vision, gender, skinTone, hairStyle, hairColor,
     eyeDetail, jewelry,
-    // When character selected, outfitOverride takes priority over Subject Details clothing
     clothing: selectedChar && outfitOverride !== 'Unspecified' ? outfitOverride : clothing,
     features, mood, contentType, scene,
     character: selectedChar,
+    // Shoot-specific overrides (only applied when character selected)
+    shootHairStyle: selectedChar ? shootHairStyle : 'Unspecified',
+    shootHairColor: selectedChar ? shootHairColor : 'Unspecified',
+    shootJewelry:   selectedChar ? shootJewelry   : 'None',
+    outfitPhotoDesc: selectedChar ? outfitPhotoDesc : '',
   });
+
+  const handleOutfitPhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target.result;
+      setOutfitPhotoUrl(dataUrl);
+      setOutfitPhotoDesc('');
+      setOutfitOverride('Unspecified'); // clear dropdown when photo used
+      setOutfitPhotoAnalyzing(true);
+      try {
+        const desc = await describeOutfitImage(dataUrl);
+        setOutfitPhotoDesc(desc);
+      } catch (err) {
+        setOutfitPhotoDesc('');
+      } finally {
+        setOutfitPhotoAnalyzing(false);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const clearOutfitPhoto = () => {
+    setOutfitPhotoUrl('');
+    setOutfitPhotoDesc('');
+  };
 
   const finishBuild = (result, mode) => {
     setOutputs(result);
@@ -430,9 +472,79 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
           <Field label="Scene">
             <Select value={scene} onChange={setScene} options={LOCATIONS} />
           </Field>
-          <Field label="Outfit">
-            <Select value={outfitOverride} onChange={setOutfitOverride} options={CLOTHING_VIBES} placeholder="Select outfit…" />
-          </Field>
+
+          {/* Shoot Styling — shown when character selected */}
+          {selectedChar ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ ...LABEL }}>Shoot Styling</div>
+                <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)', background: 'var(--rose-deep)', padding: '2px 7px', borderRadius: 'var(--radius-pill)' }}>
+                  overrides {selectedChar.name}'s defaults
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <Field label="Hair Style">
+                  <Select value={shootHairStyle} onChange={setShootHairStyle} options={HAIR_STYLES} placeholder="Keep default…" />
+                </Field>
+                <Field label="Hair Color">
+                  <Select value={shootHairColor} onChange={setShootHairColor} options={HAIR_COLORS} placeholder="Keep default…" />
+                </Field>
+              </div>
+              <Field label="Jewelry">
+                <Select value={shootJewelry} onChange={setShootJewelry} options={JEWELRY_OPTIONS} />
+              </Field>
+              <Field label="Outfit">
+                <Select
+                  value={outfitOverride}
+                  onChange={v => { setOutfitOverride(v); clearOutfitPhoto(); }}
+                  options={CLOTHING_VIBES}
+                  placeholder="Select outfit…"
+                />
+              </Field>
+              {/* Outfit photo upload */}
+              <input ref={outfitFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleOutfitPhotoUpload} />
+              {outfitPhotoUrl ? (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <img src={outfitPhotoUrl} alt="Outfit" style={{ width: 52, height: 70, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }} />
+                    <button
+                      onClick={clearOutfitPhoto}
+                      style={{ position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%', background: 'var(--cherry)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 10, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                    >✕</button>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {outfitPhotoAnalyzing ? (
+                      <p style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>Analyzing outfit…</p>
+                    ) : outfitPhotoDesc ? (
+                      <div style={{ padding: '8px 10px', background: 'var(--rose-glass)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                        <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 4 }}>Outfit Detected</div>
+                        <p style={{ font: 'var(--text-xs)', color: 'var(--text-body)', margin: 0, lineHeight: 1.5 }}>{outfitPhotoDesc}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => outfitFileRef.current?.click()}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    padding: '8px 12px', borderRadius: 'var(--radius-md)',
+                    border: '1.5px dashed var(--border)', background: 'transparent',
+                    color: 'var(--text-muted)', cursor: 'pointer',
+                    font: '500 0.8rem/1 var(--font-ui)', fontFamily: 'inherit',
+                    transition: 'border-color var(--t-fast)',
+                    width: '100%', justifyContent: 'center',
+                  }}
+                >
+                  <Icon name="upload" size={13} /> Upload Outfit Photo
+                </button>
+              )}
+            </div>
+          ) : (
+            <Field label="Outfit">
+              <Select value={outfitOverride} onChange={setOutfitOverride} options={CLOTHING_VIBES} placeholder="Select outfit…" />
+            </Field>
+          )}
 
           <div>
             <div style={{ ...LABEL, marginBottom: 10 }}>Build Mode</div>

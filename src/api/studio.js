@@ -253,6 +253,20 @@ export async function generateCharacterVariations(params) {
   return parsed; // { images: [...] }
 }
 
+export async function describeOutfitImage(imageDataUrl) {
+  const res = await fetch(`${BASE}/run/outfit_describe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [imageDataUrl], session_hash: SESSION_HASH }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const contentType = res.headers.get('content-type') || '';
+  const raw = contentType.includes('text/event-stream') ? await readSSE(res) : (await res.json()).data;
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed.outfitDescription || '';
+}
+
 export async function extractFaceAnchor(imageDataUrl) {
   const res = await fetch(`${BASE}/run/face_anchor_extract`, {
     method: 'POST',

@@ -159,7 +159,7 @@ export const GENDERS = ['Unspecified', 'Woman', 'Man', 'Non-binary', 'Femme', 'A
 
 export const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, missing fingers, broken anatomy, unnatural body proportions, stiff pose, flat lighting, harsh flash, oversaturated colors, cluttered background, cartoon styling, floating tattoos, fake jewelry, bad fabric physics, cropped limbs, generic photo, artificial smile, lifeless expression, overprocessed HDR, grainy, noisy, unrealistic skin color, washed-out skin, plastic hair, duplicate body parts, distorted face';
 
-export function buildStructuredVision({ vision = '', gender = 'Unspecified', skinTone = 'Unspecified', hairStyle = 'Unspecified', hairColor = 'Unspecified', eyeDetail = 'Unspecified', jewelry = 'None', clothing = 'Unspecified', features = 'None', mood = 'Clean', contentType = 'Portrait', scene = 'None', character = null } = {}) {
+export function buildStructuredVision({ vision = '', gender = 'Unspecified', skinTone = 'Unspecified', hairStyle = 'Unspecified', hairColor = 'Unspecified', eyeDetail = 'Unspecified', jewelry = 'None', clothing = 'Unspecified', features = 'None', mood = 'Clean', contentType = 'Portrait', scene = 'None', character = null, shootHairStyle = 'Unspecified', shootHairColor = 'Unspecified', shootJewelry = 'None', outfitPhotoDesc = '' } = {}) {
   const s = [];
   s.push('Ultra-realistic 4K commercial lifestyle photography. Shot for a premium fashion and lifestyle brand campaign. The final image must look like a high-end photograph taken on a professional camera — not AI-generated, not illustrated, not stylized.');
 
@@ -174,12 +174,24 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', ski
       if (f.tone) cp.push(`Skin: ${f.tone}`);
       if (cp.length) s.push(`TALENT — ${character.name}: ${cp.join('. ')}. Preserve face and skin tone only. Do not reproduce the reference photo's outfit or background.`);
     }
-    // Outfit — always explicit that this replaces the reference photo
-    const outfitUsed = (clothing && clothing !== 'Unspecified') ? clothing : f.wardrobe;
+    // Outfit — photo description takes priority, then dropdown, then character's wardrobe
+    const outfitUsed = outfitPhotoDesc
+      ? outfitPhotoDesc
+      : ((clothing && clothing !== 'Unspecified') ? clothing : f.wardrobe);
     if (outfitUsed) s.push(`OUTFIT FOR THIS SHOOT (REQUIRED — replace the reference photo outfit): ${outfitUsed}. The subject must wear exactly this. Do not use the clothing from the reference image.`);
-    // Supporting character details
+    // Supporting character details — shoot hair/jewelry overrides take priority
     const cp2 = [];
-    if (f.hair)        cp2.push(`Hair: ${f.hair}`);
+    const shootHair = [
+      shootHairStyle !== 'Unspecified' ? shootHairStyle : '',
+      shootHairColor !== 'Unspecified' ? `in ${shootHairColor}` : '',
+    ].filter(Boolean).join(', ');
+    if (shootHair) {
+      cp2.push(`HAIR FOR THIS SHOOT (override character default): ${shootHair}`);
+    } else if (f.hair) {
+      cp2.push(`Hair: ${f.hair}`);
+    }
+    const jewelryUsed = (shootJewelry && shootJewelry !== 'None') ? shootJewelry : (jewelry !== 'None' ? jewelry : null);
+    if (jewelryUsed) cp2.push(`Jewelry for this shoot: ${jewelryUsed}`);
     if (f.body)        cp2.push(`Build: ${f.body}`);
     if (f.personality) cp2.push(`Energy: ${f.personality}`);
     if (cp2.length) s.push(cp2.join('. ') + '.');

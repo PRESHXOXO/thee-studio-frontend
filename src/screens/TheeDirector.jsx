@@ -301,7 +301,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
         positivePrompt,
         negativePrompt: STANDARD_NEGATIVE,
         recommendedEngine: 'OpenAI Image',
-        reason: 'Structured format optimized for OpenAI gpt-image-1.',
+        reason: 'Structured format optimized for OpenAI gpt-image-2.',
       }, 'openai');
       return;
     }

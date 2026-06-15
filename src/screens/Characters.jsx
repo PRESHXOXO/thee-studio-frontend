@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { analyzeCharacterImage } from '../api/studio.js';
+import { analyzeCharacterImage, characterGenerate } from '../api/studio.js';
 
 const FIELD_DEFS = [
   { id: 'face',        icon: 'scan-face',    label: 'Face',          placeholder: 'e.g. High cheekbones, almond eyes, soft heart shape' },
@@ -16,6 +16,11 @@ const FIELD_DEFS = [
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6, display: 'block' };
 const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--input-bg, #fff)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
+
+const QUICK_ENGINES = [
+  { id: 'openai_image',         label: 'OpenAI',      icon: 'zap' },
+  { id: 'replicate_flux_schnell', label: 'FLUX Schnell', icon: 'flame' },
+];
 
 const QUICK_SCENES = [
   { id: 'none',      name: 'No Scene',    icon: 'minus-circle' },
@@ -164,8 +169,12 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [analyzeError, setAnalyzeError] = React.useState('');
   const [saveError, setSaveError]   = React.useState('');
   const [saved, setSaved]           = React.useState(false);
-  const [quickScene, setQuickScene] = React.useState('none');
-  const [quickMood, setQuickMood]   = React.useState('Clean');
+  const [quickScene, setQuickScene]   = React.useState('none');
+  const [quickMood, setQuickMood]     = React.useState('Clean');
+  const [quickEngine, setQuickEngine] = React.useState('openai_image');
+  const [generating, setGenerating]   = React.useState(false);
+  const [genImages, setGenImages]     = React.useState([]);
+  const [genError, setGenError]       = React.useState('');
   const fileInputRef                = React.useRef(null);
 
   React.useEffect(() => {
@@ -229,11 +238,34 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     setCharacters(updated);
   };
 
-  const handleQuickShoot = () => {
+  const handleQuickShoot = async () => {
     if (!active) return;
     const sceneName = quickScene === 'none' ? '' : QUICK_SCENES.find(s => s.id === quickScene)?.name || '';
     const positivePrompt = buildCharacterPrompt(active, sceneName, quickMood, !!active.locked);
-    onNav && onNav('images', { positivePrompt, negativePrompt: STANDARD_NEGATIVE });
+
+    // If character has no image, fall back to Image Generator with text prompt
+    if (!active.image) {
+      onNav && onNav('images', { positivePrompt, negativePrompt: STANDARD_NEGATIVE });
+      return;
+    }
+
+    // Character has an image — use reference generation inline
+    setGenerating(true);
+    setGenImages([]);
+    setGenError('');
+    try {
+      const result = await characterGenerate({
+        engineId: quickEngine,
+        positivePrompt,
+        negativePrompt: STANDARD_NEGATIVE,
+        characterImage: active.image,
+      });
+      setGenImages(result.images || []);
+    } catch (e) {
+      setGenError(e.message || 'Generation failed');
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleNew = () => {
@@ -426,7 +458,9 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             <div>
               <div style={{ ...LABEL, marginBottom: 2 }}>Quick Shoot</div>
               <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                Pick a scene and mood, then build + generate in one click.
+                {active.image
+                  ? 'Character portrait used as visual reference for generation.'
+                  : 'No portrait uploaded — will generate from identity fields only.'}
               </div>
             </div>
             {active.locked && (
@@ -438,6 +472,29 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
                 <Icon name="fingerprint" size={13} /> Identity Locked
               </span>
             )}
+          </div>
+
+          {/* Engine picker */}
+          <div>
+            <div style={{ ...LABEL, marginBottom: 10 }}>Engine</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {QUICK_ENGINES.map(eng => {
+                const isActive = quickEngine === eng.id;
+                return (
+                  <button key={eng.id} onClick={() => setQuickEngine(eng.id)} style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '7px 13px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+                    border: `1.5px solid ${isActive ? 'var(--accent-deep)' : 'var(--border)'}`,
+                    background: isActive ? 'var(--rose-deep)' : 'transparent',
+                    color: isActive ? 'var(--accent-deep)' : 'var(--text-muted)',
+                    font: '500 0.8125rem/1 var(--font-ui)', fontFamily: 'inherit',
+                    transition: 'all var(--t-fast)',
+                  }}>
+                    <Icon name={eng.icon} size={13} strokeWidth={1.75} /> {eng.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Scene picker */}
@@ -494,9 +551,49 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             </div>
           </div>
 
-          <Button variant="primary" onClick={handleQuickShoot} style={{ alignSelf: 'flex-start' }}>
-            <Icon name="zap" size={15} /> Build + Generate
-          </Button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Button variant="primary" onClick={handleQuickShoot} loading={generating} disabled={generating} style={{ alignSelf: 'flex-start' }}>
+              <Icon name="zap" size={15} /> {generating ? 'Generating…' : 'Build + Generate'}
+            </Button>
+            {generating && (
+              <span style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                Using your portrait as visual reference…
+              </span>
+            )}
+          </div>
+
+          {/* Generation error */}
+          {genError && (
+            <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>
+              {genError}
+            </p>
+          )}
+
+          {/* Generated results */}
+          {genImages.length > 0 && (
+            <div>
+              <div style={{ ...LABEL, marginBottom: 12 }}>Result</div>
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                {genImages.map((url, i) => (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 160 }}>
+                    <div style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
+                      <img src={url} alt={`Generated ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <a href={url} download={`thee-studio-${Date.now()}.png`} target="_blank" rel="noreferrer" style={{ flex: 1 }}>
+                        <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }}>
+                          <Icon name="download" size={13} /> Save
+                        </Button>
+                      </a>
+                      <Button variant="secondary" onClick={() => onNav && onNav('images', { positivePrompt: '', negativePrompt: '' })} style={{ fontSize: '0.75rem' }}>
+                        <Icon name="external-link" size={13} />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </Card>
       )}

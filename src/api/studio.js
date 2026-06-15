@@ -154,6 +154,37 @@ export async function buildDirectorOutputs({
 // Sends a base64 image data URL to the backend vision model and returns
 // structured character field data ({ face, hair, body, wardrobe, tone, personality, niche }).
 // Uses /run/analyze_character — in Gradio 6.x the URL path IS the api_name.
+export async function characterGenerate({ engineId, positivePrompt, negativePrompt, characterImage, imageSize = 'Vertical 9:16' }) {
+  const res = await fetch(`${BASE}/run/character_generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      data: [
+        JSON.stringify({ engineId, positivePrompt, negativePrompt, imageSize }),
+        characterImage,
+      ],
+      session_hash: SESSION_HASH,
+    }),
+  });
+  if (!res.ok) {
+    let detail = '';
+    try { detail = await res.text(); } catch {}
+    throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
+  }
+  const contentType = res.headers.get('content-type') || '';
+  const raw = contentType.includes('text/event-stream')
+    ? await readSSE(res)
+    : (await res.json()).data;
+  const jsonStr = raw[0] || '{}';
+  const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+  if (parsed.error) throw new Error(parsed.error);
+  // Rewrite localhost URLs to relative so Vite proxy can serve them
+  parsed.images = (parsed.images || []).map(url =>
+    url.replace(/^https?:\/\/127\.0\.0\.1:\d+\/gradio_api/, '/gradio_api')
+  );
+  return parsed;
+}
+
 export async function analyzeCharacterImage(imageDataUrl) {
   const res = await fetch(`${BASE}/run/analyze_character`, {
     method: 'POST',

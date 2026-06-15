@@ -324,6 +324,9 @@ export function ImageGenerator({ initialPrompts }) {
         </Button>
       </div>
 
+      {/* Prompt Builder */}
+      <PromptBuilder engine={engine} onApply={({ positive, negative }) => { setPositive(positive); setNegative(negative); }} />
+
       {/* Controls + prompts */}
       <Card style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
@@ -375,9 +378,6 @@ export function ImageGenerator({ initialPrompts }) {
           </div>
         </div>
       </Card>
-
-      {/* Prompt Builder */}
-      <PromptBuilder engine={engine} onApply={({ positive, negative }) => { setPositive(positive); setNegative(negative); }} />
 
       {error  && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
       {status && !error && <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', margin: 0 }}>{status}</p>}

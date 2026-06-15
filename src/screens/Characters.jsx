@@ -17,6 +17,43 @@ const FIELD_DEFS = [
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6, display: 'block' };
 const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--input-bg, #fff)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
 
+const QUICK_SCENES = [
+  { id: 'none',      name: 'No Scene',    icon: 'minus-circle' },
+  { id: 'studio',    name: 'Studio',      icon: 'camera' },
+  { id: 'rooftop',   name: 'Rooftop',     icon: 'sunset' },
+  { id: 'yacht',     name: 'Yacht',       icon: 'anchor' },
+  { id: 'penthouse', name: 'Penthouse',   icon: 'building-2' },
+  { id: 'poolside',  name: 'Poolside',    icon: 'droplets' },
+  { id: 'jet',       name: 'Private Jet', icon: 'plane' },
+  { id: 'hotel',     name: 'Hotel',       icon: 'bed' },
+  { id: 'beach',     name: 'Beach',       icon: 'waves' },
+  { id: 'desert',    name: 'Desert',      icon: 'sun' },
+];
+
+const QUICK_MOODS = ['Clean', 'Luxury', 'Bold', 'Romantic', 'Editorial', 'Cinematic', 'Soft', 'Playful'];
+
+const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, broken anatomy, flat lighting, harsh flash, oversaturated colors, generic photo, artificial smile, overprocessed HDR, grainy, noisy';
+
+function buildCharacterPrompt(char, sceneName, mood, identityLocked) {
+  const f = char.fields || {};
+  const parts = [];
+  parts.push('Ultra-realistic 4K commercial lifestyle photography for a premium content creator brand.');
+  if (identityLocked) {
+    parts.push('IDENTITY LOCK ACTIVE: Preserve the exact physical appearance, hair, skin tone, and wardrobe of this specific creator. Do not generalize, alter, or reinterpret any of these traits.');
+  }
+  const talentParts = [f.face, f.tone].filter(Boolean).join('. ');
+  if (talentParts) parts.push(`TALENT: ${talentParts}`);
+  if (f.hair)        parts.push(`HAIR: ${f.hair}`);
+  if (f.body)        parts.push(`BUILD: ${f.body}`);
+  if (f.wardrobe)    parts.push(`WARDROBE: ${f.wardrobe}`);
+  if (f.personality) parts.push(`ENERGY: ${f.personality}`);
+  if (f.niche)       parts.push(`CONTENT CONTEXT: ${f.niche}`);
+  if (sceneName)     parts.push(`SCENE: ${sceneName}`);
+  if (mood)          parts.push(`MOOD: ${mood}`);
+  parts.push('Photorealistic editorial photograph. Natural dimensional lighting. Professional commercial retouching. No AI artifacts. No distorted anatomy. Ultra-detailed 4K. Luxury campaign quality.');
+  return parts.join('\n\n');
+}
+
 function compressImage(dataUrl, maxPx = 480, quality = 0.82) {
   return new Promise(resolve => {
     const img = new Image();
@@ -92,6 +129,18 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
             <Icon name="x" size={12} />
           </button>
         )}
+        {/* Lock badge */}
+        {char.locked && (
+          <div style={{
+            position: 'absolute', bottom: 8, left: 8,
+            width: 22, height: 22, borderRadius: '50%',
+            background: 'var(--accent-deep)', color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+          }}>
+            <Icon name="fingerprint" size={13} />
+          </div>
+        )}
       </div>
       {/* Name */}
       <div style={{
@@ -107,7 +156,7 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
   );
 }
 
-export function Characters({ initialCharacter, onCharacterChange }) {
+export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [characters, setCharacters] = React.useState(loadCharacters);
   const [activeId, setActiveId]     = React.useState(null);
   const [editing, setEditing]       = React.useState(null);
@@ -115,6 +164,8 @@ export function Characters({ initialCharacter, onCharacterChange }) {
   const [analyzeError, setAnalyzeError] = React.useState('');
   const [saveError, setSaveError]   = React.useState('');
   const [saved, setSaved]           = React.useState(false);
+  const [quickScene, setQuickScene] = React.useState('none');
+  const [quickMood, setQuickMood]   = React.useState('Clean');
   const fileInputRef                = React.useRef(null);
 
   React.useEffect(() => {
@@ -170,6 +221,20 @@ export function Characters({ initialCharacter, onCharacterChange }) {
   };
 
   const active = activeId != null ? characters.find(c => c.id === activeId) : null;
+
+  const handleToggleLock = () => {
+    if (!activeId) return;
+    const updated = characters.map(c => c.id === activeId ? { ...c, locked: !c.locked } : c);
+    saveCharacters(updated);
+    setCharacters(updated);
+  };
+
+  const handleQuickShoot = () => {
+    if (!active) return;
+    const sceneName = quickScene === 'none' ? '' : QUICK_SCENES.find(s => s.id === quickScene)?.name || '';
+    const positivePrompt = buildCharacterPrompt(active, sceneName, quickMood, !!active.locked);
+    onNav && onNav('images', { positivePrompt, negativePrompt: STANDARD_NEGATIVE });
+  };
 
   const handleNew = () => {
     setEditing({ name: 'New Creator', image: null, fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])) });
@@ -261,6 +326,15 @@ export function Characters({ initialCharacter, onCharacterChange }) {
           )}
           {editing && <Button variant="primary" onClick={handleSave}><Icon name="save" size={15} /> Save Creator</Button>}
           {editing && <Button variant="secondary" onClick={() => { setEditing(null); setAnalyzeError(''); setSaveError(''); }}>Cancel</Button>}
+          {!editing && active && (
+            <Button
+              variant={active.locked ? 'primary' : 'secondary'}
+              onClick={handleToggleLock}
+              title={active.locked ? 'Identity Locked — click to unlock' : 'Lock identity to protect this creator\'s traits'}
+            >
+              <Icon name="fingerprint" size={15} /> {active.locked ? 'Locked' : 'Lock Identity'}
+            </Button>
+          )}
           {!editing && active && <Button variant="secondary" onClick={() => handleEdit(active)}><Icon name="pencil" size={14} /> Edit</Button>}
           <Button variant="secondary" onClick={handleNew}><Icon name="plus" size={15} /> New Creator</Button>
         </div>
@@ -341,6 +415,90 @@ export function Characters({ initialCharacter, onCharacterChange }) {
             ))}
           </Card>
         </div>
+      )}
+
+      {/* Quick Shoot — shown when character selected and not editing */}
+      {activeId != null && !editing && active && (
+        <Card style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ ...LABEL, marginBottom: 2 }}>Quick Shoot</div>
+              <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                Pick a scene and mood, then build + generate in one click.
+              </div>
+            </div>
+            {active.locked && (
+              <span style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                font: '600 0.75rem/1 var(--font-ui)', color: 'var(--accent-deep)',
+                background: 'var(--rose-deep)', padding: '5px 10px', borderRadius: 'var(--radius-pill)',
+              }}>
+                <Icon name="fingerprint" size={13} /> Identity Locked
+              </span>
+            )}
+          </div>
+
+          {/* Scene picker */}
+          <div>
+            <div style={{ ...LABEL, marginBottom: 10 }}>Scene</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {QUICK_SCENES.map(sc => {
+                const isActive = quickScene === sc.id;
+                return (
+                  <button
+                    key={sc.id}
+                    onClick={() => setQuickScene(sc.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '7px 13px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+                      border: `1.5px solid ${isActive ? 'var(--accent-deep)' : 'var(--border)'}`,
+                      background: isActive ? 'var(--rose-deep)' : 'transparent',
+                      color: isActive ? 'var(--accent-deep)' : 'var(--text-muted)',
+                      font: '500 0.8125rem/1 var(--font-ui)', fontFamily: 'inherit',
+                      transition: 'all var(--t-fast)',
+                    }}
+                  >
+                    <Icon name={sc.icon} size={13} strokeWidth={1.75} />
+                    {sc.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Mood picker */}
+          <div>
+            <div style={{ ...LABEL, marginBottom: 10 }}>Mood</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {QUICK_MOODS.map(m => {
+                const isActive = quickMood === m;
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setQuickMood(m)}
+                    style={{
+                      padding: '7px 14px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+                      border: `1.5px solid ${isActive ? 'var(--accent-deep)' : 'var(--border)'}`,
+                      background: isActive ? 'var(--rose-deep)' : 'transparent',
+                      color: isActive ? 'var(--accent-deep)' : 'var(--text-muted)',
+                      font: '500 0.8125rem/1 var(--font-ui)', fontFamily: 'inherit',
+                      transition: 'all var(--t-fast)',
+                    }}
+                  >
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <Button variant="primary" onClick={handleQuickShoot} style={{ alignSelf: 'flex-start' }}>
+            <Icon name="zap" size={15} /> Build + Generate
+          </Button>
+
+        </Card>
       )}
 
       {/* Creator gallery */}

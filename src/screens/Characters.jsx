@@ -346,6 +346,23 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [aiGenAnchor,   setAiGenAnchor]   = React.useState('');
   const [aiGenLoading,  setAiGenLoading]  = React.useState(false);
   const [aiGenError,    setAiGenError]    = React.useState('');
+  const [aiGenProgress, setAiGenProgress] = React.useState(0); // smooth 0-100
+
+  // Smooth progress animation — ticks toward ceiling, ceiling unlocks as images arrive
+  React.useEffect(() => {
+    if (!aiGenLoading && aiGenImages.length === 0) { setAiGenProgress(0); return; }
+    if (!aiGenLoading) { setAiGenProgress(100); return; }
+    const ceilings = [14, 32, 52, 70, 88, 100];
+    const ceiling  = ceilings[Math.min(aiGenImages.length, 5)];
+    const id = setInterval(() => {
+      setAiGenProgress(prev => {
+        if (prev >= ceiling) return prev;
+        const step = Math.max(0.2, (ceiling - prev) * 0.04);
+        return Math.min(ceiling, prev + step);
+      });
+    }, 40);
+    return () => clearInterval(id);
+  }, [aiGenLoading, aiGenImages.length]);
 
   // Quick Shoot state
   const [quickScene,  setQuickScene]  = React.useState('none');
@@ -534,6 +551,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     setAiGenError('');
     setAiGenImages([]);
     setAiGenAnchor('');
+    setAiGenProgress(0);
     const params = {
       name: aiGenName || 'Creator',
       gender: aiGenGender,
@@ -787,23 +805,22 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
           {(aiGenLoading || aiGenImages.length > 0) && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent-deep)', font: '500 0.8rem/1 var(--font-ui)' }}>
-                  {aiGenLoading && <Icon name="sparkles" size={14} strokeWidth={1.75} />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, font: '500 0.8rem/1 var(--font-ui)' }}>
+                  {aiGenLoading && <Icon name="sparkles" size={14} strokeWidth={1.75} style={{ animation: 'spin 1.4s linear infinite' }} />}
                   <span style={{ color: aiGenLoading ? 'var(--accent-deep)' : 'var(--text-muted)' }}>
                     {aiGenLoading ? (aiGenStep || 'Working…') : 'Complete'}
                   </span>
                 </div>
-                <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)', fontWeight: 600 }}>
-                  {aiGenImages.length} / 5
+                <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {Math.round(aiGenProgress)}%
                 </span>
               </div>
-              <div style={{ height: 5, background: 'var(--rose-deep)', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ height: 6, background: 'var(--rose-deep)', borderRadius: 99, overflow: 'hidden' }}>
                 <div style={{
                   height: '100%',
-                  width: aiGenLoading && aiGenImages.length === 0 ? '8%' : `${(aiGenImages.length / 5) * 100}%`,
+                  width: `${aiGenProgress}%`,
                   background: 'var(--grad-coral)',
                   borderRadius: 99,
-                  transition: 'width 0.7s cubic-bezier(0.4, 0, 0.2, 1)',
                 }} />
               </div>
               {/* Shot labels under the bar */}

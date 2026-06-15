@@ -3,7 +3,7 @@ import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { analyzeCharacterImage, characterGenerate } from '../api/studio.js';
-import { saveToLibrary } from '../lib/library.js';
+import { saveToLibrary, loadLibrary } from '../lib/library.js';
 
 const FIELD_DEFS = [
   { id: 'face',        icon: 'scan-face',    label: 'Face',          placeholder: 'e.g. High cheekbones, almond eyes, soft heart shape' },
@@ -19,7 +19,7 @@ const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', tex
 const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--input-bg, #fff)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
 
 const QUICK_ENGINES = [
-  { id: 'openai_image',         label: 'OpenAI',      icon: 'zap' },
+  { id: 'openai_image',           label: 'OpenAI',       icon: 'zap' },
   { id: 'replicate_flux_schnell', label: 'FLUX Schnell', icon: 'flame' },
 ];
 
@@ -37,6 +37,7 @@ const QUICK_SCENES = [
 ];
 
 const QUICK_MOODS = ['Clean', 'Luxury', 'Bold', 'Romantic', 'Editorial', 'Cinematic', 'Soft', 'Playful'];
+const BATCH_OPTIONS = [1, 2, 4];
 
 const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, broken anatomy, flat lighting, harsh flash, oversaturated colors, generic photo, artificial smile, overprocessed HDR, grainy, noisy';
 
@@ -87,8 +88,100 @@ function saveCharacters(list) {
   }
 }
 
+// Returns primary image for a character (supports legacy single-image + new refImages array)
+function getPrimaryImage(char) {
+  return char.refImages?.[0] || char.image || null;
+}
+
+function getAllImages(char) {
+  if (char.refImages?.length) return char.refImages;
+  if (char.image) return [char.image];
+  return [];
+}
+
+function PillButton({ active, onClick, children, style }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '7px 13px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+        border: `1.5px solid ${active ? 'var(--accent-deep)' : 'var(--border)'}`,
+        background: active ? 'var(--rose-deep)' : 'transparent',
+        color: active ? 'var(--accent-deep)' : 'var(--text-muted)',
+        font: '500 0.8125rem/1 var(--font-ui)', fontFamily: 'inherit',
+        transition: 'all var(--t-fast)',
+        ...style,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function RefImageSlot({ src, active, onClick, onDelete, onUpload, index }) {
+  const [hov, setHov] = React.useState(false);
+  const fileRef = React.useRef(null);
+
+  if (!src) {
+    return (
+      <>
+        <button
+          onClick={() => fileRef.current?.click()}
+          style={{
+            width: 58, height: 77, borderRadius: 8, cursor: 'pointer',
+            border: '1.5px dashed var(--border)',
+            background: 'var(--surface-raised)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--text-faint)', flexShrink: 0,
+            transition: 'border-color var(--t-fast)',
+          }}
+        >
+          <Icon name="plus" size={16} strokeWidth={1.5} />
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }}
+        />
+      </>
+    );
+  }
+
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      onClick={onClick}
+      style={{
+        width: 58, height: 77, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', flexShrink: 0, position: 'relative',
+        border: `2px solid ${active ? 'var(--accent-deep)' : 'transparent'}`,
+        boxShadow: active ? 'var(--shadow-sm)' : 'none',
+        transition: 'border-color var(--t-fast)',
+      }}
+    >
+      <img src={src} alt={`Ref ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {hov && (
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(); }}
+          style={{
+            position: 'absolute', top: 2, right: 2, width: 18, height: 18,
+            borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: 'none',
+            cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Icon name="x" size={10} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function CreatorCard({ char, selected, onClick, onDelete }) {
   const [hovered, setHovered] = React.useState(false);
+  const portrait = getPrimaryImage(char);
   return (
     <div
       onClick={onClick}
@@ -101,7 +194,6 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
         transition: 'transform var(--t-base)',
       }}
     >
-      {/* Portrait card */}
       <div style={{
         width: '100%', aspectRatio: '3/4',
         borderRadius: 'var(--radius-xl)',
@@ -112,15 +204,14 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
         transition: 'box-shadow var(--t-base), border-color var(--t-base)',
         position: 'relative',
       }}>
-        {char.image
-          ? <img src={char.image} alt={char.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        {portrait
+          ? <img src={portrait} alt={char.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-faint)' }}>
               <Icon name="user" size={32} strokeWidth={1} />
             </div>
           )
         }
-        {/* Delete button */}
         {hovered && (
           <button
             onClick={e => { e.stopPropagation(); onDelete(); }}
@@ -135,7 +226,6 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
             <Icon name="x" size={12} />
           </button>
         )}
-        {/* Lock badge */}
         {char.locked && (
           <div style={{
             position: 'absolute', bottom: 8, left: 8,
@@ -147,14 +237,21 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
             <Icon name="fingerprint" size={13} />
           </div>
         )}
+        {getAllImages(char).length > 1 && (
+          <div style={{
+            position: 'absolute', bottom: 8, right: 8,
+            background: 'rgba(0,0,0,0.55)', color: '#fff', borderRadius: 6,
+            font: '600 0.65rem/1 var(--font-ui)', padding: '2px 5px',
+          }}>
+            {getAllImages(char).length}
+          </div>
+        )}
       </div>
-      {/* Name */}
       <div style={{
         font: '600 0.8125rem/1.2 var(--font-ui)',
         color: selected ? 'var(--accent-deep)' : 'var(--text-strong)',
         textAlign: 'center',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        width: '100%',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
       }}>
         {char.name}
       </div>
@@ -170,38 +267,57 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [analyzeError, setAnalyzeError] = React.useState('');
   const [saveError, setSaveError]   = React.useState('');
   const [saved, setSaved]           = React.useState(false);
-  const [quickScene, setQuickScene]   = React.useState('none');
-  const [quickMood, setQuickMood]     = React.useState('Clean');
+
+  // Quick Shoot state
+  const [quickScene,  setQuickScene]  = React.useState('none');
+  const [quickMood,   setQuickMood]   = React.useState('Clean');
   const [quickEngine, setQuickEngine] = React.useState('openai_image');
-  const [generating, setGenerating]   = React.useState(false);
-  const [genImages, setGenImages]     = React.useState([]);
-  const [genError, setGenError]       = React.useState('');
-  const fileInputRef                = React.useRef(null);
+  const [quickBatch,  setQuickBatch]  = React.useState(1);
+  const [activeRef,   setActiveRef]   = React.useState(0); // index into getAllImages
+  const [generating,  setGenerating]  = React.useState(false);
+  const [genImages,   setGenImages]   = React.useState([]);
+  const [genError,    setGenError]    = React.useState('');
+
+  // Shot history — library entries for active character
+  const [shotHistory, setShotHistory] = React.useState([]);
+
+  const fileInputRef    = React.useRef(null);
+  const refFileRefs     = React.useRef([null, null, null]);
+
+  const active = activeId != null ? characters.find(c => c.id === activeId) : null;
+
+  // Refresh shot history when active character changes or new images generated
+  React.useEffect(() => {
+    if (!active) { setShotHistory([]); return; }
+    setShotHistory(
+      loadLibrary()
+        .filter(e => e.character === active.name)
+        .slice(0, 16)
+    );
+  }, [activeId, characters, genImages]);
+
+  // Reset activeRef when switching characters
+  React.useEffect(() => { setActiveRef(0); setGenImages([]); setGenError(''); }, [activeId]);
 
   React.useEffect(() => {
     if (!onCharacterChange) return;
-    const char = characters.find(c => c.id === activeId) || null;
-    onCharacterChange(char);
+    onCharacterChange(active || null);
   }, [activeId, characters]);
 
   React.useEffect(() => {
     if (!initialCharacter) return;
     const init = async () => {
-      const compressed = initialCharacter.image
-        ? await compressImage(initialCharacter.image)
-        : null;
+      const compressed = initialCharacter.image ? await compressImage(initialCharacter.image) : null;
       const newEditing = {
         name: initialCharacter.name || 'New Creator',
-        image: compressed,
+        refImages: compressed ? [compressed] : [],
         fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])),
       };
       setEditing(newEditing);
       setActiveId(null);
       setAnalyzeError('');
       setSaveError('');
-      if (initialCharacter.image) {
-        runAnalysis(initialCharacter.image, newEditing);
-      }
+      if (initialCharacter.image) runAnalysis(initialCharacter.image, newEditing);
     };
     init();
   }, [initialCharacter]);
@@ -230,8 +346,6 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     }
   };
 
-  const active = activeId != null ? characters.find(c => c.id === activeId) : null;
-
   const handleToggleLock = () => {
     if (!activeId) return;
     const updated = characters.map(c => c.id === activeId ? { ...c, locked: !c.locked } : c);
@@ -241,16 +355,16 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
 
   const handleQuickShoot = async () => {
     if (!active) return;
+    const allImages = getAllImages(active);
     const sceneName = quickScene === 'none' ? '' : QUICK_SCENES.find(s => s.id === quickScene)?.name || '';
     const positivePrompt = buildCharacterPrompt(active, sceneName, quickMood, !!active.locked);
 
-    // If character has no image, fall back to Image Generator with text prompt
-    if (!active.image) {
+    if (!allImages.length) {
       onNav && onNav('images', { positivePrompt, negativePrompt: STANDARD_NEGATIVE });
       return;
     }
 
-    // Character has an image — use reference generation inline
+    const refImage = allImages[activeRef] || allImages[0];
     setGenerating(true);
     setGenImages([]);
     setGenError('');
@@ -259,7 +373,8 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         engineId: quickEngine,
         positivePrompt,
         negativePrompt: STANDARD_NEGATIVE,
-        characterImage: active.image,
+        characterImage: refImage,
+        batchSize: quickBatch,
       });
       const imgs = result.images || [];
       setGenImages(imgs);
@@ -280,14 +395,18 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   };
 
   const handleNew = () => {
-    setEditing({ name: 'New Creator', image: null, fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])) });
+    setEditing({ name: 'New Creator', refImages: [], fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])) });
     setActiveId(null);
     setAnalyzeError('');
     setSaveError('');
   };
 
   const handleEdit = (char) => {
-    setEditing({ name: char.name, image: char.image, fields: { ...char.fields } });
+    // Migrate legacy single image to refImages array
+    const refImages = char.refImages?.length
+      ? char.refImages
+      : char.image ? [char.image] : [];
+    setEditing({ name: char.name, refImages, fields: { ...char.fields } });
     setActiveId(char.id);
     setAnalyzeError('');
     setSaveError('');
@@ -296,14 +415,19 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const handleSave = () => {
     if (!editing) return;
     setSaveError('');
+    // Normalize: always store refImages, keep legacy image as first ref for compat
+    const charData = {
+      ...editing,
+      image: editing.refImages?.[0] || null,
+    };
     const updated = activeId != null
-      ? characters.map(c => c.id === activeId ? { ...c, ...editing } : c)
-      : [...characters, { id: Date.now(), ...editing }];
+      ? characters.map(c => c.id === activeId ? { ...c, ...charData } : c)
+      : [...characters, { id: Date.now(), ...charData }];
     try {
       saveCharacters(updated);
     } catch {
       try {
-        const slim = updated.map((c, i) => i < updated.length - 1 ? { ...c, image: null } : c);
+        const slim = updated.map((c, i) => i < updated.length - 1 ? { ...c, image: null, refImages: [] } : c);
         saveCharacters(slim);
         setCharacters(slim);
       } catch {
@@ -326,23 +450,50 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     if (activeId === id) { setActiveId(null); setEditing(null); }
   };
 
-  const handleImageUpload = (e) => {
+  const handlePrimaryUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async ev => {
       const original = ev.target.result;
       const compressed = await compressImage(original);
-      setEditing(ed => ({ ...ed, image: compressed }));
+      setEditing(ed => ({
+        ...ed,
+        refImages: [compressed, ...(ed.refImages || []).slice(1)],
+      }));
       runAnalysis(original, editing);
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
+  const handleRefUpload = async (file, index) => {
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      const compressed = await compressImage(ev.target.result);
+      setEditing(ed => {
+        const imgs = [...(ed.refImages || [])];
+        imgs[index] = compressed;
+        return { ...ed, refImages: imgs };
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRefDelete = (index) => {
+    setEditing(ed => {
+      const imgs = [...(ed.refImages || [])];
+      imgs.splice(index, 1);
+      return { ...ed, refImages: imgs };
+    });
+  };
+
   const displayChar = editing
-    ? { name: editing.name, image: editing.image, fields: editing.fields }
+    ? { name: editing.name, refImages: editing.refImages, image: editing.refImages?.[0] || null, fields: editing.fields }
     : active;
+
+  const displayImages = displayChar ? getAllImages(displayChar) : [];
+  const primaryDisplay = displayImages[0] || null;
 
   const showPanel = !!(editing || activeId != null);
 
@@ -373,7 +524,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             <Button
               variant={active.locked ? 'primary' : 'secondary'}
               onClick={handleToggleLock}
-              title={active.locked ? 'Identity Locked — click to unlock' : 'Lock identity to protect this creator\'s traits'}
+              title={active.locked ? 'Identity Locked — click to unlock' : 'Lock identity'}
             >
               <Icon name="fingerprint" size={15} /> {active.locked ? 'Locked' : 'Lock Identity'}
             </Button>
@@ -394,18 +545,19 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         </p>
       )}
 
-      {/* Detail panel — portrait + identity fields */}
+      {/* Detail panel */}
       {showPanel && (
         <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 20, alignItems: 'start' }}>
 
-          {/* Portrait */}
+          {/* Portrait + reference slots */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Primary portrait */}
             <div
               onClick={() => editing && fileInputRef.current?.click()}
               style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', background: 'var(--grad-portrait)', boxShadow: 'var(--shadow-md)', overflow: 'hidden', cursor: editing ? 'pointer' : 'default', position: 'relative' }}
             >
-              {displayChar?.image
-                ? <img src={displayChar.image} alt="Creator" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {primaryDisplay
+                ? <img src={primaryDisplay} alt="Creator" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : editing && (
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-faint)' }}>
                     <Icon name="upload" size={24} strokeWidth={1.5} />
@@ -420,9 +572,28 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
                 </div>
               )}
             </div>
-            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
-            {editing && editing.image && !analyzing && (
-              <Button variant="secondary" onClick={() => runAnalysis(editing.image, editing)} style={{ width: '100%' }}>
+            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePrimaryUpload} />
+
+            {/* Additional reference photo slots (editing mode or view mode when refs exist) */}
+            {(editing || displayImages.length > 1) && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {/* Slots 1–3 (indices 1–3) */}
+                {[1, 2, 3].map(i => (
+                  <RefImageSlot
+                    key={i}
+                    index={i}
+                    src={displayImages[i] || null}
+                    active={!editing && activeRef === i}
+                    onClick={() => !editing && displayImages[i] && setActiveRef(i)}
+                    onDelete={() => editing && handleRefDelete(i)}
+                    onUpload={file => handleRefUpload(file, i)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {editing && primaryDisplay && !analyzing && (
+              <Button variant="secondary" onClick={() => runAnalysis(primaryDisplay, editing)} style={{ width: '100%' }}>
                 <Icon name="sparkles" size={13} /> Re-analyze
               </Button>
             )}
@@ -460,17 +631,16 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         </div>
       )}
 
-      {/* Quick Shoot — shown when character selected and not editing */}
+      {/* Quick Shoot */}
       {activeId != null && !editing && active && (
         <Card style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-          {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ ...LABEL, marginBottom: 2 }}>Quick Shoot</div>
               <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                {active.image
-                  ? 'Character portrait used as visual reference for generation.'
+                {getAllImages(active).length
+                  ? `${getAllImages(active).length} reference photo${getAllImages(active).length > 1 ? 's' : ''} · portrait used as visual reference`
                   : 'No portrait uploaded — will generate from identity fields only.'}
               </div>
             </div>
@@ -485,80 +655,77 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             )}
           </div>
 
-          {/* Engine picker */}
+          {/* Reference picker — only when multiple refs */}
+          {getAllImages(active).length > 1 && (
+            <div>
+              <div style={{ ...LABEL, marginBottom: 10 }}>Reference Photo</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {getAllImages(active).map((img, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveRef(i)}
+                    style={{
+                      width: 52, height: 69, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', padding: 0,
+                      border: `2px solid ${activeRef === i ? 'var(--accent-deep)' : 'var(--border)'}`,
+                      boxShadow: activeRef === i ? 'var(--shadow-sm)' : 'none',
+                      transition: 'border-color var(--t-fast)', background: 'none', flexShrink: 0,
+                    }}
+                  >
+                    <img src={img} alt={`Ref ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  </button>
+                ))}
+                <span style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', marginLeft: 4 }}>
+                  Using ref {activeRef + 1}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Engine */}
           <div>
             <div style={{ ...LABEL, marginBottom: 10 }}>Engine</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {QUICK_ENGINES.map(eng => {
-                const isActive = quickEngine === eng.id;
-                return (
-                  <button key={eng.id} onClick={() => setQuickEngine(eng.id)} style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '7px 13px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
-                    border: `1.5px solid ${isActive ? 'var(--accent-deep)' : 'var(--border)'}`,
-                    background: isActive ? 'var(--rose-deep)' : 'transparent',
-                    color: isActive ? 'var(--accent-deep)' : 'var(--text-muted)',
-                    font: '500 0.8125rem/1 var(--font-ui)', fontFamily: 'inherit',
-                    transition: 'all var(--t-fast)',
-                  }}>
-                    <Icon name={eng.icon} size={13} strokeWidth={1.75} /> {eng.label}
-                  </button>
-                );
-              })}
+              {QUICK_ENGINES.map(eng => (
+                <PillButton key={eng.id} active={quickEngine === eng.id} onClick={() => setQuickEngine(eng.id)}>
+                  <Icon name={eng.icon} size={13} strokeWidth={1.75} /> {eng.label}
+                </PillButton>
+              ))}
             </div>
           </div>
 
-          {/* Scene picker */}
+          {/* Scene */}
           <div>
             <div style={{ ...LABEL, marginBottom: 10 }}>Scene</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {QUICK_SCENES.map(sc => {
-                const isActive = quickScene === sc.id;
-                return (
-                  <button
-                    key={sc.id}
-                    onClick={() => setQuickScene(sc.id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '7px 13px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
-                      border: `1.5px solid ${isActive ? 'var(--accent-deep)' : 'var(--border)'}`,
-                      background: isActive ? 'var(--rose-deep)' : 'transparent',
-                      color: isActive ? 'var(--accent-deep)' : 'var(--text-muted)',
-                      font: '500 0.8125rem/1 var(--font-ui)', fontFamily: 'inherit',
-                      transition: 'all var(--t-fast)',
-                    }}
-                  >
-                    <Icon name={sc.icon} size={13} strokeWidth={1.75} />
-                    {sc.name}
-                  </button>
-                );
-              })}
+              {QUICK_SCENES.map(sc => (
+                <PillButton key={sc.id} active={quickScene === sc.id} onClick={() => setQuickScene(sc.id)}>
+                  <Icon name={sc.icon} size={13} strokeWidth={1.75} /> {sc.name}
+                </PillButton>
+              ))}
             </div>
           </div>
 
-          {/* Mood picker */}
+          {/* Mood */}
           <div>
             <div style={{ ...LABEL, marginBottom: 10 }}>Mood</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {QUICK_MOODS.map(m => {
-                const isActive = quickMood === m;
-                return (
-                  <button
-                    key={m}
-                    onClick={() => setQuickMood(m)}
-                    style={{
-                      padding: '7px 14px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
-                      border: `1.5px solid ${isActive ? 'var(--accent-deep)' : 'var(--border)'}`,
-                      background: isActive ? 'var(--rose-deep)' : 'transparent',
-                      color: isActive ? 'var(--accent-deep)' : 'var(--text-muted)',
-                      font: '500 0.8125rem/1 var(--font-ui)', fontFamily: 'inherit',
-                      transition: 'all var(--t-fast)',
-                    }}
-                  >
-                    {m}
-                  </button>
-                );
-              })}
+              {QUICK_MOODS.map(m => (
+                <PillButton key={m} active={quickMood === m} onClick={() => setQuickMood(m)}>
+                  {m}
+                </PillButton>
+              ))}
+            </div>
+          </div>
+
+          {/* Batch size */}
+          <div>
+            <div style={{ ...LABEL, marginBottom: 10 }}>Batch</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {BATCH_OPTIONS.map(n => (
+                <PillButton key={n} active={quickBatch === n} onClick={() => setQuickBatch(n)}>
+                  {n} image{n > 1 ? 's' : ''}
+                </PillButton>
+              ))}
             </div>
           </div>
 
@@ -568,45 +735,61 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             </Button>
             {generating && (
               <span style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                Using your portrait as visual reference…
+                {quickBatch > 1 ? `Generating ${quickBatch} images…` : 'Using your portrait as visual reference…'}
               </span>
             )}
           </div>
 
-          {/* Generation error */}
           {genError && (
-            <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>
-              {genError}
-            </p>
+            <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>
           )}
 
-          {/* Generated results */}
           {genImages.length > 0 && (
             <div>
-              <div style={{ ...LABEL, marginBottom: 12 }}>Result</div>
+              <div style={{ ...LABEL, marginBottom: 12 }}>
+                Result · {genImages.length} image{genImages.length > 1 ? 's' : ''}
+              </div>
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
                 {genImages.map((url, i) => (
                   <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 160 }}>
                     <div style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
                       <img src={url} alt={`Generated ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <a href={url} download={`thee-studio-${Date.now()}.png`} target="_blank" rel="noreferrer" style={{ flex: 1 }}>
-                        <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }}>
-                          <Icon name="download" size={13} /> Save
-                        </Button>
-                      </a>
-                      <Button variant="secondary" onClick={() => onNav && onNav('images', { positivePrompt: '', negativePrompt: '' })} style={{ fontSize: '0.75rem' }}>
-                        <Icon name="external-link" size={13} />
+                    <a href={url} download={`thee-studio-${Date.now()}-${i}.jpg`} target="_blank" rel="noreferrer">
+                      <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }}>
+                        <Icon name="download" size={13} /> Download
                       </Button>
-                    </div>
+                    </a>
                   </div>
                 ))}
               </div>
             </div>
           )}
-
         </Card>
+      )}
+
+      {/* Shot History */}
+      {activeId != null && !editing && shotHistory.length > 0 && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ ...LABEL, marginBottom: 0 }}>
+              Shot History · {shotHistory.length} image{shotHistory.length !== 1 ? 's' : ''}
+            </div>
+            <button
+              onClick={() => onNav && onNav('library')}
+              style={{ font: 'var(--text-sm)', color: 'var(--accent-deep)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              View all in Library <Icon name="arrow-right" size={13} />
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 12 }}>
+            {shotHistory.map(entry => (
+              <div key={entry.id} style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', aspectRatio: '3/4', background: 'var(--grad-portrait)' }}>
+                <img src={entry.url} alt="Shot" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Creator gallery */}
@@ -627,7 +810,6 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         </div>
       )}
 
-      {/* Empty state */}
       {characters.length === 0 && !editing && (
         <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-faint)' }}>
           <Icon name="sparkles" size={40} strokeWidth={1} />

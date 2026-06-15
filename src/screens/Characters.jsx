@@ -2,7 +2,9 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { analyzeCharacterImage, characterGenerate, extractFaceAnchor } from '../api/studio.js';
+import { analyzeCharacterImage, characterGenerate, extractFaceAnchor, generateCharacterSeed, generateCharacterVariations } from '../api/studio.js';
+import { GENDERS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS } from '../lib/promptData.js';
+import { Select } from '../components/forms/Select.jsx';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
 
 const FIELD_DEFS = [
@@ -316,6 +318,20 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [saveError, setSaveError]   = React.useState('');
   const [saved, setSaved]           = React.useState(false);
 
+  // AI Generate Creator state
+  const [aiGenOpen,    setAiGenOpen]    = React.useState(false);
+  const [aiGenName,    setAiGenName]    = React.useState('');
+  const [aiGenGender,  setAiGenGender]  = React.useState('Woman');
+  const [aiGenSkin,    setAiGenSkin]    = React.useState('Unspecified');
+  const [aiGenHairSt,  setAiGenHairSt]  = React.useState('Unspecified');
+  const [aiGenHairCo,  setAiGenHairCo]  = React.useState('Unspecified');
+  const [aiGenVision,  setAiGenVision]  = React.useState('');
+  const [aiGenStep,    setAiGenStep]    = React.useState(''); // status message
+  const [aiGenImages,  setAiGenImages]  = React.useState([]); // generated data urls
+  const [aiGenAnchor,  setAiGenAnchor]  = React.useState('');
+  const [aiGenLoading, setAiGenLoading] = React.useState(false);
+  const [aiGenError,   setAiGenError]   = React.useState('');
+
   // Quick Shoot state
   const [quickScene,  setQuickScene]  = React.useState('none');
   const [quickMood,   setQuickMood]   = React.useState('Clean');
@@ -498,6 +514,59 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     setTimeout(() => setSaved(false), 2000);
   };
 
+  const handleAiGenerate = async () => {
+    setAiGenLoading(true);
+    setAiGenError('');
+    setAiGenImages([]);
+    setAiGenAnchor('');
+    const params = {
+      name: aiGenName || 'Creator',
+      gender: aiGenGender,
+      skinTone: aiGenSkin,
+      hairStyle: aiGenHairSt,
+      hairColor: aiGenHairCo,
+      vision: aiGenVision,
+    };
+    try {
+      // Step 1: generate seed portrait + face anchor
+      setAiGenStep('Generating portrait…');
+      const seedResult = await generateCharacterSeed(params);
+      setAiGenImages([seedResult.image]);
+      setAiGenAnchor(seedResult.faceAnchor || '');
+
+      // Step 2: generate 3 variations conditioned on seed
+      setAiGenStep('Generating reference shots…');
+      const varResult = await generateCharacterVariations({
+        ...params,
+        seedImage: seedResult.image,
+        faceAnchor: seedResult.faceAnchor || '',
+      });
+      setAiGenImages([seedResult.image, ...(varResult.images || [])]);
+      setAiGenStep('');
+    } catch (e) {
+      setAiGenError(e.message || 'Generation failed');
+      setAiGenStep('');
+    } finally {
+      setAiGenLoading(false);
+    }
+  };
+
+  const handleAiGenUse = async () => {
+    if (!aiGenImages.length) return;
+    const compressed = await Promise.all(aiGenImages.slice(0, 4).map(img => compressImage(img)));
+    const newEditing = {
+      name: aiGenName || 'Creator',
+      faceAnchor: aiGenAnchor,
+      refImages: compressed,
+      fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])),
+    };
+    setEditing(newEditing);
+    setActiveId(null);
+    setAiGenOpen(false);
+    // Auto-analyze the first generated photo to fill in fields
+    if (compressed[0]) runAnalysis(aiGenImages[0], newEditing);
+  };
+
   const handleDelete = (id) => {
     const updated = characters.filter(c => c.id !== id);
     saveCharacters(updated);
@@ -585,6 +654,9 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             </Button>
           )}
           {!editing && active && <Button variant="secondary" onClick={() => handleEdit(active)}><Icon name="pencil" size={14} /> Edit</Button>}
+          <Button variant="secondary" onClick={() => { setAiGenOpen(o => !o); setEditing(null); }}>
+            <Icon name="wand-2" size={15} /> Generate Creator
+          </Button>
           <Button variant="secondary" onClick={handleNew}><Icon name="plus" size={15} /> New Creator</Button>
         </div>
       </div>
@@ -598,6 +670,98 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>
           Save failed: {saveError}
         </p>
+      )}
+
+      {/* AI Generate Creator Panel */}
+      {aiGenOpen && (
+        <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 'var(--radius)', background: 'var(--rose-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-deep)', flexShrink: 0 }}>
+              <Icon name="wand-2" size={18} strokeWidth={1.75} />
+            </div>
+            <div>
+              <div style={{ font: '600 0.9rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Generate Creator with AI</div>
+              <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 3 }}>Describe your creator — AI generates 4 reference photos and locks their face automatically.</div>
+            </div>
+          </div>
+
+          {/* Form */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div>
+              <label style={LABEL}>Creator Name</label>
+              <input value={aiGenName} onChange={e => setAiGenName(e.target.value)} placeholder="e.g. Angel, Maya, Jade…" style={INPUT_STYLE} />
+            </div>
+            <div>
+              <label style={LABEL}>Gender</label>
+              <Select value={aiGenGender} onChange={setAiGenGender} options={GENDERS} />
+            </div>
+            <div>
+              <label style={LABEL}>Skin Tone</label>
+              <Select value={aiGenSkin} onChange={setAiGenSkin} options={SKIN_TONES} />
+            </div>
+            <div>
+              <label style={LABEL}>Hair Style</label>
+              <Select value={aiGenHairSt} onChange={setAiGenHairSt} options={HAIR_STYLES} />
+            </div>
+            <div>
+              <label style={LABEL}>Hair Color</label>
+              <Select value={aiGenHairCo} onChange={setAiGenHairCo} options={HAIR_COLORS} />
+            </div>
+            <div>
+              <label style={LABEL}>Vision / Style Notes</label>
+              <input value={aiGenVision} onChange={e => setAiGenVision(e.target.value)} placeholder="e.g. Editorial luxury, confident, slim build, sophisticated energy…" style={INPUT_STYLE} />
+            </div>
+          </div>
+
+          {aiGenError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{aiGenError}</p>}
+
+          {/* Loading state */}
+          {aiGenLoading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--accent-deep)', font: '500 0.875rem/1 var(--font-ui)' }}>
+              <Icon name="sparkles" size={16} strokeWidth={1.75} />
+              {aiGenStep || 'Working…'} This takes about 60 seconds.
+            </div>
+          )}
+
+          {/* Generated image preview */}
+          {aiGenImages.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Generated Reference Photos · {aiGenImages.length}/4
+                {aiGenAnchor && <span style={{ color: 'var(--accent-deep)', marginLeft: 10 }}>● Face Lock Ready</span>}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                {[0,1,2,3].map(i => (
+                  <div key={i} style={{ aspectRatio: '2/3', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--rose-glass)', border: '1px solid var(--border)' }}>
+                    {aiGenImages[i]
+                      ? <img src={aiGenImages[i]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={`Reference ${i+1}`} />
+                      : aiGenLoading && <div style={{ width: '100%', height: '100%', background: 'var(--grad-portrait)', opacity: 0.5 }} />
+                    }
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Button
+              variant="primary"
+              loading={aiGenLoading}
+              onClick={aiGenImages.length ? handleAiGenUse : handleAiGenerate}
+              disabled={aiGenLoading}
+            >
+              <Icon name={aiGenImages.length ? 'user-check' : 'sparkles'} size={15} />
+              {aiGenLoading ? (aiGenStep || 'Generating…') : aiGenImages.length ? 'Use These Photos & Create Creator' : 'Generate 4 Reference Photos'}
+            </Button>
+            {aiGenImages.length > 0 && !aiGenLoading && (
+              <Button variant="secondary" onClick={handleAiGenerate}>
+                <Icon name="refresh-cw" size={14} /> Regenerate
+              </Button>
+            )}
+            <Button variant="secondary" onClick={() => setAiGenOpen(false)}>Cancel</Button>
+          </div>
+        </div>
       )}
 
       {/* Detail panel */}

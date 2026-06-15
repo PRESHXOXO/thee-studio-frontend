@@ -225,6 +225,34 @@ export async function analyzeCharacterImage(imageDataUrl) {
   return parsed;
 }
 
+export async function generateCharacterSeed(params) {
+  const res = await fetch(`${BASE}/run/character_seed_generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [JSON.stringify(params)], session_hash: SESSION_HASH }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const contentType = res.headers.get('content-type') || '';
+  const raw = contentType.includes('text/event-stream') ? await readSSE(res) : (await res.json()).data;
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed; // { image, faceAnchor }
+}
+
+export async function generateCharacterVariations(params) {
+  const res = await fetch(`${BASE}/run/character_variations_generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [JSON.stringify(params)], session_hash: SESSION_HASH }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const contentType = res.headers.get('content-type') || '';
+  const raw = contentType.includes('text/event-stream') ? await readSSE(res) : (await res.json()).data;
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed; // { images: [...] }
+}
+
 export async function extractFaceAnchor(imageDataUrl) {
   const res = await fetch(`${BASE}/run/face_anchor_extract`, {
     method: 'POST',

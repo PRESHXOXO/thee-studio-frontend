@@ -777,11 +777,37 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
 
           {aiGenError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{aiGenError}</p>}
 
-          {/* Loading state */}
-          {aiGenLoading && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--accent-deep)', font: '500 0.875rem/1 var(--font-ui)' }}>
-              <Icon name="sparkles" size={16} strokeWidth={1.75} />
-              {aiGenStep || 'Working…'} This takes about 60 seconds.
+          {/* Progress bar — visible while loading or once images arrive */}
+          {(aiGenLoading || aiGenImages.length > 0) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent-deep)', font: '500 0.8rem/1 var(--font-ui)' }}>
+                  {aiGenLoading && <Icon name="sparkles" size={14} strokeWidth={1.75} />}
+                  <span style={{ color: aiGenLoading ? 'var(--accent-deep)' : 'var(--text-muted)' }}>
+                    {aiGenLoading ? (aiGenStep || 'Working…') : 'Complete'}
+                  </span>
+                </div>
+                <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)', fontWeight: 600 }}>
+                  {aiGenImages.length} / 5
+                </span>
+              </div>
+              <div style={{ height: 5, background: 'var(--rose-deep)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: aiGenLoading && aiGenImages.length === 0 ? '8%' : `${(aiGenImages.length / 5) * 100}%`,
+                  background: 'var(--grad-coral)',
+                  borderRadius: 99,
+                  transition: 'width 0.7s cubic-bezier(0.4, 0, 0.2, 1)',
+                }} />
+              </div>
+              {/* Shot labels under the bar */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+                {['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'].map((label, i) => (
+                  <div key={i} style={{ textAlign: 'center', font: '500 0.6rem/1 var(--font-ui)', letterSpacing: '0.03em', textTransform: 'uppercase', color: aiGenImages[i] ? 'var(--accent-deep)' : 'var(--text-faint)', transition: 'color 0.4s ease' }}>
+                    {label}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

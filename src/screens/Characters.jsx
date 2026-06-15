@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
+import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
 import { analyzeCharacterImage, characterGenerate, extractFaceAnchor, generateCharacterSeed, generateCharacterVariations } from '../api/studio.js';
 import { GENDERS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, JEWELRY_OPTIONS, CLOTHING_VIBES } from '../lib/promptData.js';
 import { Select } from '../components/forms/Select.jsx';
@@ -613,10 +614,18 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   };
 
   const handleDelete = (id) => {
-    const updated = characters.filter(c => c.id !== id);
-    saveCharacters(updated);
-    setCharacters(updated);
-    if (activeId === id) { setActiveId(null); setEditing(null); }
+    const char = characters.find(c => c.id === id);
+    setConfirm({
+      title: 'Delete Creator?',
+      message: `"${char?.name || 'This creator'}" and all their reference photos will be permanently removed.`,
+      onConfirm: () => {
+        const updated = characters.filter(c => c.id !== id);
+        saveCharacters(updated);
+        setCharacters(updated);
+        if (activeId === id) { setActiveId(null); setEditing(null); }
+        setConfirm(null);
+      },
+    });
   };
 
   const handlePrimaryUpload = (e) => {
@@ -650,12 +659,22 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   };
 
   const handleRefDelete = (index) => {
-    setEditing(ed => {
-      const imgs = [...(ed.refImages || [])];
-      imgs.splice(index, 1);
-      return { ...ed, refImages: imgs };
+    setConfirm({
+      title: 'Remove Photo?',
+      message: 'This reference photo will be removed from the creator profile.',
+      confirmLabel: 'Remove',
+      onConfirm: () => {
+        setEditing(ed => {
+          const imgs = [...(ed.refImages || [])];
+          imgs.splice(index, 1);
+          return { ...ed, refImages: imgs };
+        });
+        setConfirm(null);
+      },
     });
   };
+
+  const [confirm, setConfirm] = React.useState(null); // { title, message, onConfirm }
 
   const displayChar = editing
     ? { name: editing.name, refImages: editing.refImages, image: editing.refImages?.[0] || null, fields: editing.fields }
@@ -1183,6 +1202,14 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         </div>
       )}
 
+      <ConfirmDialog
+        open={!!confirm}
+        title={confirm?.title}
+        message={confirm?.message}
+        confirmLabel={confirm?.confirmLabel || 'Delete'}
+        onConfirm={confirm?.onConfirm}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   );
 }

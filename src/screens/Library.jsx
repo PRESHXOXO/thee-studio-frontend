@@ -3,6 +3,7 @@ import { PageHeader } from '../components/navigation/PageHeader.jsx';
 import { EmptyState } from '../components/feedback/EmptyState.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
+import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
 import { loadLibrary, deleteFromLibrary } from '../lib/library.js';
 
 const SOURCE_LABELS = {
@@ -107,16 +108,31 @@ function LibraryCard({ entry, onDelete }) {
 
 export function Library() {
   const [library, setLibrary] = React.useState(loadLibrary);
+  const [confirm, setConfirm] = React.useState(null);
 
   const handleDelete = (id) => {
-    deleteFromLibrary(id);
-    setLibrary(prev => prev.filter(e => e.id !== id));
+    setConfirm({
+      title: 'Delete Image?',
+      message: 'This image will be permanently removed from your library.',
+      onConfirm: () => {
+        deleteFromLibrary(id);
+        setLibrary(prev => prev.filter(e => e.id !== id));
+        setConfirm(null);
+      },
+    });
   };
 
   const handleClearAll = () => {
-    if (!window.confirm('Clear all saved images? This cannot be undone.')) return;
-    localStorage.removeItem('ts_library');
-    setLibrary([]);
+    setConfirm({
+      title: 'Clear Entire Library?',
+      message: 'All saved images will be permanently removed. This cannot be undone.',
+      confirmLabel: 'Clear All',
+      onConfirm: () => {
+        localStorage.removeItem('ts_library');
+        setLibrary([]);
+        setConfirm(null);
+      },
+    });
   };
 
   // Reload from storage when window regains focus (other tabs may have saved)
@@ -163,6 +179,15 @@ export function Library() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirm}
+        title={confirm?.title}
+        message={confirm?.message}
+        confirmLabel={confirm?.confirmLabel || 'Delete'}
+        onConfirm={confirm?.onConfirm}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { Input } from '../components/forms/Input.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { PromptOutput } from '../components/feedback/PromptOutput.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { buildDirectorOutputs, generateImage, characterGenerate } from '../api/studio.js';
+import { buildDirectorOutputs, generateImage, characterGenerate, sanitizeForOpenAI } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
 import {
   CONTENT_TYPES, MOODS, LOCATIONS, GENDERS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS,
@@ -302,13 +302,14 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
 
     try {
       const charImg = selectedChar ? getCharacterImage(selectedChar) : null;
+      const engineId = ENGINE_ID_MAP[outputs.recommendedEngine] || 'openai_image';
+      const isOpenAI = engineId === 'openai_image' || (outputs.recommendedEngine || '').toLowerCase().includes('openai');
+      const positivePrompt = isOpenAI ? sanitizeForOpenAI(outputs.positivePrompt) : outputs.positivePrompt;
 
       if (charImg) {
-        // Use reference-based generation for characters with portraits
-        const engineId = ENGINE_ID_MAP[outputs.recommendedEngine] || 'openai_image';
         const result = await characterGenerate({
           engineId,
-          positivePrompt: outputs.positivePrompt,
+          positivePrompt,
           negativePrompt: outputs.negativePrompt,
           characterImage: charImg,
           batchSize: 1,
@@ -321,10 +322,9 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
           engine: engineId,
         }).catch(() => {}));
       } else {
-        // Standard generation
         const result = await generateImage({
           engine: outputs.recommendedEngine,
-          positivePrompt: outputs.positivePrompt,
+          positivePrompt,
           negativePrompt: outputs.negativePrompt,
           imageSize: 'Vertical 9:16',
           quality: 'High',

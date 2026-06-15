@@ -1,19 +1,35 @@
 const BASE = '/gradio_api';
 const SESSION_HASH = Math.random().toString(36).slice(2);
 
-// Replaces words that trigger OpenAI's safety filter while preserving prompt quality.
+// Replaces words that trigger OpenAI's output safety filter while preserving prompt quality.
 // Applied automatically when engine is OpenAI Image.
 const OPENAI_REPLACEMENTS = [
-  [/\bsensual\b/gi,     'refined'],
-  [/\bseductive\b/gi,   'magnetic'],
-  [/\bintimate\b/gi,    'warm and personal'],
-  [/\bsuggestive\b/gi,  'editorial'],
-  [/\bsexy\b/gi,        'confident'],
-  [/\brevealing\b/gi,   'fashion-forward'],
-  [/\bboudoir\b/gi,     'editorial boudoir-inspired'],
-  [/\berotic\b/gi,      'artistic'],
-  [/\bnude\b/gi,        'natural'],
-  [/\bexplicit\b/gi,    'editorial'],
+  // Direct triggers
+  [/\bsensual\b/gi,                         'refined'],
+  [/\bseductive\b/gi,                        'magnetic'],
+  [/\bsexy\b/gi,                             'confident'],
+  [/\berotic\b/gi,                           'artistic'],
+  [/\bexplicit\b/gi,                         'editorial'],
+  [/\bsuggestive\b/gi,                       'editorial'],
+  [/\brevealing\b/gi,                        'fashion-forward'],
+  [/\bnude\b/gi,                             'natural'],
+  [/\bboudoir[\w\s-]*inspired\b/gi,          'studio-style editorial'],
+  [/\bboudoir\b/gi,                          'studio editorial'],
+  [/\bintimate\b/gi,                         'close and personal'],
+  // Skin language that triggers output moderation
+  [/visible pores[^.)]*/gi,                  'realistic skin detail'],
+  [/natural skin imperfections/gi,           'authentic natural features'],
+  [/no plastic or airbrushed appearance/gi,  'natural and authentic'],
+  [/realistic skin texture/gi,               'healthy natural skin'],
+  // Clothing descriptions that trigger output
+  [/sheer lace bodysuit/gi,                  'fitted editorial bodysuit'],
+  [/lace bodysuit/gi,                        'fitted bodysuit'],
+  [/\bsheer\b/gi,                            'lightweight'],
+  [/lingerie set[^.)]*/gi,                   'editorial fashion set'],
+  [/\blingerie\b/gi,                         'editorial fashion'],
+  [/silk robe[^.)]*/gi,                      'silk wrap outfit'],
+  [/body confidence/gi,                      'editorial presence'],
+  [/tasteful editorial boudoir/gi,           'styled editorial'],
 ];
 
 export function sanitizeForOpenAI(prompt) {

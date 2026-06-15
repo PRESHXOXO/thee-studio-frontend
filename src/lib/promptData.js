@@ -204,7 +204,8 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', ski
   s.push('POSE & COMPOSITION: Natural, confident posture. Candid-feeling but composed. Flattering three-quarter or portrait angle. Intentional negative space. Realistic anatomy.');
   s.push('LIGHTING: Soft, dimensional natural or studio lighting. Light wraps realistically around the subject. Warm and refined color grading. No flat lighting, no harsh flash.');
   s.push('CAMERA: Sony A1 or Canon EOS R5. 50mm–85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face and styling details.');
-  s.push('QUALITY: Ultra-realistic photograph. 4K resolution. Professional commercial retouching. Realistic skin texture. Accurate fabric physics. No AI artifacts. No distorted hands.');
+  s.push('QUALITY: Ultra-realistic photograph. 4K resolution. Professional commercial retouching. Healthy natural skin. Accurate fabric physics. No AI artifacts. No distorted hands.');
+  s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography. Professional editorial image suitable for a luxury brand campaign. No nudity, no inappropriate content.');
 
   return s.join('\n\n');
 }

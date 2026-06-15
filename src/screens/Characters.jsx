@@ -3,6 +3,7 @@ import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { analyzeCharacterImage, characterGenerate } from '../api/studio.js';
+import { saveToLibrary } from '../lib/library.js';
 
 const FIELD_DEFS = [
   { id: 'face',        icon: 'scan-face',    label: 'Face',          placeholder: 'e.g. High cheekbones, almond eyes, soft heart shape' },
@@ -260,7 +261,17 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         negativePrompt: STANDARD_NEGATIVE,
         characterImage: active.image,
       });
-      setGenImages(result.images || []);
+      const imgs = result.images || [];
+      setGenImages(imgs);
+      imgs.forEach(url => {
+        saveToLibrary(url, {
+          source: 'quick_shoot',
+          character: active.name,
+          engine: quickEngine,
+          scene: sceneName || undefined,
+          mood: quickMood,
+        }).catch(() => {});
+      });
     } catch (e) {
       setGenError(e.message || 'Generation failed');
     } finally {

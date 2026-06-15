@@ -4,6 +4,7 @@ import { Select } from '../components/forms/Select.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { generateImage, fetchEngineChoices, sanitizeForOpenAI } from '../api/studio.js';
+import { saveToLibrary } from '../lib/library.js';
 
 // Fallback engine list — matches the app.py YAML engine definitions.
 // Used only when the live Gradio config fetch fails.
@@ -122,8 +123,16 @@ export function ImageGenerator({ initialPrompts }) {
         positivePrompt: finalPositive,
         negativePrompt,
       });
-      setImages(result.images || []);
+      const imgs = result.images || [];
+      setImages(imgs);
       if (result.status) setStatus(result.status);
+      imgs.forEach(url => {
+        saveToLibrary(url, {
+          source: 'generator',
+          engine: safeEngine,
+          prompt: finalPositive.slice(0, 120),
+        }).catch(() => {});
+      });
     } catch (e) {
       setError(e?.message || 'Generation failed. Make sure your Gradio app is running on port 7860.');
     } finally {

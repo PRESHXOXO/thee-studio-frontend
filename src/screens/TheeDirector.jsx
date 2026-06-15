@@ -233,11 +233,13 @@ function buildStructuredVision({ vision, gender, skinTone, hairStyle, hairColor,
     if (f.tone)        cp.push(`Skin: ${f.tone}`);
     if (f.hair)        cp.push(`Hair: ${f.hair}`);
     if (f.body)        cp.push(`Build: ${f.body}`);
-    if (f.wardrobe)    cp.push(`Wardrobe: ${f.wardrobe}`);
     if (f.personality) cp.push(`Energy: ${f.personality}`);
     if (cp.length) {
-      s.push(`TALENT IDENTITY — ${character.name}: ${cp.join('. ')}. Preserve this creator's distinctive appearance, style, and essence throughout the image. Do not alter their core identity traits.`);
+      s.push(`TALENT IDENTITY — ${character.name}: ${cp.join('. ')}. Preserve this creator's face, skin tone, hair, and body. Do not alter their identity.`);
     }
+    // Outfit: use clothing override if set, otherwise character's default wardrobe
+    const outfitUsed = (clothing && clothing !== 'Unspecified') ? clothing : f.wardrobe;
+    if (outfitUsed) s.push(`OUTFIT FOR THIS SHOOT: ${outfitUsed}. Dress them in this specifically — override any default styling assumptions.`);
   } else {
     const hasSubject = gender !== 'Unspecified' || skinTone !== 'Unspecified' || eyeDetail !== 'Unspecified';
     if (hasSubject) {
@@ -285,7 +287,9 @@ function buildFluxVision({ vision, gender, skinTone, hairStyle, hairColor, eyeDe
     if (f.hair)  line += `, ${f.hair} hair`;
     if (f.face)  line += `, ${f.face}`;
     parts.push(`${line}.`);
-    if (f.wardrobe)    parts.push(`Wearing ${f.wardrobe}.`);
+    // Outfit override takes priority over character's default wardrobe
+    const outfitUsed = (clothing && clothing !== 'Unspecified') ? clothing : f.wardrobe;
+    if (outfitUsed) parts.push(`Wearing ${outfitUsed}.`);
     if (f.personality) parts.push(`${f.personality} energy.`);
   } else {
     const subParts = [];
@@ -467,6 +471,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
   const [features,     setFeatures]     = React.useState('None');
 
   const [buildMode,    setBuildMode]    = React.useState('openai');
+  const [outfitOverride, setOutfitOverride] = React.useState('Unspecified');
   const [loading,      setLoading]      = React.useState(false);
   const [error,        setError]        = React.useState('');
   const [outputs,      setOutputs]      = React.useState(null);
@@ -482,7 +487,10 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
   // Collect current form params
   const formParams = () => ({
     vision, gender, skinTone, hairStyle, hairColor,
-    eyeDetail, jewelry, clothing, features, mood, contentType, scene,
+    eyeDetail, jewelry,
+    // When character selected, outfitOverride takes priority over Subject Details clothing
+    clothing: selectedChar && outfitOverride !== 'Unspecified' ? outfitOverride : clothing,
+    features, mood, contentType, scene,
     character: selectedChar,
   });
 
@@ -646,6 +654,9 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
           </Field>
           <Field label="Scene">
             <Select value={scene} onChange={setScene} options={LOCATIONS} />
+          </Field>
+          <Field label="Outfit">
+            <Select value={outfitOverride} onChange={setOutfitOverride} options={CLOTHING_VIBES} placeholder="Select outfit…" />
           </Field>
 
           <div>

@@ -19,9 +19,20 @@ const SCENE_DATA = [
   { id: 'desert', name: 'Desert', icon: 'sun', desc: 'Vast, stark, cinematic.' },
 ];
 
-function SceneCard({ scene }) {
+function SceneCard({ scene, onUse }) {
+  const [hovered, setHovered] = React.useState(false);
   return (
-    <Card style={{ display: 'flex', flexDirection: 'column', gap: 12, cursor: 'default' }}>
+    <Card
+      onClick={onUse}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 12, cursor: 'pointer',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+        transition: 'transform var(--t-base), box-shadow var(--t-base)',
+        boxShadow: hovered ? 'var(--shadow-md)' : undefined,
+      }}
+    >
       <div style={{
         width: 40, height: 40, borderRadius: 'var(--radius)',
         background: 'var(--rose-deep)', color: 'var(--accent-deep)',
@@ -33,21 +44,30 @@ function SceneCard({ scene }) {
         <div style={{ font: 'var(--display-sm)', color: 'var(--text-strong)' }}>{scene.name}</div>
         <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 4 }}>{scene.desc}</div>
       </div>
+      {hovered && (
+        <div style={{ font: 'var(--text-sm)', color: 'var(--accent-deep)', fontWeight: 600, marginTop: 'auto' }}>
+          Use in Director →
+        </div>
+      )}
     </Card>
   );
 }
 
-export function Scenes() {
+export function Scenes({ onNav }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
       <PageHeader
         title="Scenes"
-        subtitle="Browse available scene presets. Scenes are used by Thee Director to craft your prompts."
+        subtitle="Browse available scene presets. Click a scene to open it in Thee Director."
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
         {SCENE_DATA.map(scene => (
-          <SceneCard key={scene.id} scene={scene} />
+          <SceneCard
+            key={scene.id}
+            scene={scene}
+            onUse={() => onNav && onNav('director', { scene: scene.name, vision: scene.desc })}
+          />
         ))}
       </div>
     </div>

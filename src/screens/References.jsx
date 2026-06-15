@@ -69,7 +69,7 @@ function UploadCard({ onUpload }) {
   );
 }
 
-export function References() {
+export function References({ onNav }) {
   const [refs, setRefs] = React.useState(SAMPLE_REFS);
   const [selected, setSelected] = React.useState(new Set());
 
@@ -116,7 +116,11 @@ export function References() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'var(--rose-glass)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)' }}>
           <span style={{ font: '600 0.875rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>{selected.size} selected</span>
           <Button variant="secondary" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
-          <Button variant="dark" size="sm" onClick={() => {}}>Use in Director</Button>
+          <Button variant="dark" size="sm" onClick={() => {
+            const selectedRefs = refs.filter(r => selected.has(r.id));
+            const vision = selectedRefs.map(r => `${r.caption} (${r.tag})`).join(', ');
+            onNav && onNav('director', { vision });
+          }}>Use in Director</Button>
         </div>
       )}
 

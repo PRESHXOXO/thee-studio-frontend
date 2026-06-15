@@ -1,7 +1,6 @@
 import React from 'react';
 import { Icon } from '../core/Icon.jsx';
 import { Avatar } from '../core/Avatar.jsx';
-import { Button } from '../core/Button.jsx';
 
 export function Topbar({ context = 'Studio', search = true, actions, user = 'Thee Studio', userSrc, style }) {
   return (
@@ -20,17 +19,22 @@ export function Topbar({ context = 'Studio', search = true, actions, user = 'The
         <div style={{
           marginLeft: 8, flex: 1, maxWidth: 380, display: 'flex', alignItems: 'center', gap: 9,
           padding: '9px 14px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)',
-          border: '1px solid var(--border)', color: 'var(--text-faint)',
+          border: '1px solid var(--border)',
         }}>
-          <Icon name="search" size={15} />
-          <span style={{ font: 'var(--text-sm)' }}>Search creators, prompts, scenes…</span>
-          <span style={{ marginLeft: 'auto', font: '500 0.625rem/1 var(--font-mono)', color: 'var(--text-faint)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 7px' }}>⌘K</span>
+          <Icon name="search" size={15} color="var(--text-faint)" />
+          <input
+            placeholder="Search creators, prompts, scenes…"
+            style={{
+              flex: 1, border: 'none', background: 'transparent', outline: 'none',
+              font: 'var(--text-sm)', color: 'var(--text-body)', fontFamily: 'inherit',
+            }}
+          />
+          <span style={{ marginLeft: 'auto', font: '500 0.625rem/1 var(--font-mono)', color: 'var(--text-faint)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 7px', flexShrink: 0 }}>⌘K</span>
         </div>
       )}
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
         {actions}
-        <Button variant="primary" size="sm" onClick={() => {}}>Upgrade</Button>
         <button style={{ border: '1px solid var(--border)', background: 'var(--white)', width: 38, height: 38, borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-body)' }}>
           <Icon name="bell" size={17} />
         </button>

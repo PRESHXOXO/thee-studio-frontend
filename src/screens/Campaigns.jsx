@@ -5,7 +5,7 @@ import { Button } from '../components/core/Button.jsx';
 
 export function Campaigns() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
       <PageHeader
         title="Campaigns"
         subtitle="Organize your shoots into campaigns. Group related generations and track progress."

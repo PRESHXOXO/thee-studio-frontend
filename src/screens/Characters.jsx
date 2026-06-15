@@ -107,7 +107,7 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
   );
 }
 
-export function Characters({ initialCharacter }) {
+export function Characters({ initialCharacter, onCharacterChange }) {
   const [characters, setCharacters] = React.useState(loadCharacters);
   const [activeId, setActiveId]     = React.useState(null);
   const [editing, setEditing]       = React.useState(null);
@@ -116,6 +116,12 @@ export function Characters({ initialCharacter }) {
   const [saveError, setSaveError]   = React.useState('');
   const [saved, setSaved]           = React.useState(false);
   const fileInputRef                = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!onCharacterChange) return;
+    const char = characters.find(c => c.id === activeId) || null;
+    onCharacterChange(char);
+  }, [activeId, characters]);
 
   React.useEffect(() => {
     if (!initialCharacter) return;

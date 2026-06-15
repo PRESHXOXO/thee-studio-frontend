@@ -255,12 +255,12 @@ function buildFluxVision({ vision, gender, skinTone, hairStyle, hairColor, eyeDe
   return parts.join(' ');
 }
 
-export function TheeDirector({ onNav }) {
-  const [vision, setVision]           = React.useState('');
+export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' }) {
+  const [vision, setVision]           = React.useState(initialVision);
   const [contentType, setContentType] = React.useState('Portrait');
   const [mood, setMood]               = React.useState('Clean');
   const [outputGoal, setOutputGoal]   = React.useState('Build Prompt Only');
-  const [scene, setScene]             = React.useState('None');
+  const [scene, setScene]             = React.useState(initialScene);
   const [gender, setGender]           = React.useState('Unspecified');
   const [skinTone, setSkinTone]       = React.useState('Unspecified');
   const [hairStyle, setHairStyle]     = React.useState('Unspecified');
@@ -282,27 +282,33 @@ export function TheeDirector({ onNav }) {
       vision, gender, skinTone, hairStyle, hairColor,
       eyeDetail, jewelry, clothing, features, mood, contentType, scene,
     });
-    setOutputs({
+    const result = {
       positivePrompt,
       negativePrompt: STANDARD_NEGATIVE,
       recommendedEngine: 'OpenAI Image',
       reason: 'Structured format optimized for OpenAI gpt-image-1.',
-    });
+    };
+    setOutputs(result);
+    if (outputGoal === 'Generate Image') {
+      onNav && onNav('images', { positivePrompt: result.positivePrompt, negativePrompt: result.negativePrompt });
+    }
   };
 
-  // FLUX build: natural language prompt + recommends FLUX Ultra for unrestricted editorial/sensual content.
-  // safety_tolerance=5 + raw=true are set in the backend for FLUX Pro/Ultra automatically.
   const handleFluxBuild = () => {
     const positivePrompt = buildFluxVision({
       vision, gender, skinTone, hairStyle, hairColor,
       eyeDetail, jewelry, clothing, features, mood, contentType, scene,
     });
-    setOutputs({
+    const result = {
       positivePrompt,
       negativePrompt: STANDARD_NEGATIVE,
       recommendedEngine: 'Replicate FLUX Pro',
       reason: 'Natural language format optimized for FLUX Pro. Backend uses prompt_upsampling + safety_tolerance 5 for unrestricted editorial output.',
-    });
+    };
+    setOutputs(result);
+    if (outputGoal === 'Generate Image') {
+      onNav && onNav('images', { positivePrompt: result.positivePrompt, negativePrompt: result.negativePrompt });
+    }
   };
 
   // Standard mode: sends to Gradio backend AI for refinement (better for local ComfyUI engines).
@@ -329,7 +335,11 @@ export function TheeDirector({ onNav }) {
         ? `${result.negativePrompt}, ${STANDARD_NEGATIVE}`
         : STANDARD_NEGATIVE;
 
-      setOutputs({ ...result, negativePrompt: enhancedNegative });
+      const finalOutputs = { ...result, negativePrompt: enhancedNegative };
+      setOutputs(finalOutputs);
+      if (outputGoal === 'Generate Image') {
+        onNav && onNav('images', { positivePrompt: finalOutputs.positivePrompt, negativePrompt: finalOutputs.negativePrompt });
+      }
     } catch (e) {
       setError(`Error: ${e?.message || String(e)}`);
     } finally {

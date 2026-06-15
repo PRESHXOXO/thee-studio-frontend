@@ -41,16 +41,19 @@ const SCREENS = {
 };
 
 export default function App() {
-  const [activeNav, setActiveNav] = React.useState('home');
+  const [activeNav, setActiveNav]       = React.useState('home');
   const [pendingPrompts,   setPendingPrompts]   = React.useState(null);
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
+  const [pendingDirector,  setPendingDirector]  = React.useState(null);
+  const [activeCharacter,  setActiveCharacter]  = React.useState(null);
 
   function handleNav(id, data) {
-    if (id === 'images'     && data) setPendingPrompts(data);
-    if (id === 'characters' && data) setPendingCharacter(data);
-    // Clear pending state when navigating away or navigating back without fresh data
+    if (id === 'images'    && data) setPendingPrompts(data);
+    if (id === 'characters'&& data) setPendingCharacter(data);
+    if (id === 'director'  && data) setPendingDirector(data);
     if (id !== 'images')     setPendingPrompts(null);
     if (id !== 'characters' || !data) setPendingCharacter(null);
+    if (id !== 'director'  || !data) setPendingDirector(null);
     setActiveNav(id);
   }
 
@@ -60,10 +63,15 @@ export default function App() {
   const screenProps = { onNav: handleNav };
   if (activeNav === 'images'     && pendingPrompts)   screenProps.initialPrompts   = pendingPrompts;
   if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
+  if (activeNav === 'characters') screenProps.onCharacterChange = setActiveCharacter;
+  if (activeNav === 'director'   && pendingDirector) {
+    screenProps.initialScene  = pendingDirector.scene  || 'None';
+    screenProps.initialVision = pendingDirector.vision || '';
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>
-      <Sidebar items={NAV_ITEMS} active={activeNav} onNavigate={id => handleNav(id)} />
+      <Sidebar items={NAV_ITEMS} active={activeNav} onNavigate={id => handleNav(id)} activeCharacter={activeCharacter} />
       <div style={{ marginLeft: 'var(--sidebar-w, 248px)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Topbar context={screenLabel} />
         <main style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1 }}>

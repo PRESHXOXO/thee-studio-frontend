@@ -4,7 +4,7 @@ import { EmptyState } from '../components/feedback/EmptyState.jsx';
 
 export function History() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
       <PageHeader
         title="History"
         subtitle="A log of your prompt runs and generation jobs."

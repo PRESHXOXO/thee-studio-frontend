@@ -1,32 +1,41 @@
 import React from 'react';
 import { Icon } from '../core/Icon.jsx';
 
-function CreatorChip() {
+function CreatorChip({ activeCharacter, onNavigate }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-      borderRadius: 'var(--radius-md)', background: 'var(--cream-deep)',
-      border: '1px solid var(--border)', cursor: 'pointer',
-      transition: 'background var(--t-fast)',
-    }}
-    onMouseEnter={e => e.currentTarget.style.background = 'var(--blush)'}
-    onMouseLeave={e => e.currentTarget.style.background = 'var(--cream-deep)'}
+    <div
+      onClick={() => onNavigate && onNavigate('characters')}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+        borderRadius: 'var(--radius-md)', background: 'var(--cream-deep)',
+        border: '1px solid var(--border)', cursor: 'pointer',
+        transition: 'background var(--t-fast)',
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--blush)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'var(--cream-deep)'}
     >
       <div style={{
         width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
         background: 'var(--grad-portrait)',
         boxShadow: '0 0 0 2px var(--champagne)',
-      }} />
+        overflow: 'hidden',
+      }}>
+        {activeCharacter?.image && (
+          <img src={activeCharacter.image} alt={activeCharacter.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        )}
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ font: '600 0.8125rem/1 var(--font-ui)', color: 'var(--text-strong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Active Creator</div>
-        <div style={{ font: '500 0.6875rem/1 var(--font-ui)', color: 'var(--text-faint)', marginTop: 3 }}>None selected</div>
+        <div style={{ font: '500 0.6875rem/1 var(--font-ui)', color: activeCharacter ? 'var(--accent-deep)' : 'var(--text-faint)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {activeCharacter?.name || 'None selected'}
+        </div>
       </div>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--status-ready)', flexShrink: 0 }} />
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeCharacter ? 'var(--status-ready)' : 'var(--border)', flexShrink: 0 }} />
     </div>
   );
 }
 
-export function Sidebar({ items = [], active, onNavigate, footer, style }) {
+export function Sidebar({ items = [], active, onNavigate, footer, activeCharacter, style }) {
   return (
     <nav style={{
       width: 'var(--sidebar-w)', flex: 'none', height: '100vh',
@@ -89,7 +98,7 @@ export function Sidebar({ items = [], active, onNavigate, footer, style }) {
       {/* Creator chip footer */}
       {footer !== null && (
         <div style={{ flexShrink: 0, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-          {footer || <CreatorChip />}
+          {footer || <CreatorChip activeCharacter={activeCharacter} onNavigate={onNavigate} />}
         </div>
       )}
     </nav>

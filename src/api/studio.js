@@ -180,7 +180,7 @@ export async function characterGenerate({ engineId, positivePrompt, negativeProm
   if (parsed.error) throw new Error(parsed.error);
   // Rewrite localhost URLs to relative so Vite proxy can serve them
   parsed.images = (parsed.images || []).map(url =>
-    url.replace(/^https?:\/\/127\.0\.0\.1:\d+\/gradio_api/, '/gradio_api')
+    url.startsWith('data:') ? url : url.replace(/^https?:\/\/127\.0\.0\.1:\d+\/gradio_api/, '/gradio_api')
   );
   return parsed;
 }

@@ -48,6 +48,9 @@ export default function App() {
   function handleNav(id, data) {
     if (id === 'images'     && data) setPendingPrompts(data);
     if (id === 'characters' && data) setPendingCharacter(data);
+    // Clear pending state when navigating away or navigating back without fresh data
+    if (id !== 'images')     setPendingPrompts(null);
+    if (id !== 'characters' || !data) setPendingCharacter(null);
     setActiveNav(id);
   }
 
@@ -60,7 +63,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>
-      <Sidebar items={NAV_ITEMS} active={activeNav} onNavigate={setActiveNav} />
+      <Sidebar items={NAV_ITEMS} active={activeNav} onNavigate={id => handleNav(id)} />
       <div style={{ marginLeft: 'var(--sidebar-w, 248px)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Topbar context={screenLabel} />
         <main style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1 }}>

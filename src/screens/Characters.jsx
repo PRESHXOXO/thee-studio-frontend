@@ -75,27 +75,36 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
   const f = char.fields || {};
   const parts = [];
 
-  // Face anchor goes FIRST — highest token weight
+  // FACE + SKIN ONLY — everything else is shoot-specific
   if (char.faceAnchor) {
-    parts.push(`FACE LOCK — ${char.name} (NON-NEGOTIABLE): ${char.faceAnchor} This person's face is fixed. Do not drift, average, or alter their facial features under any circumstances. The reference image shows this exact person.`);
-  } else {
-    parts.push(`TALENT IDENTITY — ${char.name}: ${[f.face, f.tone].filter(Boolean).join('. ')}. Preserve this creator's exact face. Do not alter their identity.`);
+    parts.push(`FACE & SKIN LOCK — ${char.name}: ${char.faceAnchor} Lock ONLY the face and skin tone. The outfit, hair styling, and background in the reference photo are NOT part of this shoot — they will be replaced by the creative direction below.`);
+  } else if (f.face || f.tone) {
+    parts.push(`TALENT — ${char.name}: ${[f.face, f.tone].filter(Boolean).join('. ')}. Preserve the face and skin tone only. Do not carry over the outfit or background from the reference image.`);
   }
 
-  parts.push('Ultra-realistic 4K commercial lifestyle photography for a premium content creator brand. The subject must look like the same real person as in the reference image.');
+  parts.push('Ultra-realistic 4K commercial lifestyle photography for a premium content creator brand.');
 
-  if (identityLocked) {
-    parts.push('IDENTITY LOCK ACTIVE: Only the outfit and location change. Face, skin, hair, and body are identical to the reference. No reinterpretation of the person\'s appearance.');
+  // OUTFIT — explicit override of reference photo
+  const wardrobe = outfitOverride || f.wardrobe;
+  if (wardrobe) {
+    parts.push(`OUTFIT FOR THIS SHOOT (REQUIRED — replace any outfit from the reference photo): ${wardrobe}. The creator must be wearing this specific outfit. Do not use the clothing from the reference image.`);
   }
 
+  // SCENE — explicit override of reference background
+  if (sceneName) {
+    parts.push(`SCENE (REQUIRED — replace the reference photo background): ${sceneName}. The background must be this environment, not whatever was behind the subject in the reference photo.`);
+  }
+
+  if (mood)          parts.push(`MOOD: ${mood}`);
   if (f.hair)        parts.push(`HAIR: ${f.hair}`);
   if (f.body)        parts.push(`BUILD: ${f.body}`);
-  const wardrobe = outfitOverride || f.wardrobe;
-  if (wardrobe)      parts.push(`OUTFIT: ${wardrobe}`);
   if (f.personality) parts.push(`ENERGY: ${f.personality}`);
   if (f.niche)       parts.push(`CONTENT CONTEXT: ${f.niche}`);
-  if (sceneName)     parts.push(`SCENE: ${sceneName}`);
-  if (mood)          parts.push(`MOOD: ${mood}`);
+
+  if (identityLocked) {
+    parts.push('IDENTITY LOCK: Face and skin tone are fixed. Only the outfit and location change between shoots.');
+  }
+
   parts.push('Photorealistic editorial photograph. Natural dimensional lighting. Professional commercial retouching. No AI artifacts. No distorted anatomy. Ultra-detailed 4K. Luxury campaign quality. Fully clothed, brand-appropriate content.');
   return parts.join('\n\n');
 }

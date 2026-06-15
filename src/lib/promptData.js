@@ -165,22 +165,24 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', ski
 
   if (character) {
     const f = character.fields || {};
-    // Face anchor is placed FIRST for maximum token weight
+    // Face + skin ONLY — placed first for maximum token weight
     if (character.faceAnchor) {
-      s.unshift(`FACE LOCK — ${character.name} (NON-NEGOTIABLE): ${character.faceAnchor} This person's face is fixed. Do not drift, reinterpret, or average their features. Match the reference image exactly.`);
+      s.unshift(`FACE & SKIN LOCK — ${character.name}: ${character.faceAnchor} Lock ONLY the face geometry and skin tone. The outfit, hair styling, and scene from the reference photo are NOT carried over — they are replaced by this shoot's creative direction.`);
     } else {
       const cp = [];
       if (f.face) cp.push(`Face: ${f.face}`);
       if (f.tone) cp.push(`Skin: ${f.tone}`);
-      if (cp.length) s.push(`TALENT IDENTITY — ${character.name}: ${cp.join('. ')}. Preserve this creator's exact face and skin tone. Do not alter their identity.`);
+      if (cp.length) s.push(`TALENT — ${character.name}: ${cp.join('. ')}. Preserve face and skin tone only. Do not reproduce the reference photo's outfit or background.`);
     }
+    // Outfit — always explicit that this replaces the reference photo
+    const outfitUsed = (clothing && clothing !== 'Unspecified') ? clothing : f.wardrobe;
+    if (outfitUsed) s.push(`OUTFIT FOR THIS SHOOT (REQUIRED — replace the reference photo outfit): ${outfitUsed}. The subject must wear exactly this. Do not use the clothing from the reference image.`);
+    // Supporting character details
     const cp2 = [];
     if (f.hair)        cp2.push(`Hair: ${f.hair}`);
     if (f.body)        cp2.push(`Build: ${f.body}`);
     if (f.personality) cp2.push(`Energy: ${f.personality}`);
     if (cp2.length) s.push(cp2.join('. ') + '.');
-    const outfitUsed = (clothing && clothing !== 'Unspecified') ? clothing : f.wardrobe;
-    if (outfitUsed) s.push(`OUTFIT FOR THIS SHOOT: ${outfitUsed}. Dress them in this specifically — override any default styling assumptions.`);
   } else {
     const hasSubject = gender !== 'Unspecified' || skinTone !== 'Unspecified' || eyeDetail !== 'Unspecified';
     if (hasSubject) {
@@ -204,7 +206,7 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', ski
     }
   }
 
-  if (scene && scene !== 'None') s.push(`LOCATION: ${scene}. Premium environment with authentic architectural detail, polished surfaces, and controlled depth.`);
+  if (scene && scene !== 'None') s.push(`LOCATION (REQUIRED — replace the reference photo background): ${scene}. The background must be this environment. Do not carry over the setting from the reference image. Premium environment with authentic architectural detail, polished surfaces, and controlled depth.`);
   if (vision) s.push(`ART DIRECTION: ${vision}`);
   if (mood || contentType) s.push(`CAMPAIGN FEEL: ${[contentType, mood].filter(Boolean).join(' — ')}. Premium editorial spread or luxury brand campaign energy.`);
 

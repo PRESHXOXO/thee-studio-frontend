@@ -562,7 +562,13 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         seedImage: seedResult.image,
         faceAnchor: seedResult.faceAnchor || '',
       });
-      setAiGenImages([seedResult.image, ...(varResult.images || [])]);
+      const varImages = (varResult.images || []).map(img =>
+        typeof img === 'string' && img.startsWith('ERROR:') ? null : img
+      );
+      const errors = (varResult.images || []).filter(img => typeof img === 'string' && img.startsWith('ERROR:'));
+      if (errors.length) console.warn('Shot errors:', errors);
+      setAiGenImages([seedResult.image, ...varImages]);
+      if (errors.length) setAiGenError(`${errors.length} shot(s) failed: ${errors[0].slice(6, 200)}`);
       setAiGenStep('');
     } catch (e) {
       setAiGenError(e.message || 'Generation failed');

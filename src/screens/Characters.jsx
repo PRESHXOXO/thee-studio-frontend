@@ -664,7 +664,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
           )}
           {!editing && active && <Button variant="secondary" onClick={() => handleEdit(active)}><Icon name="pencil" size={14} /> Edit</Button>}
           <Button variant="secondary" onClick={() => { setAiGenOpen(o => !o); setEditing(null); }}>
-            <Icon name="wand-2" size={15} /> Generate Creator
+            <Icon name="wand-2" size={15} /> Build With Thee Studio
           </Button>
           <Button variant="secondary" onClick={handleNew}><Icon name="plus" size={15} /> New Creator</Button>
         </div>
@@ -689,7 +689,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
               <Icon name="wand-2" size={18} strokeWidth={1.75} />
             </div>
             <div>
-              <div style={{ font: '600 0.9rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Generate Creator with AI</div>
+              <div style={{ font: '600 0.9rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Build Creator with Thee Studio</div>
               <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 3 }}>Describe your creator — AI generates 4 reference photos and locks their face automatically.</div>
             </div>
           </div>

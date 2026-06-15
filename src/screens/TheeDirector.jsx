@@ -220,6 +220,9 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
 
   const [history,      setHistory]      = React.useState(loadHistory);
 
+  const [showSaveChar, setShowSaveChar] = React.useState(false);
+  const [saveCharName, setSaveCharName] = React.useState('');
+
   const selectedChar = characters.find(c => c.id === selectedCharId) || null;
 
   // Collect current form params
@@ -353,6 +356,40 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
     setGenImages([]);
   };
 
+  const handleSaveCharacter = () => {
+    const name = saveCharName.trim();
+    if (!name) return;
+    const hairParts = [
+      hairStyle !== 'Unspecified' ? hairStyle : '',
+      hairColor !== 'Unspecified' ? `in ${hairColor}` : '',
+    ].filter(Boolean);
+    const faceParts = [
+      eyeDetail !== 'Unspecified' ? eyeDetail : '',
+      features !== 'None' ? features : '',
+    ].filter(Boolean);
+    const newChar = {
+      id: Date.now().toString(),
+      name,
+      refImages: [],
+      fields: {
+        tone:        skinTone !== 'Unspecified' ? skinTone : '',
+        hair:        hairParts.join(', '),
+        face:        faceParts.join(', '),
+        body:        '',
+        personality: vision || '',
+        wardrobe:    clothing !== 'Unspecified' ? clothing : (outfitOverride !== 'Unspecified' ? outfitOverride : ''),
+      },
+    };
+    try {
+      const existing = JSON.parse(localStorage.getItem('ts_characters') || '[]');
+      existing.push(newChar);
+      localStorage.setItem('ts_characters', JSON.stringify(existing));
+    } catch {}
+    setSaveCharName('');
+    setShowSaveChar(false);
+    onNav && onNav('characters');
+  };
+
   const subjectDisabled = !!selectedChar;
 
   return (
@@ -452,18 +489,20 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
         </Card>
 
         {/* Col 3: Build Prompt + Generate */}
-        <Card style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <Card style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'sticky', top: 24 }}>
           <h3 style={LABEL}>Build Prompt</h3>
 
           <PromptOutput
             label="Positive Prompt"
             value={outputs?.positivePrompt}
             placeholder="Your positive prompt will appear here after building."
+            maxHeight={200}
           />
           <PromptOutput
             label="Negative Prompt"
             value={outputs?.negativePrompt}
             placeholder="Your negative prompt will appear here after building."
+            maxHeight={100}
           />
 
           {outputs?.recommendedEngine && (
@@ -484,6 +523,45 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
               <Icon name="sparkles" size={15} />
               {generating ? 'Generating…' : selectedChar && getCharacterImage(selectedChar) ? `Generate as ${selectedChar.name}` : 'Generate Here'}
             </Button>
+          )}
+
+          {/* Save as Creator — only when building a new subject (no character selected) */}
+          {outputs?.positivePrompt && !selectedChar && (
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+              {!showSaveChar ? (
+                <Button variant="secondary" onClick={() => setShowSaveChar(true)} style={{ width: '100%' }}>
+                  <Icon name="user-plus" size={14} /> Save as Creator
+                </Button>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                    Name this Creator
+                  </div>
+                  <input
+                    autoFocus
+                    value={saveCharName}
+                    onChange={e => setSaveCharName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveCharacter(); if (e.key === 'Escape') setShowSaveChar(false); }}
+                    placeholder="e.g. Angel, Maya, Jade…"
+                    style={{
+                      width: '100%', boxSizing: 'border-box',
+                      padding: '9px 12px', borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border)', background: 'var(--input-bg, #fff)',
+                      font: 'var(--text-sm)', color: 'var(--text-body)',
+                      outline: 'none', fontFamily: 'inherit',
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <Button variant="primary" onClick={handleSaveCharacter} disabled={!saveCharName.trim()} style={{ flex: 1 }}>
+                      <Icon name="user-check" size={13} /> Save & Go to Characters
+                    </Button>
+                    <Button variant="secondary" onClick={() => { setShowSaveChar(false); setSaveCharName(''); }}>
+                      <Icon name="x" size={13} />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {genError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>}

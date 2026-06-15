@@ -1,7 +1,7 @@
 import React from 'react';
 import { Icon } from '../core/Icon.jsx';
 
-export function PromptOutput({ label, value, placeholder, onCopy, style }) {
+export function PromptOutput({ label, value, placeholder, onCopy, style, maxHeight = 180 }) {
   const [copied, setCopied] = React.useState(false);
   const handleCopy = () => {
     if (value) {
@@ -28,7 +28,8 @@ export function PromptOutput({ label, value, placeholder, onCopy, style }) {
         background: 'var(--white)', border: '1px solid var(--border-strong)',
         borderRadius: 'var(--radius-sm)', padding: '12px 14px',
         font: '0.875rem/1.6 var(--font-ui)', color: value ? 'var(--text-body)' : 'var(--text-faint)',
-        minHeight: 80, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        minHeight: 80, maxHeight, overflowY: 'auto',
+        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
       }}>
         {value || placeholder || 'Output will appear here.'}
       </div>

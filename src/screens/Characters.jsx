@@ -443,7 +443,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     if (!active) { setShotHistory([]); return; }
     setShotHistory(
       loadLibrary()
-        .filter(e => e.character === active.name)
+        .filter(e => e.character === active.id || e.character === active.name)
         .slice(0, 16)
     );
   }, [activeId, characters, genImages]);
@@ -551,7 +551,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
       imgs.forEach(url => {
         saveToLibrary(url, {
           source: 'quick_shoot',
-          character: active.name,
+          character: active.id,
           engine: quickEngine,
           scene: sceneName || undefined,
           mood: quickMood,
@@ -568,7 +568,15 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const handleSaveAsAnchor = async (url) => {
     if (!active) return;
     try {
-      const compressed = await compressImage(url);
+      // Convert external/Gradio URLs to data URLs before compressing so anchors
+      // don't expire when the Gradio session ends.
+      let src = url;
+      if (!url.startsWith('data:')) {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        src = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+      }
+      const compressed = await compressImage(src);
       const updated = characters.map(c => {
         if (c.id !== activeId) return c;
         const existing = getAllImages(c);
@@ -687,7 +695,9 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
 
   const handleAiGenUse = async () => {
     if (!aiGenImages.length) return;
-    const compressed = await Promise.all(aiGenImages.slice(0, 5).map(img => compressImage(img)));
+    const validImgs = aiGenImages.filter(img => img && !img.startsWith('ERROR:'));
+    if (!validImgs.length) return;
+    const compressed = await Promise.all(validImgs.slice(0, 5).map(img => compressImage(img)));
     const newEditing = {
       name: aiGenName || 'Creator',
       faceAnchor: aiGenAnchor,

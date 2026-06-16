@@ -10,11 +10,9 @@ export function deleteFromLibrary(id) {
   try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {}
 }
 
-// Compress any image src (data URL or same-origin URL) to a small JPEG data URL.
-export function compressForLibrary(src, maxPx = 640, quality = 0.82) {
+function _compressDataUrl(dataUrl, maxPx, quality) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => {
       const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
       const canvas = document.createElement('canvas');
@@ -24,8 +22,25 @@ export function compressForLibrary(src, maxPx = 640, quality = 0.82) {
       resolve(canvas.toDataURL('image/jpeg', quality));
     };
     img.onerror = reject;
-    img.src = src;
+    img.src = dataUrl;
   });
+}
+
+// Compress any image src to a small JPEG data URL.
+// Fetches non-data URLs first so Gradio file paths don't expire.
+export async function compressForLibrary(src, maxPx = 640, quality = 0.82) {
+  let dataUrl = src;
+  if (!src.startsWith('data:')) {
+    const res = await fetch(src);
+    const blob = await res.blob();
+    dataUrl = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = rej;
+      fr.readAsDataURL(blob);
+    });
+  }
+  return _compressDataUrl(dataUrl, maxPx, quality);
 }
 
 export async function saveToLibrary(src, metadata = {}) {

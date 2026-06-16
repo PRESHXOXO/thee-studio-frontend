@@ -33,12 +33,10 @@ function ease(t) { return 1 - Math.pow(1 - t, 3); }
 export function GenerationProgress({ active, identityLocked = false, engine = '', batchSize = 1, style }) {
   const [progress, setProgress]     = React.useState(0);
   const [stageIdx, setStageIdx]     = React.useState(0);
-  const [elapsed, setElapsed]       = React.useState(0);
   const [complete, setComplete]     = React.useState(false);
   const [visible, setVisible]       = React.useState(false);
 
   const frameRef    = React.useRef(null);
-  const startRef    = React.useRef(null);
   const stageRef    = React.useRef(null);
   const stageIdxRef = React.useRef(0);
   const progressRef = React.useRef(0);
@@ -49,17 +47,11 @@ export function GenerationProgress({ active, identityLocked = false, engine = ''
     if (active) {
       setProgress(0);
       setStageIdx(0);
-      setElapsed(0);
       setComplete(false);
       setVisible(true);
       progressRef.current = 0;
       stageIdxRef.current = 0;
-      startRef.current = Date.now();
       stageRef.current  = Date.now();
-
-      const elapsedTimer = setInterval(() => {
-        setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
-      }, 1000);
 
       const animate = () => {
         const now = Date.now();
@@ -86,7 +78,6 @@ export function GenerationProgress({ active, identityLocked = false, engine = ''
       frameRef.current = requestAnimationFrame(animate);
 
       return () => {
-        clearInterval(elapsedTimer);
         if (frameRef.current) cancelAnimationFrame(frameRef.current);
       };
     } else if (visible) {
@@ -101,7 +92,7 @@ export function GenerationProgress({ active, identityLocked = false, engine = ''
   if (!visible) return null;
 
   const label = complete
-    ? `Done in ${elapsed}s`
+    ? 'Done'
     : batchSize > 1
       ? `${currentStage?.label} · ${batchSize} images`
       : currentStage?.label;
@@ -128,7 +119,7 @@ export function GenerationProgress({ active, identityLocked = false, engine = ''
           {label}
         </div>
         <span style={{ font: '500 0.75rem/1 var(--font-mono)', color: 'var(--text-faint)', flexShrink: 0 }}>
-          {complete ? '✓' : `${elapsed}s`}
+          {complete ? '✓' : `${Math.round(progress)}%`}
         </span>
       </div>
 

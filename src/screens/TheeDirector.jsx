@@ -5,6 +5,7 @@ import { Select } from '../components/forms/Select.jsx';
 import { Input } from '../components/forms/Input.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { PromptOutput } from '../components/feedback/PromptOutput.jsx';
+import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { buildDirectorOutputs, generateImage, characterGenerate, sanitizeForOpenAI, describeOutfitImage } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
@@ -638,15 +639,23 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
           )}
 
           {outputs?.positivePrompt && (
-            <Button
-              variant="primary"
-              loading={generating}
-              onClick={handleGenerate}
-              style={{ width: '100%' }}
-            >
-              <Icon name="sparkles" size={15} />
-              {generating ? 'Generating…' : selectedChar && getCharacterImage(selectedChar) ? `Generate as ${selectedChar.name}` : 'Generate Here'}
-            </Button>
+            <>
+              <Button
+                variant="primary"
+                loading={generating}
+                onClick={handleGenerate}
+                style={{ width: '100%' }}
+              >
+                <Icon name="sparkles" size={15} />
+                {generating ? 'Generating…' : selectedChar && getCharacterImage(selectedChar) ? `Generate as ${selectedChar.name}` : 'Generate Here'}
+              </Button>
+              <GenerationProgress
+                active={generating}
+                identityLocked={!!(selectedChar?.locked && getCharacterImage(selectedChar))}
+                engine={outputs?.recommendedEngine || ''}
+                batchSize={1}
+              />
+            </>
           )}
 
           {/* Save as Creator — only when building a new subject (no character selected) */}

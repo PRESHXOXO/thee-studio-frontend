@@ -91,8 +91,17 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
     const whatChanges = mode === 'portrait'
       ? 'Camera angle, expression, and framing only — no outfit changes, no complex scene.'
       : 'Scene, wardrobe, pose, lighting, camera angle, styling, and mood only.';
+
+    // Pull the face anchor inside the lock block so eye color / specific features are LOCKED, not just context
+    const anchorDesc = char.faceAnchor
+      || (f.face ? `${f.face}${f.tone ? `. ${f.tone} complexion.` : ''}` : '');
+
+    const lockedDetails = anchorDesc
+      ? `\n\nLOCKED IDENTITY DETAILS — MUST BE PRESERVED EXACTLY:\n${anchorDesc}\nEvery detail above is non-negotiable. Do not change eye color, skin tone, facial structure, or any listed feature.`
+      : '';
+
     parts.push(
-      `IDENTITY LOCK — DO NOT RECAST:\nUse the attached reference image(s) as the master identity anchor for ${char.name}. Preserve exact recognizable facial identity: facial proportions, skin tone, eye shape, eyebrow shape, nose shape, lips, cheekbones, jawline, hairline, and overall appearance.\n\nDo not recast the subject. Do not alter ethnicity. Do not change bone structure. Do not create a generic influencer face. Do not over-smooth the skin. Do not make the subject look AI-generated.\n\nWHAT STAYS: Face, identity, skin tone, bone structure, recognizable presence.\nWHAT CHANGES: ${whatChanges}\n\nREFERENCE IMAGES ATTACHED: The subject in the output must match the same person from all attached reference images.`
+      `IDENTITY LOCK — DO NOT RECAST:\nUse the attached reference image(s) as the master identity anchor for ${char.name}. Preserve exact recognizable facial identity: facial proportions, skin tone, eye color, eye shape, eyebrow shape, nose shape, lips, cheekbones, jawline, hairline, and overall appearance.${lockedDetails}\n\nDo not recast the subject. Do not alter ethnicity. Do not change bone structure. Do not change eye color. Do not create a generic influencer face. Do not over-smooth the skin. Do not make the subject look AI-generated.\n\nWHAT STAYS: Face, identity, skin tone, bone structure, eye color, recognizable presence.\nWHAT CHANGES: ${whatChanges}\n\nREFERENCE IMAGES ATTACHED: The subject in the output must match the same person from all attached reference images.`
     );
   }
 

@@ -52,7 +52,7 @@ function EngineRow({ engine, isActive, onSelect }) {
   );
 }
 
-function KeyField({ label, description, placeholder, localStorageKey, onSave, status, errorMsg }) {
+function KeyField({ label, description, placeholder, localStorageKey, onSave, onSaved }) {
   const [key, setKey] = React.useState('');
   const [st, setSt] = React.useState(null);
   const [err, setErr] = React.useState('');
@@ -64,6 +64,7 @@ function KeyField({ label, description, placeholder, localStorageKey, onSave, st
       await onSave(key.trim());
       if (localStorageKey) localStorage.setItem(localStorageKey, '1');
       setSt('ok'); setKey('');
+      onSaved?.();
     } catch (e) { setSt('error'); setErr(e.message); }
   }
 
@@ -99,9 +100,12 @@ function KeyField({ label, description, placeholder, localStorageKey, onSave, st
 
 export function Settings() {
   const [activeEngine, setActiveEngine] = React.useState('openai');
+  const [savedTick, setSavedTick] = React.useState(0);
   const engineDef = ENGINES.find(e => e.id === activeEngine);
   const engine = engineDef ? { ...engineDef, status: resolveEngineStatus(engineDef) } : engineDef;
   const s = STATUS_CONFIG[engine?.status || 'idle'];
+
+  const onKeySaved = React.useCallback(() => setSavedTick(t => t + 1), []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
@@ -124,6 +128,7 @@ export function Settings() {
           placeholder="sk-..."
           localStorageKey="ts_openai_configured"
           onSave={saveApiKey}
+          onSaved={onKeySaved}
         />
 
         <div style={{ borderTop: '1px solid var(--border)', margin: '0 -4px' }} />
@@ -134,6 +139,7 @@ export function Settings() {
           placeholder="AIza..."
           localStorageKey="ts_gemini_configured"
           onSave={saveGeminiKey}
+          onSaved={onKeySaved}
         />
 
         <div style={{ borderTop: '1px solid var(--border)', margin: '0 -4px' }} />
@@ -144,6 +150,7 @@ export function Settings() {
           placeholder="r8_..."
           localStorageKey="ts_replicate_configured"
           onSave={saveReplicateKey}
+          onSaved={onKeySaved}
         />
 
       </Card>

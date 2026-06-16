@@ -723,11 +723,14 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     reader.onload = async ev => {
       const original = ev.target.result;
       const compressed = await compressImage(original);
+      // Capture current editing snapshot BEFORE setEditing so runAnalysis
+      // gets the correct state, not the stale closure value.
+      const snapshot = editing;
       setEditing(ed => ({
         ...ed,
         refImages: [compressed, ...(ed.refImages || []).slice(1)],
       }));
-      runAnalysis(original, editing);
+      runAnalysis(original, snapshot);
     };
     reader.readAsDataURL(file);
     e.target.value = '';

@@ -170,7 +170,8 @@ function compressImage(dataUrl, maxPx = 768, quality = 0.88) {
       canvas.width  = Math.round(img.width  * scale);
       canvas.height = Math.round(img.height * scale);
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
+      // PNG for reference photos — lossless preserves eye color, skin tone detail
+      resolve(canvas.toDataURL('image/png'));
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;

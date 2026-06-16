@@ -4,7 +4,7 @@ import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
 import { analyzeCharacterImage, characterGenerate, extractFaceAnchor, generateCharacterSeed, generateCharacterVariations } from '../api/studio.js';
-import { GENDERS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, JEWELRY_OPTIONS, CLOTHING_VIBES } from '../lib/promptData.js';
+import { GENDERS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, JEWELRY_OPTIONS, CLOTHING_VIBES, STANDARD_NEGATIVE } from '../lib/promptData.js';
 import { Select } from '../components/forms/Select.jsx';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
 
@@ -23,6 +23,7 @@ const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px
 
 const QUICK_ENGINES = [
   { id: 'openai_image',           label: 'OpenAI',       icon: 'zap' },
+  { id: 'replicate_instantid',    label: 'InstantID 🔒', icon: 'scan-face' },
   { id: 'replicate_flux_schnell', label: 'FLUX Schnell', icon: 'flame' },
 ];
 
@@ -47,22 +48,22 @@ const QUICK_OUTFITS = [
   { id: 'default',          label: "Creator's Style",        prompt: null },
   { id: 'casual',           label: 'Casual',                 prompt: 'fitted white tee, high-waist dark jeans, clean white sneakers, minimal accessories' },
   { id: 'athleisure',       label: 'Athleisure',             prompt: 'matching athletic set, sports bra, biker shorts, sleek sneakers, gym bag' },
-  { id: 'elevated_ath',     label: 'Skims Set',              prompt: 'Skims bodysuit, cycling shorts, oversized hoodie, clean sneakers, gold hoops' },
+  { id: 'elevated_ath',     label: 'Skims Set',              prompt: 'fitted seamless bodysuit, cycling shorts, oversized hoodie, clean sneakers, gold hoops — no logos, no text on clothing' },
   { id: 'sundress',         label: 'Sundress',               prompt: 'flowy floral mini sundress, strappy sandals, dainty gold jewelry, sunglasses' },
   { id: 'brunch',           label: 'Brunch',                 prompt: 'linen coord set, strappy mules, sun hat, gold necklace — elevated summer daytime' },
   { id: 'denim',            label: 'Denim',                  prompt: 'vintage denim jacket, straight-leg jeans, fitted white tee, white sneakers or ankle boots' },
-  { id: 'streetwear',       label: 'Streetwear',             prompt: 'streetwear luxury: cargo pants, oversized graphic hoodie, chunky sneakers, cap' },
+  { id: 'streetwear',       label: 'Streetwear',             prompt: 'streetwear luxury: clean cargo pants, oversized solid-color hoodie, chunky sneakers, cap — no logos, no text, no graphics on clothing' },
   { id: 'date_night',       label: 'Date Night',             prompt: 'satin slip dress, strappy stiletto heels, diamond studs, sleek clutch — sensual but elegant' },
   { id: 'lbd',              label: 'LBD',                    prompt: 'fitted little black dress, pointed-toe pumps, minimal gold jewelry — classic and polished' },
   { id: 'night_out',        label: 'Night Out',              prompt: 'chic tailored blazer over a bodysuit, wide-leg trousers, heels, bold earrings' },
   { id: 'club',             label: 'Club Ready',             prompt: 'crystal-embellished mini dress, platform stilettos, full glam makeup, bold jewelry' },
   { id: 'biz_casual',       label: 'Business Casual',        prompt: 'fitted blazer, tailored trousers, silk blouse, block heels — polished and professional' },
   { id: 'power_suit',       label: 'Power Suit',             prompt: 'structured monochrome suit, no undershirt, pointed pumps, minimal accessories — commanding' },
-  { id: 'high_fashion',     label: 'High Fashion',           prompt: 'avant-garde editorial look: Balenciaga, sharp structured silhouette, editorial styling' },
+  { id: 'high_fashion',     label: 'High Fashion',           prompt: 'avant-garde editorial look: architectural structured silhouette, fashion week styling, solid fabrics — no logos, no text on clothing' },
   { id: 'old_money',        label: 'Old Money',              prompt: 'cashmere knit, wide-leg cream trousers, loafers, structured bag — quiet luxury' },
-  { id: 'monochrome',       label: 'Monochrome',             prompt: 'head-to-toe tonal look, Celine aesthetic, clean lines, one color, minimal accessories' },
-  { id: 'luxury_casual',    label: 'Luxury Casual',          prompt: 'Bottega Veneta bag, linen coord set, slides, gold jewelry — effortless expensive' },
-  { id: 'resort',           label: 'Resort',                 prompt: 'Zimmermann flowy maxi dress, woven sun hat, strappy sandals, gold jewelry' },
+  { id: 'monochrome',       label: 'Monochrome',             prompt: 'head-to-toe tonal look, clean architectural lines, one color, minimal accessories — solid fabrics only' },
+  { id: 'luxury_casual',    label: 'Luxury Casual',          prompt: 'structured woven bag, linen coord set, slides, gold jewelry — effortless expensive, no logos' },
+  { id: 'resort',           label: 'Resort',                 prompt: 'flowy printed maxi dress, woven sun hat, strappy sandals, gold jewelry — resort luxe' },
   { id: 'beach',            label: 'Beach',                  prompt: 'designer bikini, sheer sarong wrap, oversized sunglasses, gold accessories' },
   { id: 'pool',             label: 'Poolside',               prompt: 'luxury one-piece swimsuit, designer slides, oversized beach hat, linen cover-up' },
   { id: 'cozy_winter',      label: 'Winter Coat',            prompt: 'oversized tailored coat, turtleneck, knee-high boots, structured bag — cold weather editorial' },
@@ -70,43 +71,44 @@ const QUICK_OUTFITS = [
   { id: 'boudoir',          label: 'Boudoir Editorial',      prompt: 'silk robe, sheer lace bodysuit, soft natural confidence — tasteful editorial boudoir-inspired' },
 ];
 
-const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, broken anatomy, flat lighting, harsh flash, oversaturated colors, generic photo, artificial smile, overprocessed HDR, grainy, noisy';
-
 function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverride = null) {
   const f = char.fields || {};
   const parts = [];
 
-  // FACE + SKIN ONLY — everything else is shoot-specific
+  parts.push('Ultra-realistic 4K commercial lifestyle fashion photography. Shot for a premium fashion and lifestyle brand campaign. The final image must look like a high-end professional photograph captured on a real camera — realistic, polished, editorial, and not illustrated or overly stylized.');
+
+  // TALENT — face and skin only
   if (char.faceAnchor) {
-    parts.push(`FACE & SKIN LOCK — ${char.name}: ${char.faceAnchor} Lock ONLY the face and skin tone. The outfit, hair styling, and background in the reference photo are NOT part of this shoot — they will be replaced by the creative direction below.`);
+    parts.push(`TALENT — ${char.name}: ${char.faceAnchor}.`);
   } else if (f.face || f.tone) {
-    parts.push(`TALENT — ${char.name}: ${[f.face, f.tone].filter(Boolean).join('. ')}. Preserve the face and skin tone only. Do not carry over the outfit or background from the reference image.`);
+    parts.push(`TALENT — ${char.name}: ${[f.face, f.tone && `${f.tone} complexion`].filter(Boolean).join('. ')}.`);
   }
 
-  parts.push('Ultra-realistic 4K commercial lifestyle photography for a premium content creator brand.');
+  // BUILD & PRESENCE — separate block for full model weight
+  const presenceParts = [f.body, f.personality].filter(Boolean);
+  if (presenceParts.length) parts.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
 
-  // OUTFIT — explicit override of reference photo
+  // OUTFIT
   const wardrobe = outfitOverride || f.wardrobe;
-  if (wardrobe) {
-    parts.push(`OUTFIT FOR THIS SHOOT (REQUIRED — replace any outfit from the reference photo): ${wardrobe}. The creator must be wearing this specific outfit. Do not use the clothing from the reference image.`);
-  }
+  if (wardrobe) parts.push(`OUTFIT: ${wardrobe}.`);
 
-  // SCENE — explicit override of reference background
-  if (sceneName) {
-    parts.push(`SCENE (REQUIRED — replace the reference photo background): ${sceneName}. The background must be this environment, not whatever was behind the subject in the reference photo.`);
-  }
+  // HAIR
+  if (f.hair) parts.push(`HAIR & ACCESSORIES: Hair: ${f.hair}.`);
 
-  if (mood)          parts.push(`MOOD: ${mood}`);
-  if (f.hair)        parts.push(`HAIR: ${f.hair}`);
-  if (f.body)        parts.push(`BUILD: ${f.body}`);
-  if (f.personality) parts.push(`ENERGY: ${f.personality}`);
-  if (f.niche)       parts.push(`CONTENT CONTEXT: ${f.niche}`);
+  // SCENE
+  if (sceneName) parts.push(`SCENE: ${sceneName}. Premium environment, authentic architectural detail, controlled depth.`);
 
-  if (identityLocked) {
-    parts.push('IDENTITY LOCK: Face and skin tone are fixed. Only the outfit and location change between shoots.');
-  }
+  // CAMPAIGN FEEL
+  const campaignParts = [mood || 'Editorial'].filter(Boolean);
+  if (f.niche) campaignParts.push(f.niche);
+  parts.push(`CAMPAIGN FEEL: ${campaignParts.join(' — ')}. Premium editorial spread energy.`);
 
-  parts.push('Photorealistic editorial photograph. Natural dimensional lighting. Professional commercial retouching. No AI artifacts. No distorted anatomy. Ultra-detailed 4K. Luxury campaign quality. Fully clothed, brand-appropriate content.');
+  parts.push('POSE & COMPOSITION: Three-quarter body editorial portrait so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, realistic anatomy, relaxed hands.');
+  parts.push('LIGHTING: Soft dimensional natural or studio lighting. Light wraps realistically around the subject. Warm refined color grading.');
+  parts.push('CAMERA & DETAIL: Shot on Canon EOS R5 with 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face, hair, jewelry, and styling details.');
+  parts.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. No text, logos, brand names, or graphic prints on clothing.');
+  parts.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a luxury campaign.');
+
   return parts.join('\n\n');
 }
 

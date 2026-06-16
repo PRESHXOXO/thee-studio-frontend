@@ -99,9 +99,9 @@ export const JEWELRY_OPTIONS = [
   { value: 'statement oversized earrings',                                          label: 'Statement Earrings' },
   { value: 'layered gold chains, textured',                                         label: 'Layered Gold Chains' },
   { value: 'diamond tennis necklace',                                               label: 'Tennis Necklace' },
-  { value: 'Cartier love bracelet, gold',                                           label: 'Cartier Love Bracelet' },
-  { value: 'Rolex watch, luxury',                                                   label: 'Rolex Watch' },
-  { value: 'Van Cleef clover necklace',                                             label: 'Van Cleef Clover' },
+  { value: 'gold love bracelet, textured bangle, luxury finish',                     label: 'Gold Love Bracelet' },
+  { value: 'luxury gold watch, premium timepiece, polished case',                   label: 'Luxury Watch' },
+  { value: 'clover pendant necklace, delicate gold, fine jewelry',                  label: 'Clover Pendant Necklace' },
   { value: 'stacked gold rings, editorial',                                         label: 'Stacked Gold Rings' },
   { value: 'body chain, gold delicate',                                             label: 'Delicate Body Chain' },
   { value: 'full luxury set: necklace, earrings, bracelet, rings',                  label: 'Full Luxury Set' },
@@ -113,7 +113,7 @@ export const CLOTHING_VIBES = [
   { value: 'Unspecified', label: 'Unspecified' },
   { value: 'casual: fitted white tee, high-waist dark jeans, clean sneakers, minimal accessories',                            label: 'Casual — jeans + tee' },
   { value: 'athleisure: matching athletic set, sports bra, biker shorts, sleek sneakers',                                     label: 'Athleisure — athletic set' },
-  { value: 'Skims set: bodysuit, cycling shorts, oversized hoodie, clean sneakers, gold hoops',                               label: 'Elevated Athleisure — Skims' },
+  { value: 'fitted seamless bodysuit, cycling shorts, oversized hoodie, clean sneakers, gold hoops — no logos, no text on clothing',    label: 'Elevated Athleisure — Seamless Set' },
   { value: 'flowy floral mini sundress, strappy sandals, dainty gold jewelry, sunglasses',                                    label: 'Sundress — casual chic' },
   { value: 'linen coord set, strappy mules, sun hat, gold necklace — elevated summer daytime',                                label: 'Summer Brunch — linen' },
   { value: 'vintage denim jacket, straight-leg jeans, fitted white tee, ankle boots',                                         label: 'Elevated Denim' },
@@ -125,18 +125,18 @@ export const CLOTHING_VIBES = [
   { value: 'fitted blazer, tailored trousers, silk blouse, block heels — polished and professional',                          label: 'Business Casual — blazer' },
   { value: 'structured monochrome suit, no undershirt, pointed pumps, minimal accessories — commanding',                      label: 'Power Suit — monochrome' },
   { value: 'pencil skirt, tucked silk blouse, pointed heels, structured bag — corporate chic',                                label: 'Corporate Chic — pencil skirt' },
-  { value: 'streetwear luxury: Off-White or Fear of God, cargo pants, chunky sneakers, oversized hoodie',                     label: 'Streetwear Luxury' },
-  { value: 'high fashion editorial: Balenciaga, avant-garde structured silhouette, fashion week styling',                      label: 'High Fashion — editorial' },
+  { value: 'streetwear luxury: clean oversized hoodie in a solid neutral tone, relaxed cargo pants, premium chunky sneakers — no logos, no text, no graphics',                     label: 'Streetwear Luxury' },
+  { value: 'high fashion editorial: avant-garde structured silhouette, architectural draping, fashion week styling — solid fabrics, no visible logos or text',                      label: 'High Fashion — editorial' },
   { value: 'cashmere knit, wide-leg cream trousers, loafers, structured bag — quiet luxury old money',                        label: 'Old Money — quiet luxury' },
-  { value: 'head-to-toe tonal look, Celine aesthetic, clean lines, one color palette, minimal accessories',                   label: 'Monochrome Minimal — Celine' },
-  { value: 'Bottega Veneta bag, linen coord set, designer slides, gold jewelry — effortless expensive',                       label: 'Luxury Casual — Bottega' },
-  { value: 'Zimmermann flowy maxi dress, woven sun hat, strappy sandals, gold jewelry — resort lifestyle',                    label: 'Resort Glam — Zimmermann' },
+  { value: 'head-to-toe tonal look, architectural clean lines, one color palette, minimal accessories — solid fabrics only',   label: 'Monochrome Minimal' },
+  { value: 'structured woven bag, linen coord set, designer slides, gold jewelry — effortless expensive, no logos',           label: 'Luxury Casual' },
+  { value: 'flowy printed maxi dress, woven sun hat, strappy sandals, gold jewelry — resort lifestyle',                       label: 'Resort Glam' },
   { value: 'designer bikini, sheer sarong wrap, oversized sunglasses, gold body jewelry',                                     label: 'Beach — designer bikini' },
   { value: 'luxury one-piece swimsuit, designer slides, oversized beach hat, linen cover-up',                                 label: 'Poolside — luxury one-piece' },
   { value: 'oversized tailored coat, ribbed turtleneck, knee-high boots, structured bag — cold weather editorial',            label: 'Winter Coat Moment' },
   { value: 'Y2K revival: low-rise jeans, rhinestone crop top, butterfly clips, platform sandals',                             label: 'Y2K Glam — revival' },
   { value: 'silk robe, sheer lace bodysuit, soft natural confidence, tasteful editorial boudoir-inspired pose',               label: 'Boudoir Editorial — silk robe' },
-  { value: 'designer lingerie set, Savage X Fenty or La Perla, tasteful editorial styling',                                   label: 'Lingerie Editorial' },
+  { value: 'designer lingerie set, lace bodysuit and brief set, tasteful editorial styling — elegant and editorial',           label: 'Lingerie Editorial' },
   { value: 'high-end bikini or one-piece, resort lifestyle shoot, body confidence, luxury vacation',                          label: 'Swimwear — resort luxury' },
 ];
 
@@ -157,76 +157,79 @@ export const SPECIAL_FEATURES = [
 
 export const GENDERS = ['Unspecified', 'Woman', 'Man', 'Non-binary', 'Femme', 'Androgynous'].map(v => ({ value: v, label: v }));
 
-export const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, missing fingers, broken anatomy, unnatural body proportions, stiff pose, flat lighting, harsh flash, oversaturated colors, cluttered background, cartoon styling, floating tattoos, fake jewelry, bad fabric physics, cropped limbs, generic photo, artificial smile, lifeless expression, overprocessed HDR, grainy, noisy, unrealistic skin color, washed-out skin, plastic hair, duplicate body parts, distorted face';
+export const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, missing fingers, broken anatomy, unnatural body proportions, stiff pose, flat lighting, harsh flash, oversaturated colors, cluttered background, cartoon styling, floating tattoos, fake jewelry, bad fabric physics, cropped limbs, generic photo, artificial smile, lifeless expression, overprocessed HDR, grainy, noisy, unrealistic skin color, washed-out skin, plastic hair, duplicate body parts, distorted face, text on clothing, visible brand names, graphic prints on garments, fake logos, illegible text, random letters on fabric, misspelled words, hallucinated typography';
 
 export function buildStructuredVision({ vision = '', gender = 'Unspecified', skinTone = 'Unspecified', hairStyle = 'Unspecified', hairColor = 'Unspecified', eyeDetail = 'Unspecified', jewelry = 'None', clothing = 'Unspecified', features = 'None', mood = 'Clean', contentType = 'Portrait', scene = 'None', character = null, shootHairStyle = 'Unspecified', shootHairColor = 'Unspecified', shootJewelry = 'None', outfitPhotoDesc = '' } = {}) {
   const s = [];
-  s.push('Ultra-realistic 4K commercial lifestyle photography. Shot for a premium fashion and lifestyle brand campaign. The final image must look like a high-end photograph taken on a professional camera — not AI-generated, not illustrated, not stylized.');
+
+  s.push('Ultra-realistic 4K commercial lifestyle fashion photography. Shot for a premium fashion and lifestyle brand campaign. The final image must look like a high-end professional photograph captured on a real camera — realistic, polished, editorial, and not illustrated or overly stylized.');
 
   if (character) {
     const f = character.fields || {};
-    // Face + skin ONLY — placed first for maximum token weight
+
+    // TALENT — face and skin only
+    const talentParts = [];
     if (character.faceAnchor) {
-      s.unshift(`FACE & SKIN LOCK — ${character.name}: ${character.faceAnchor} Lock ONLY the face geometry and skin tone. The outfit, hair styling, and scene from the reference photo are NOT carried over — they are replaced by this shoot's creative direction.`);
+      talentParts.push(character.faceAnchor);
     } else {
-      const cp = [];
-      if (f.face) cp.push(`Face: ${f.face}`);
-      if (f.tone) cp.push(`Skin: ${f.tone}`);
-      if (cp.length) s.push(`TALENT — ${character.name}: ${cp.join('. ')}. Preserve face and skin tone only. Do not reproduce the reference photo's outfit or background.`);
+      if (f.face) talentParts.push(f.face);
+      if (f.tone) talentParts.push(`${f.tone} complexion`);
     }
-    // Outfit — photo description takes priority, then dropdown, then character's wardrobe
+    if (talentParts.length) s.push(`TALENT — ${character.name}: ${talentParts.join('. ')}.`);
+
+    // BUILD & PRESENCE — separate block so it gets full model weight
+    const presenceParts = [];
+    if (f.body)        presenceParts.push(f.body);
+    if (f.personality) presenceParts.push(f.personality);
+    if (presenceParts.length) s.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
+
+    // OUTFIT
     const outfitUsed = outfitPhotoDesc
       ? outfitPhotoDesc
       : ((clothing && clothing !== 'Unspecified') ? clothing : f.wardrobe);
-    if (outfitUsed) s.push(`OUTFIT FOR THIS SHOOT (REQUIRED — replace the reference photo outfit): ${outfitUsed}. The subject must wear exactly this. Do not use the clothing from the reference image.`);
-    // Supporting character details — shoot hair/jewelry overrides take priority
-    const cp2 = [];
-    const shootHair = [
-      shootHairStyle !== 'Unspecified' ? shootHairStyle : '',
-      shootHairColor !== 'Unspecified' ? `in ${shootHairColor}` : '',
-    ].filter(Boolean).join(', ');
-    if (shootHair) {
-      cp2.push(`HAIR FOR THIS SHOOT (override character default): ${shootHair}`);
-    } else if (f.hair) {
-      cp2.push(`Hair: ${f.hair}`);
-    }
+    if (outfitUsed) s.push(`OUTFIT: ${outfitUsed}.`);
+
+    // HAIR & ACCESSORIES
+    const hairAccessParts = [];
+    const effectiveHairStyle = shootHairStyle !== 'Unspecified' ? shootHairStyle : (f.hair || null);
+    const effectiveHairColor = shootHairColor !== 'Unspecified' ? shootHairColor : null;
+    const hairDesc = [effectiveHairStyle, effectiveHairColor ? `in ${effectiveHairColor}` : null].filter(Boolean).join(', ');
+    if (hairDesc) hairAccessParts.push(`Hair: ${hairDesc}`);
     const jewelryUsed = (shootJewelry && shootJewelry !== 'None') ? shootJewelry : (jewelry !== 'None' ? jewelry : null);
-    if (jewelryUsed) cp2.push(`Jewelry for this shoot: ${jewelryUsed}`);
-    if (f.body)        cp2.push(`Build: ${f.body}`);
-    if (f.personality) cp2.push(`Energy: ${f.personality}`);
-    if (cp2.length) s.push(cp2.join('. ') + '.');
+    if (jewelryUsed) hairAccessParts.push(`Accessories: ${jewelryUsed}`);
+    if (hairAccessParts.length) s.push(`HAIR & ACCESSORIES: ${hairAccessParts.join('. ')}.`);
   } else {
+    // Standalone talent block
     const hasSubject = gender !== 'Unspecified' || skinTone !== 'Unspecified' || eyeDetail !== 'Unspecified';
     if (hasSubject) {
-      const who = gender !== 'Unspecified' ? gender : 'talent';
-      const skin = skinTone !== 'Unspecified' ? `${skinTone} complexion. Skin should render with realistic texture — visible pores, natural highlights, subtle tone variation, no plastic or airbrushed appearance` : '';
-      const eyes = eyeDetail !== 'Unspecified' ? `${eyeDetail} eyes. Eye rendering should be sharp, wet, dimensional, and lifelike` : '';
-      s.push(`TALENT / CASTING: ${who}${skin ? `. ${skin}` : ''}${eyes ? `. ${eyes}` : ''}. Face must look photorealistic — natural facial asymmetry, real skin imperfections, grounded expression.`);
+      const who = gender !== 'Unspecified' ? gender : 'Talent';
+      const talentParts = [];
+      if (skinTone !== 'Unspecified') talentParts.push(`${skinTone} complexion, realistic skin texture with visible pores and natural tone variation`);
+      if (eyeDetail !== 'Unspecified') talentParts.push(`${eyeDetail} eyes, sharp and dimensional`);
+      s.push(`TALENT: ${who}. ${talentParts.join('. ')}${talentParts.length ? '. ' : ''}Natural facial structure, grounded expression.`);
     }
+    if (features !== 'None') s.push(`BUILD & PRESENCE: ${features}.`);
+
+    if (clothing !== 'Unspecified') s.push(`OUTFIT: ${clothing}.`);
+
+    const hairAccessParts = [];
     if (hairStyle !== 'Unspecified' || hairColor !== 'Unspecified') {
       const hair = [hairStyle !== 'Unspecified' ? hairStyle : '', hairColor !== 'Unspecified' ? `in ${hairColor}` : ''].filter(Boolean).join(', ');
-      s.push(`HAIR STYLING: ${hair}. Render with full strand-level detail — individual hair texture, natural frizz, fine flyaways, realistic shine and depth.`);
+      hairAccessParts.push(`Hair: ${hair}, full strand detail and natural texture`);
     }
-    const hasWardrobe = clothing !== 'Unspecified' || jewelry !== 'None' || features !== 'None';
-    if (hasWardrobe) {
-      const items = [
-        clothing !== 'Unspecified' ? `${clothing} — render fabric with realistic texture, natural folds, tension at seams` : '',
-        jewelry !== 'None' ? `Accessories: ${jewelry} — render with accurate material finish, realistic reflections` : '',
-        features !== 'None' ? `Notable features: ${features} — render naturally, embedded in skin` : '',
-      ].filter(Boolean);
-      s.push(`WARDROBE & ACCESSORIES: ${items.join('. ')}. All items must look expensive, real, and brand-accurate.`);
-    }
+    if (jewelry !== 'None') hairAccessParts.push(`Accessories: ${jewelry}`);
+    if (hairAccessParts.length) s.push(`HAIR & ACCESSORIES: ${hairAccessParts.join('. ')}.`);
   }
 
-  if (scene && scene !== 'None') s.push(`LOCATION (REQUIRED — replace the reference photo background): ${scene}. The background must be this environment. Do not carry over the setting from the reference image. Premium environment with authentic architectural detail, polished surfaces, and controlled depth.`);
+  if (scene && scene !== 'None') s.push(`SCENE: ${scene}. Premium environment, authentic architectural detail, controlled depth.`);
   if (vision) s.push(`ART DIRECTION: ${vision}`);
-  if (mood || contentType) s.push(`CAMPAIGN FEEL: ${[contentType, mood].filter(Boolean).join(' — ')}. Premium editorial spread or luxury brand campaign energy.`);
 
-  s.push('POSE & COMPOSITION: Natural, confident posture. Candid-feeling but composed. Flattering three-quarter or portrait angle. Intentional negative space. Realistic anatomy.');
-  s.push('LIGHTING: Soft, dimensional natural or studio lighting. Light wraps realistically around the subject. Warm and refined color grading. No flat lighting, no harsh flash.');
-  s.push('CAMERA: Sony A1 or Canon EOS R5. 50mm–85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face and styling details.');
-  s.push('QUALITY: Ultra-realistic photograph. 4K resolution. Professional commercial retouching. Healthy natural skin. Accurate fabric physics. No AI artifacts. No distorted hands.');
-  s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography. Professional editorial image suitable for a luxury brand campaign. No nudity, no inappropriate content.');
+  s.push(`CAMPAIGN FEEL: ${[contentType, mood].filter(Boolean).join(' — ')}. Premium editorial spread energy.`);
+  s.push('POSE & COMPOSITION: Three-quarter body editorial portrait so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, realistic anatomy, relaxed hands.');
+  s.push('LIGHTING: Soft dimensional natural or studio lighting. Light wraps realistically around the subject. Warm refined color grading.');
+  s.push('CAMERA & DETAIL: Shot on Canon EOS R5 with 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face, hair, jewelry, and styling details.');
+  s.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. Hair has individual strand detail and natural movement. Jewelry reflects light accurately.');
+  s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a luxury campaign.');
 
   return s.join('\n\n');
 }

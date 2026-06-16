@@ -3,7 +3,7 @@ import { Card } from '../components/surfaces/Card.jsx';
 import { Select } from '../components/forms/Select.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { generateImage, fetchEngineChoices, sanitizeForOpenAI } from '../api/studio.js';
+import { generateImage, characterGenerate, fetchEngineChoices, sanitizeForOpenAI } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
 import {
   CONTENT_TYPES, MOODS, LOCATIONS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS,
@@ -77,7 +77,7 @@ function PromptBuilder({ engine, onApply }) {
     if (open) setChars(loadCharacters());
   }, [open]);
 
-  const selectedChar = characters.find(c => c.id === charId) || null;
+  const selectedChar = characters.find(c => String(c.id) === String(charId)) || null;
   const isFlux = engine?.toLowerCase().includes('flux');
 
   const charOptions = [
@@ -276,17 +276,32 @@ export function ImageGenerator({ initialPrompts }) {
       const [width, height] = FORMAT_DIMS[format] || [832, 1216];
       const isOpenAI = safeEngine.toLowerCase().includes('openai');
       const finalPositive = isOpenAI ? sanitizeForOpenAI(positivePrompt) : positivePrompt;
-      const result = await generateImage({
-        engine: safeEngine,
-        performanceMode: perf,
-        imageStyle: style,
-        imageSize: format,
-        quality,
-        width,
-        height,
-        positivePrompt: finalPositive,
-        negativePrompt,
-      });
+
+      // When a character with a reference photo is selected on an OpenAI engine,
+      // route through images.edit() for identity lock instead of pure text generation
+      const charRefImage = selectedChar?.refImages?.[0];
+      const useCharRef = isOpenAI && charRefImage;
+
+      const result = useCharRef
+        ? await characterGenerate({
+            engineId: safeEngine,
+            positivePrompt: finalPositive,
+            negativePrompt,
+            imageSize: format,
+            batchSize: 1,
+            characterImage: charRefImage,
+          })
+        : await generateImage({
+            engine: safeEngine,
+            performanceMode: perf,
+            imageStyle: style,
+            imageSize: format,
+            quality,
+            width,
+            height,
+            positivePrompt: finalPositive,
+            negativePrompt,
+          });
       const imgs = result.images || [];
       setImages(imgs);
       if (result.status) setStatus(result.status);

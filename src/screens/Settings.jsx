@@ -10,6 +10,7 @@ const ENGINES = [
   { id: 'photomaker',          name: 'PhotoMaker — Identity Lock',      desc: 'Replicate · face-locked from your reference photo',  status: 'dynamic',     statusKey: 'ts_replicate_configured', icon: 'scan-face' },
   { id: 'instantid',           name: 'InstantID',                      desc: 'Replicate · SDXL face-locked character shots',       status: 'dynamic',     statusKey: 'ts_replicate_configured', icon: 'fingerprint' },
   { id: 'flux_schnell',        name: 'FLUX Schnell',                   desc: 'Replicate · fast editorial proofs',                  status: 'dynamic',     statusKey: 'ts_replicate_configured', icon: 'flame' },
+  { id: 'uncensored_xl',        name: 'Uncensored Portrait XL',         desc: 'Local ComfyUI · epiCRealism XL · no restrictions',   status: 'needs-setup', statusKey: null,                      icon: 'unlock' },
   { id: 'comfyui',             name: 'Local ComfyUI',                  desc: 'On your machine · full control',                     status: 'needs-setup', statusKey: null,                      icon: 'cpu' },
   { id: 'prompt',              name: 'Prompt Only',                    desc: 'No image engine · writes prompts',                   status: 'idle',        statusKey: null,                      icon: 'type' },
 ];

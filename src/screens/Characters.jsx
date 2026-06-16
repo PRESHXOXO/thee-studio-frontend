@@ -161,7 +161,7 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
   return parts.join('\n\n');
 }
 
-function compressImage(dataUrl, maxPx = 768, quality = 0.88) {
+function compressImage(dataUrl, maxPx = 768, quality = 0.92) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
@@ -170,8 +170,7 @@ function compressImage(dataUrl, maxPx = 768, quality = 0.88) {
       canvas.width  = Math.round(img.width  * scale);
       canvas.height = Math.round(img.height * scale);
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      // PNG for reference photos — lossless preserves eye color, skin tone detail
-      resolve(canvas.toDataURL('image/png'));
+      resolve(canvas.toDataURL('image/jpeg', quality));
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;

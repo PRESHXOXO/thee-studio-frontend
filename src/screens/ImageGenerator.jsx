@@ -56,7 +56,7 @@ function loadCharacters() {
   try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
 }
 
-function PromptBuilder({ engine, onApply }) {
+function PromptBuilder({ engine, onApply, onCharChange }) {
   const [open, setOpen]           = React.useState(false);
   const [characters, setChars]    = React.useState(loadCharacters);
   const [charId, setCharId]       = React.useState('none');
@@ -79,6 +79,10 @@ function PromptBuilder({ engine, onApply }) {
 
   const selectedChar = characters.find(c => String(c.id) === String(charId)) || null;
   const isFlux = engine?.toLowerCase().includes('flux');
+
+  React.useEffect(() => {
+    onCharChange?.(selectedChar);
+  }, [charId, characters]);
 
   const charOptions = [
     { value: 'none', label: 'No Character — build subject from scratch' },
@@ -233,6 +237,7 @@ export function ImageGenerator({ initialPrompts }) {
   const [error, setError]                 = React.useState('');
   const [status, setStatus]               = React.useState('');
   const [images, setImages]               = React.useState([]);
+  const [selectedChar, setSelectedChar]   = React.useState(null);
 
   React.useEffect(() => {
     fetchEngineChoices().then(choices => {
@@ -340,7 +345,7 @@ export function ImageGenerator({ initialPrompts }) {
       </div>
 
       {/* Prompt Builder */}
-      <PromptBuilder engine={engine} onApply={({ positive, negative }) => { setPositive(positive); setNegative(negative); }} />
+      <PromptBuilder engine={engine} onApply={({ positive, negative }) => { setPositive(positive); setNegative(negative); }} onCharChange={setSelectedChar} />
 
       {/* Controls + prompts */}
       <Card style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>

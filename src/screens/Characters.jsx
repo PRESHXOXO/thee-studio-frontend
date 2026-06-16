@@ -65,7 +65,7 @@ const QUICK_OUTFITS = [
   { id: 'brunch',           label: 'Brunch',                 prompt: 'linen coord set, strappy mules, sun hat, gold necklace — elevated summer daytime' },
   { id: 'denim',            label: 'Denim',                  prompt: 'vintage denim jacket, straight-leg jeans, fitted white tee, white sneakers or ankle boots' },
   { id: 'streetwear',       label: 'Streetwear',             prompt: 'streetwear luxury: clean cargo pants, oversized solid-color hoodie, chunky sneakers, cap — no logos, no text, no graphics on clothing' },
-  { id: 'date_night',       label: 'Date Night',             prompt: 'satin slip dress, strappy stiletto heels, diamond studs, sleek clutch — sensual but elegant' },
+  { id: 'date_night',       label: 'Date Night',             prompt: 'satin slip dress, strappy stiletto heels, diamond studs, sleek clutch — elegant and alluring' },
   { id: 'lbd',              label: 'LBD',                    prompt: 'fitted little black dress, pointed-toe pumps, minimal gold jewelry — classic and polished' },
   { id: 'night_out',        label: 'Night Out',              prompt: 'chic tailored blazer over a bodysuit, wide-leg trousers, heels, bold earrings' },
   { id: 'club',             label: 'Club Ready',             prompt: 'crystal-embellished mini dress, platform stilettos, full glam makeup, bold jewelry' },
@@ -76,11 +76,11 @@ const QUICK_OUTFITS = [
   { id: 'monochrome',       label: 'Monochrome',             prompt: 'head-to-toe tonal look, clean architectural lines, one color, minimal accessories — solid fabrics only' },
   { id: 'luxury_casual',    label: 'Luxury Casual',          prompt: 'structured woven bag, linen coord set, slides, gold jewelry — effortless expensive, no logos' },
   { id: 'resort',           label: 'Resort',                 prompt: 'flowy printed maxi dress, woven sun hat, strappy sandals, gold jewelry — resort luxe' },
-  { id: 'beach',            label: 'Beach',                  prompt: 'designer bikini, sheer sarong wrap, oversized sunglasses, gold accessories' },
+  { id: 'beach',            label: 'Beach',                  prompt: 'designer bikini, lightweight sarong wrap, oversized sunglasses, gold accessories' },
   { id: 'pool',             label: 'Poolside',               prompt: 'luxury one-piece swimsuit, designer slides, oversized beach hat, linen cover-up' },
   { id: 'cozy_winter',      label: 'Winter Coat',            prompt: 'oversized tailored coat, turtleneck, knee-high boots, structured bag — cold weather editorial' },
   { id: 'y2k',              label: 'Y2K',                    prompt: 'Y2K revival: low-rise jeans, rhinestone crop top, butterfly clips, platform sandals' },
-  { id: 'boudoir',          label: 'Boudoir Editorial',      prompt: 'silk robe, sheer lace bodysuit, soft natural confidence — tasteful editorial boudoir-inspired' },
+  { id: 'boudoir',          label: 'Studio Editorial',       prompt: 'silk robe, fitted lace bodysuit, soft natural confidence — tasteful editorial studio look' },
 ];
 
 function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverride = null, mode = 'lifestyle') {

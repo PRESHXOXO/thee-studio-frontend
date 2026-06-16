@@ -268,6 +268,20 @@ export async function saveApiKey(key) {
   return parsed;
 }
 
+export async function saveGeminiKey(key) {
+  const raw = await callNamedEndpoint('save_gemini_key', [key]);
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed;
+}
+
+export async function saveReplicateKey(key) {
+  const raw = await callNamedEndpoint('save_replicate_key', [key]);
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed;
+}
+
 export async function generateImage({
   engine = '',
   performanceMode = 'Balanced',

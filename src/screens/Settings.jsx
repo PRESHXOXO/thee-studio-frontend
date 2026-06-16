@@ -2,44 +2,28 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { saveApiKey } from '../api/studio.js';
+import { saveApiKey, saveGeminiKey, saveReplicateKey } from '../api/studio.js';
 
 const ENGINES = [
-  {
-    id: 'openai',
-    name: 'OpenAI Image',
-    desc: 'Cloud · best for clean studio beauty',
-    status: 'dynamic', // resolved at render time from localStorage
-    icon: 'cloud',
-  },
-  {
-    id: 'replicate',
-    name: 'Replicate FLUX Schnell',
-    desc: 'Cloud · fast editorial proofs',
-    status: 'connected',
-    icon: 'zap',
-  },
-  {
-    id: 'comfyui',
-    name: 'Local ComfyUI',
-    desc: 'On your machine · full control',
-    status: 'needs-setup',
-    icon: 'cpu',
-  },
-  {
-    id: 'prompt',
-    name: 'Prompt Only',
-    desc: 'No image engine · writes prompts',
-    status: 'idle',
-    icon: 'type',
-  },
+  { id: 'openai',              name: 'OpenAI — gpt-image-2',      desc: 'Cloud · photorealistic studio quality',        status: 'dynamic',    statusKey: 'ts_openai_configured',    icon: 'cloud' },
+  { id: 'nano_banana_pro',     name: 'Nano Banana Pro',            desc: 'Google Gemini 3 Pro Image · highest quality',  status: 'dynamic',    statusKey: 'ts_gemini_configured',    icon: 'sparkles' },
+  { id: 'nano_banana_2',       name: 'Nano Banana 2',              desc: 'Google Gemini 3.1 Flash Image · fast',         status: 'dynamic',    statusKey: 'ts_gemini_configured',    icon: 'zap' },
+  { id: 'instantid',           name: 'InstantID — Identity Lock',  desc: 'Replicate · face-locked character shots',      status: 'dynamic',    statusKey: 'ts_replicate_configured', icon: 'scan-face' },
+  { id: 'flux_schnell',        name: 'FLUX Schnell',               desc: 'Replicate · fast editorial proofs',            status: 'dynamic',    statusKey: 'ts_replicate_configured', icon: 'flame' },
+  { id: 'comfyui',             name: 'Local ComfyUI',              desc: 'On your machine · full control',               status: 'needs-setup', statusKey: null,                      icon: 'cpu' },
+  { id: 'prompt',              name: 'Prompt Only',                desc: 'No image engine · writes prompts',             status: 'idle',        statusKey: null,                      icon: 'type' },
 ];
 
 const STATUS_CONFIG = {
-  'connected':   { label: 'Connected',    color: 'var(--status-ready)',  bg: 'var(--status-ready-bg)' },
-  'needs-setup': { label: 'Needs setup',  color: 'var(--status-warn)',   bg: 'var(--status-warn-bg)' },
-  'idle':        { label: 'Idle',         color: 'var(--status-off)',    bg: 'var(--status-off-bg)' },
+  'connected':   { label: 'Connected',    color: 'var(--status-ready)', bg: 'var(--status-ready-bg)' },
+  'needs-setup': { label: 'Needs setup',  color: 'var(--status-warn)',  bg: 'var(--status-warn-bg)' },
+  'idle':        { label: 'Idle',         color: 'var(--status-off)',   bg: 'var(--status-off-bg)' },
 };
+
+function resolveEngineStatus(engine) {
+  if (engine.status !== 'dynamic') return engine.status;
+  return engine.statusKey && localStorage.getItem(engine.statusKey) === '1' ? 'connected' : 'needs-setup';
+}
 
 function EngineRow({ engine, isActive, onSelect }) {
   const s = STATUS_CONFIG[engine.status];
@@ -68,71 +52,49 @@ function EngineRow({ engine, isActive, onSelect }) {
   );
 }
 
-function ApiKeySection() {
+function KeyField({ label, description, placeholder, localStorageKey, onSave, status, errorMsg }) {
   const [key, setKey] = React.useState('');
-  const [status, setStatus] = React.useState(null); // null | 'saving' | 'ok' | 'error'
-  const [errorMsg, setErrorMsg] = React.useState('');
+  const [st, setSt] = React.useState(null);
+  const [err, setErr] = React.useState('');
 
   async function handleSave() {
     if (!key.trim()) return;
-    setStatus('saving');
-    setErrorMsg('');
+    setSt('saving'); setErr('');
     try {
-      await saveApiKey(key.trim());
-      localStorage.setItem('ts_api_configured', '1');
-      setStatus('ok');
-      setKey('');
-    } catch (e) {
-      setStatus('error');
-      setErrorMsg(e.message);
-    }
+      await onSave(key.trim());
+      if (localStorageKey) localStorage.setItem(localStorageKey, '1');
+      setSt('ok'); setKey('');
+    } catch (e) { setSt('error'); setErr(e.message); }
   }
 
   return (
-    <Card style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div>
-        <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>API Keys</div>
-        <div style={{ font: '600 1rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>OpenAI API Key</div>
-        <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 4 }}>Required for image generation and AI character building.</div>
+        <div style={{ font: '600 0.9375rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>{label}</div>
+        <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 3 }}>{description}</div>
       </div>
-
-      {status === 'ok' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, font: 'var(--text-sm)', color: 'var(--status-ready)', background: 'var(--status-ready-bg)', padding: '10px 14px', borderRadius: 'var(--radius-md)' }}>
-          <Icon name="check-circle" size={15} /> Key saved — you're good to go.
+      {st === 'ok' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, font: 'var(--text-sm)', color: 'var(--status-ready)', background: 'var(--status-ready-bg)', padding: '9px 12px', borderRadius: 'var(--radius-md)' }}>
+          <Icon name="check-circle" size={14} /> Saved — ready to use.
         </div>
       )}
-
-      {status === 'error' && (
-        <div style={{ font: 'var(--text-sm)', color: 'var(--status-warn)', background: 'var(--status-warn-bg)', padding: '10px 14px', borderRadius: 'var(--radius-md)' }}>
-          {errorMsg}
-        </div>
+      {st === 'error' && (
+        <div style={{ font: 'var(--text-sm)', color: 'var(--status-warn)', background: 'var(--status-warn-bg)', padding: '9px 12px', borderRadius: 'var(--radius-md)' }}>{err}</div>
       )}
-
       <div style={{ display: 'flex', gap: 10 }}>
         <input
-          type="password"
-          value={key}
-          onChange={e => { setKey(e.target.value); setStatus(null); }}
+          type="password" value={key}
+          onChange={e => { setKey(e.target.value); setSt(null); }}
           onKeyDown={e => e.key === 'Enter' && handleSave()}
-          placeholder="sk-..."
-          style={{
-            flex: 1, padding: '10px 14px', borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--border-default)', background: 'var(--surface-input, var(--cream-light))',
-            font: 'var(--text-sm)', color: 'var(--text-strong)', outline: 'none',
-            fontFamily: 'monospace', letterSpacing: '0.05em',
-          }}
+          placeholder={placeholder}
+          style={{ flex: 1, padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--surface-input, var(--cream-light))', font: 'var(--text-sm)', color: 'var(--text-strong)', outline: 'none', fontFamily: 'monospace', letterSpacing: '0.05em' }}
         />
-        <Button variant="primary" onClick={handleSave} disabled={!key.trim() || status === 'saving'}>
-          {status === 'saving' ? 'Saving…' : 'Save'}
+        <Button variant="primary" onClick={handleSave} disabled={!key.trim() || st === 'saving'}>
+          {st === 'saving' ? 'Saving…' : 'Save'}
         </Button>
       </div>
-    </Card>
+    </div>
   );
-}
-
-function resolveEngineStatus(engine) {
-  if (engine.status !== 'dynamic') return engine.status;
-  return localStorage.getItem('ts_api_configured') === '1' ? 'connected' : 'needs-setup';
 }
 
 export function Settings() {
@@ -144,24 +106,50 @@ export function Settings() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
 
-      {/* Page header */}
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24 }}>
         <div>
           <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 10 }}>Settings</div>
           <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 10px' }}>Engine Library</h1>
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 480 }}>Connect and tune the engines that power your studio.</p>
         </div>
-        <Button variant="primary" onClick={() => {}} title="Coming soon" style={{ opacity: 0.5, cursor: 'not-allowed' }}>
-          <Icon name="plus" size={15} /> Add Engine
-        </Button>
       </div>
 
-      <ApiKeySection />
+      {/* API Keys */}
+      <Card style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>API Keys</div>
+
+        <KeyField
+          label="OpenAI API Key"
+          description="Required for gpt-image-2 image generation and AI character building."
+          placeholder="sk-..."
+          localStorageKey="ts_openai_configured"
+          onSave={saveApiKey}
+        />
+
+        <div style={{ borderTop: '1px solid var(--border)', margin: '0 -4px' }} />
+
+        <KeyField
+          label="Gemini API Key"
+          description="Required for Nano Banana 2 and Nano Banana Pro image generation. Free tier available at aistudio.google.com."
+          placeholder="AIza..."
+          localStorageKey="ts_gemini_configured"
+          onSave={saveGeminiKey}
+        />
+
+        <div style={{ borderTop: '1px solid var(--border)', margin: '0 -4px' }} />
+
+        <KeyField
+          label="Replicate API Token"
+          description="Required for InstantID identity lock and FLUX Schnell. Get your token at replicate.com."
+          placeholder="r8_..."
+          localStorageKey="ts_replicate_configured"
+          onSave={saveReplicateKey}
+        />
+      </Card>
 
       {/* 2-column layout */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 20, alignItems: 'start' }}>
 
-        {/* Engine list */}
         <Card style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '16px' }}>
           <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '4px 4px 12px', margin: 0 }}>Active Engines</div>
           {ENGINES.map(e => (
@@ -169,7 +157,6 @@ export function Settings() {
           ))}
         </Card>
 
-        {/* Engine detail */}
         <Card variant="rose" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ width: 44, height: 44, borderRadius: 'var(--radius-lg)', background: 'var(--white)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-deep)', boxShadow: 'var(--shadow-xs)' }}>
@@ -186,16 +173,10 @@ export function Settings() {
           </div>
 
           <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>
-            {engine?.status === 'connected' && 'This engine is connected and ready to use for generation.'}
-            {engine?.status === 'needs-setup' && 'Start your local ComfyUI server, then configure the server URL below.'}
-            {engine?.status === 'idle' && 'This engine is available but not active. Enable it to use in generation.'}
+            {engine?.status === 'connected' && 'This engine is connected and ready to use.'}
+            {engine?.status === 'needs-setup' && 'Add the required API key above to activate this engine.'}
+            {engine?.status === 'idle' && 'This engine is available but not yet active.'}
           </p>
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            {engine?.status === 'needs-setup' && <Button variant="primary" onClick={() => {}} title="Coming soon" style={{ opacity: 0.5, cursor: 'not-allowed' }}>Configure</Button>}
-            {engine?.status === 'connected' && <Button variant="secondary" onClick={() => {}} title="Coming soon" style={{ opacity: 0.5, cursor: 'not-allowed' }}>Disconnect</Button>}
-            {engine?.status === 'idle' && <Button variant="secondary" onClick={() => {}} title="Coming soon" style={{ opacity: 0.5, cursor: 'not-allowed' }}>Enable</Button>}
-          </div>
         </Card>
 
       </div>

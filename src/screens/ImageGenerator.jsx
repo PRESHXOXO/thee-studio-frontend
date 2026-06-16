@@ -278,15 +278,20 @@ export function ImageGenerator({ initialPrompts }) {
       const opts = list.map(c => ({ value: c, label: c }));
       setEngineOptions(opts);
 
-      const readyList = list.filter(c => !c.includes('Setup Needed') && !c.includes('Disabled'));
-      // Prefer cloud engines over local ComfyUI when auto-selecting
-      const preferred = readyList.find(c =>
-        c.toLowerCase().includes('openai') ||
-        c.toLowerCase().includes('fal') ||
-        c.toLowerCase().includes('gemini') ||
-        c.toLowerCase().includes('replicate')
-      ) || readyList[0] || list[0];
-      setEngine(preferred);
+      // Pick best default engine — prefer configured cloud engines over local ComfyUI
+      const hasOpenAI    = localStorage.getItem('ts_openai_configured') === '1';
+      const hasFal       = localStorage.getItem('ts_fal_configured') === '1';
+      const hasGemini    = localStorage.getItem('ts_gemini_configured') === '1';
+      const hasReplicate = localStorage.getItem('ts_replicate_configured') === '1';
+
+      const cloudPick =
+        (hasOpenAI    && list.find(c => c.toLowerCase().includes('openai'))) ||
+        (hasFal       && list.find(c => c.toLowerCase().includes('fal'))) ||
+        (hasGemini    && list.find(c => c.toLowerCase().includes('gemini') || c.toLowerCase().includes('nano'))) ||
+        (hasReplicate && list.find(c => c.toLowerCase().includes('flux schnell')));
+
+      const readyLocal = list.find(c => !c.includes('Setup Needed') && !c.includes('Disabled'));
+      setEngine(cloudPick || readyLocal || list[0]);
     });
   }, []);
 

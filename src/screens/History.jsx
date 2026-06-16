@@ -14,7 +14,7 @@ const MODE_META = {
   ai:     { label: 'AI Refine',     icon: 'wand-2',  color: '#8b5cf6' },
 };
 
-function HistoryCard({ entry, onCopy }) {
+function HistoryCard({ entry, onNav }) {
   const [expanded, setExpanded] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const meta = MODE_META[entry.mode] || MODE_META.openai;
@@ -81,6 +81,9 @@ function HistoryCard({ entry, onCopy }) {
             <Button variant="secondary" onClick={handleCopy} style={{ fontSize: '0.75rem' }}>
               <Icon name={copied ? 'check' : 'copy'} size={13} /> {copied ? 'Copied!' : 'Copy Prompt'}
             </Button>
+            <Button variant="secondary" onClick={() => onNav && onNav('images', { positivePrompt: entry.positivePrompt, negativePrompt: entry.negativePrompt })} style={{ fontSize: '0.75rem' }}>
+              <Icon name="image" size={13} /> Use in Generator
+            </Button>
           </div>
         </div>
       )}
@@ -88,7 +91,7 @@ function HistoryCard({ entry, onCopy }) {
   );
 }
 
-export function History() {
+export function History({ onNav }) {
   const [history, setHistory] = React.useState(loadHistory);
 
   const handleClear = () => {
@@ -136,7 +139,7 @@ export function History() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {history.map(entry => (
-            <HistoryCard key={entry.id} entry={entry} />
+            <HistoryCard key={entry.id} entry={entry} onNav={onNav} />
           ))}
         </div>
       )}

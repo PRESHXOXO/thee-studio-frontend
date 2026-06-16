@@ -57,6 +57,38 @@ function loadCharacters() {
   try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
 }
 
+function ImageResult({ src, index }) {
+  const [hovered, setHovered] = React.useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative' }}
+    >
+      <img src={src} alt={`Generated ${index + 1}`} style={{ width: '100%', display: 'block' }} />
+      {hovered && (
+        <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, display: 'flex', gap: 6 }}>
+          <a
+            href={src}
+            download={`thee-studio-${Date.now()}-${index}.jpg`}
+            style={{ flex: 1, textDecoration: 'none' }}
+          >
+            <button style={{
+              width: '100%', padding: '7px 0', borderRadius: 'var(--radius-md)',
+              background: 'rgba(255,255,255,0.93)', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-strong)',
+              boxShadow: 'var(--shadow-sm)',
+            }}>
+              <Icon name="download" size={13} /> Download
+            </button>
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PromptBuilder({ engine, onApply, onCharChange }) {
   const [open, setOpen]           = React.useState(false);
   const [characters, setChars]    = React.useState(loadCharacters);
@@ -416,9 +448,7 @@ export function ImageGenerator({ initialPrompts }) {
       {images.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
           {images.map((src, i) => (
-            <div key={i} style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)' }}>
-              <img src={src} alt={`Generated ${i + 1}`} style={{ width: '100%', display: 'block' }} />
-            </div>
+            <ImageResult key={i} src={src} index={i} />
           ))}
         </div>
       ) : (

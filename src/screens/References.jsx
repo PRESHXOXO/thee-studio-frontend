@@ -84,17 +84,23 @@ export function References({ onNav }) {
   };
 
   const handleUpload = (files) => {
-    const newRefs = files.map((file, i) => ({
-      id: `ref_${Date.now()}_${i}`,
-      src: URL.createObjectURL(file),
-      creator: 'My Reference',
-      caption: file.name.replace(/\.[^.]+$/, ''),
-      tag: 'Uploaded',
+    const readers = files.map((file, i) => new Promise(resolve => {
+      const fr = new FileReader();
+      fr.onload = ev => resolve({
+        id: `ref_${Date.now()}_${i}`,
+        src: ev.target.result,
+        creator: 'My Reference',
+        caption: file.name.replace(/\.[^.]+$/, ''),
+        tag: 'Uploaded',
+      });
+      fr.readAsDataURL(file);
     }));
-    setRefs(prev => {
-      const updated = [...prev, ...newRefs];
-      saveRefs(updated);
-      return updated;
+    Promise.all(readers).then(newRefs => {
+      setRefs(prev => {
+        const updated = [...prev, ...newRefs];
+        saveRefs(updated);
+        return updated;
+      });
     });
   };
 

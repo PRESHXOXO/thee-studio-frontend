@@ -22,11 +22,11 @@ const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', tex
 const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--input-bg, #fff)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
 
 const QUICK_ENGINES = [
-  { id: 'openai_image',           label: 'OpenAI',          icon: 'zap' },
-  { id: 'gemini_nano_banana_pro', label: 'Nano Banana Pro', icon: 'sparkles' },
-  { id: 'gemini_nano_banana',     label: 'Nano Banana 2',   icon: 'banana' },
-  { id: 'replicate_instantid',    label: 'InstantID 🔒',    icon: 'scan-face' },
-  { id: 'replicate_flux_schnell', label: 'FLUX Schnell',    icon: 'flame' },
+  { id: 'openai_image',              label: 'OpenAI',                icon: 'zap' },
+  { id: 'gemini_nano_banana',        label: 'Nano Banana',           icon: 'banana' },
+  { id: 'wavespeed_higgsfield_soul', label: 'Higgsfield Soul 🔒',   icon: 'scan-face' },
+  { id: 'replicate_instantid',       label: 'InstantID 🔒',         icon: 'fingerprint' },
+  { id: 'replicate_flux_schnell',    label: 'FLUX Schnell',          icon: 'flame' },
 ];
 
 const QUICK_SCENES = [

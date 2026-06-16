@@ -2,16 +2,16 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { saveApiKey, saveGeminiKey, saveReplicateKey } from '../api/studio.js';
+import { saveApiKey, saveGeminiKey, saveReplicateKey, saveWavespeedKey } from '../api/studio.js';
 
 const ENGINES = [
-  { id: 'openai',              name: 'OpenAI — gpt-image-2',      desc: 'Cloud · photorealistic studio quality',        status: 'dynamic',    statusKey: 'ts_openai_configured',    icon: 'cloud' },
-  { id: 'nano_banana_pro',     name: 'Nano Banana Pro',            desc: 'Google Gemini 3 Pro Image · highest quality',  status: 'dynamic',    statusKey: 'ts_gemini_configured',    icon: 'sparkles' },
-  { id: 'nano_banana_2',       name: 'Nano Banana 2',              desc: 'Google Gemini 3.1 Flash Image · fast',         status: 'dynamic',    statusKey: 'ts_gemini_configured',    icon: 'zap' },
-  { id: 'instantid',           name: 'InstantID — Identity Lock',  desc: 'Replicate · face-locked character shots',      status: 'dynamic',    statusKey: 'ts_replicate_configured', icon: 'scan-face' },
-  { id: 'flux_schnell',        name: 'FLUX Schnell',               desc: 'Replicate · fast editorial proofs',            status: 'dynamic',    statusKey: 'ts_replicate_configured', icon: 'flame' },
-  { id: 'comfyui',             name: 'Local ComfyUI',              desc: 'On your machine · full control',               status: 'needs-setup', statusKey: null,                      icon: 'cpu' },
-  { id: 'prompt',              name: 'Prompt Only',                desc: 'No image engine · writes prompts',             status: 'idle',        statusKey: null,                      icon: 'type' },
+  { id: 'openai',              name: 'OpenAI — gpt-image-2',           desc: 'Cloud · photorealistic studio quality',              status: 'dynamic',     statusKey: 'ts_openai_configured',    icon: 'cloud' },
+  { id: 'nano_banana',         name: 'Nano Banana',                    desc: 'Google Gemini 2.5 Flash · free tier · 60 rpm',       status: 'dynamic',     statusKey: 'ts_gemini_configured',    icon: 'zap' },
+  { id: 'higgsfield_soul',     name: 'Higgsfield Soul — Identity Lock', desc: 'WaveSpeed · face-locked Nano Banana Pro engine',     status: 'dynamic',     statusKey: 'ts_wavespeed_configured', icon: 'scan-face' },
+  { id: 'instantid',           name: 'InstantID',                      desc: 'Replicate · SDXL face-locked character shots',       status: 'dynamic',     statusKey: 'ts_replicate_configured', icon: 'fingerprint' },
+  { id: 'flux_schnell',        name: 'FLUX Schnell',                   desc: 'Replicate · fast editorial proofs',                  status: 'dynamic',     statusKey: 'ts_replicate_configured', icon: 'flame' },
+  { id: 'comfyui',             name: 'Local ComfyUI',                  desc: 'On your machine · full control',                     status: 'needs-setup', statusKey: null,                      icon: 'cpu' },
+  { id: 'prompt',              name: 'Prompt Only',                    desc: 'No image engine · writes prompts',                   status: 'idle',        statusKey: null,                      icon: 'type' },
 ];
 
 const STATUS_CONFIG = {
@@ -144,6 +144,16 @@ export function Settings() {
           placeholder="r8_..."
           localStorageKey="ts_replicate_configured"
           onSave={saveReplicateKey}
+        />
+
+        <div style={{ borderTop: '1px solid var(--border)', margin: '0 -4px' }} />
+
+        <KeyField
+          label="WaveSpeed API Key"
+          description="Required for Higgsfield Soul — the face-locked Nano Banana Pro engine. Get your key at wavespeed.ai."
+          placeholder="ws_..."
+          localStorageKey="ts_wavespeed_configured"
+          onSave={saveWavespeedKey}
         />
       </Card>
 

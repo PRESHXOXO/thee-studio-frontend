@@ -161,7 +161,7 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
   return parts.join('\n\n');
 }
 
-function compressImage(dataUrl, maxPx = 480, quality = 0.82) {
+function compressImage(dataUrl, maxPx = 768, quality = 0.88) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {

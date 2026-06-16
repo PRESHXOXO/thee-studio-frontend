@@ -209,9 +209,9 @@ export async function buildDirectorOutputs({
 // Sends a base64 image data URL to the backend vision model and returns
 // structured character field data ({ face, hair, body, wardrobe, tone, personality, niche }).
 // Uses /run/analyze_character — in Gradio 6.x the URL path IS the api_name.
-export async function characterGenerate({ engineId, positivePrompt, negativePrompt, characterImage, imageSize = 'Vertical 9:16', batchSize = 1 }) {
+export async function characterGenerate({ engineId, positivePrompt, negativePrompt, characterImage, anchorImages = [], mode = 'lifestyle', imageSize = 'Vertical 9:16', batchSize = 1 }) {
   const raw = await callNamedEndpoint('character_generate', [
-    JSON.stringify({ engineId, positivePrompt, negativePrompt, imageSize, batchSize }),
+    JSON.stringify({ engineId, positivePrompt, negativePrompt, imageSize, batchSize, anchorImages, mode }),
     characterImage,
   ]);
   const jsonStr = raw[0] || '{}';

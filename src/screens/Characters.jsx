@@ -43,6 +43,15 @@ const QUICK_SCENES = [
 ];
 
 const QUICK_MOODS = ['Clean', 'Luxury', 'Bold', 'Romantic', 'Editorial', 'Cinematic', 'Soft', 'Playful'];
+const PORTRAIT_ANGLES = [
+  'front-facing',
+  'left 3/4 angle',
+  'right 3/4 angle',
+  'left profile',
+  'slight high angle',
+  'over-the-shoulder',
+  'soft smile, front',
+];
 const BATCH_OPTIONS = [1, 2, 4];
 
 // Outfit override — first entry means "use character's wardrobe field"
@@ -73,10 +82,36 @@ const QUICK_OUTFITS = [
   { id: 'boudoir',          label: 'Boudoir Editorial',      prompt: 'silk robe, sheer lace bodysuit, soft natural confidence — tasteful editorial boudoir-inspired' },
 ];
 
-function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverride = null) {
+function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverride = null, mode = 'lifestyle') {
   const f = char.fields || {};
   const parts = [];
 
+  // IDENTITY LOCK BLOCK — prepended first when identity is locked
+  if (identityLocked) {
+    const whatChanges = mode === 'portrait'
+      ? 'Camera angle, expression, and framing only — no outfit changes, no complex scene.'
+      : 'Scene, wardrobe, pose, lighting, camera angle, styling, and mood only.';
+    parts.push(
+      `IDENTITY LOCK — DO NOT RECAST:\nUse the attached reference image(s) as the master identity anchor for ${char.name}. Preserve exact recognizable facial identity: facial proportions, skin tone, eye shape, eyebrow shape, nose shape, lips, cheekbones, jawline, hairline, and overall appearance.\n\nDo not recast the subject. Do not alter ethnicity. Do not change bone structure. Do not create a generic influencer face. Do not over-smooth the skin. Do not make the subject look AI-generated.\n\nWHAT STAYS: Face, identity, skin tone, bone structure, recognizable presence.\nWHAT CHANGES: ${whatChanges}\n\nREFERENCE IMAGES ATTACHED: The subject in the output must match the same person from all attached reference images.`
+    );
+  }
+
+  // PORTRAIT MODE — simplified prompt, return early
+  if (mode === 'portrait') {
+    // outfitOverride carries the angle string in portrait mode
+    const angle = outfitOverride || 'front-facing';
+    if (char.faceAnchor) {
+      parts.push(`TALENT — ${char.name}: ${char.faceAnchor}.`);
+    } else if (f.face || f.tone) {
+      parts.push(`TALENT — ${char.name}: ${[f.face, f.tone && `${f.tone} complexion`].filter(Boolean).join('. ')}.`);
+    }
+    parts.push(`PORTRAIT: Realistic photographic portrait. ${angle}. Neutral clean background. Natural studio lighting. Preserve exact identity. No complex scene, no props, no other people.`);
+    parts.push('QUALITY: Ultra-realistic portrait photography. Natural skin texture. Believable facial features. Shot on 85mm lens at f/2.8.');
+    parts.push('AVOID: Face drift, altered bone structure, changed ethnicity, generic model face, over-smoothed skin, AI look, warped features.');
+    return parts.join('\n\n');
+  }
+
+  // LIFESTYLE MODE — full prompt
   parts.push('Ultra-realistic 4K commercial lifestyle fashion photography. Shot for a premium fashion and lifestyle brand campaign. The final image must look like a high-end professional photograph captured on a real camera — realistic, polished, editorial, and not illustrated or overly stylized.');
 
   // TALENT — face and skin only
@@ -110,6 +145,9 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
   parts.push('CAMERA & DETAIL: Shot on Canon EOS R5 with 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face, hair, jewelry, and styling details.');
   parts.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. No text, logos, brand names, or graphic prints on clothing.');
   parts.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a luxury campaign.');
+
+  parts.push('REALISM & QUALITY: Ultra-realistic professional photography. Natural skin texture. Believable facial asymmetry. Realistic body proportions. Realistic fabric texture. Natural lighting. Candid lived-in pose. Not plastic. Not overly edited.');
+  parts.push('AVOID: Face drift, altered bone structure, changed ethnicity, generic model face, over-smoothed skin, doll-like beauty, warped hands, stiff posing, fake-looking fabric, overprocessed AI shine.');
 
   return parts.join('\n\n');
 }
@@ -370,15 +408,18 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   }, [aiGenLoading, aiGenImages.length]);
 
   // Quick Shoot state
-  const [quickScene,  setQuickScene]  = React.useState('none');
-  const [quickMood,   setQuickMood]   = React.useState('Clean');
-  const [quickOutfit, setQuickOutfit] = React.useState('default');
-  const [quickEngine, setQuickEngine] = React.useState('openai_image');
-  const [quickBatch,  setQuickBatch]  = React.useState(1);
-  const [activeRef,   setActiveRef]   = React.useState(0); // index into getAllImages
-  const [generating,  setGenerating]  = React.useState(false);
-  const [genImages,   setGenImages]   = React.useState([]);
-  const [genError,    setGenError]    = React.useState('');
+  const [quickScene,    setQuickScene]    = React.useState('none');
+  const [quickMood,     setQuickMood]     = React.useState('Clean');
+  const [quickOutfit,   setQuickOutfit]   = React.useState('default');
+  const [quickEngine,   setQuickEngine]   = React.useState('openai_image');
+  const [quickBatch,    setQuickBatch]    = React.useState(1);
+  const [activeRef,     setActiveRef]     = React.useState(0); // index into getAllImages
+  const [generating,    setGenerating]    = React.useState(false);
+  const [genImages,     setGenImages]     = React.useState([]);
+  const [genError,      setGenError]      = React.useState('');
+  const [identityMode,  setIdentityMode]  = React.useState('lifestyle'); // 'portrait' | 'lifestyle'
+  const [quickAngle,    setQuickAngle]    = React.useState('front-facing');
+  const [anchorSaved,   setAnchorSaved]   = React.useState(false); // brief toast
 
   // Shot history — library entries for active character
   const [shotHistory, setShotHistory] = React.useState([]);
@@ -463,16 +504,26 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const handleQuickShoot = async () => {
     if (!active) return;
     const allImages = getAllImages(active);
+
+    // Block generation if identity locked but no reference image
+    if (active.locked && !allImages.length) {
+      setGenError('Identity lock is ON but no reference images are uploaded. Add a reference photo to this creator first.');
+      return;
+    }
+
     const sceneName = quickScene === 'none' ? '' : QUICK_SCENES.find(s => s.id === quickScene)?.name || '';
-    const outfitPrompt = QUICK_OUTFITS.find(o => o.id === quickOutfit)?.prompt || null;
-    const positivePrompt = buildCharacterPrompt(active, sceneName, quickMood, !!active.locked, outfitPrompt);
+    // In portrait mode, outfitOverride carries the angle string
+    const outfitOrAngle = identityMode === 'portrait'
+      ? quickAngle
+      : QUICK_OUTFITS.find(o => o.id === quickOutfit)?.prompt || null;
+
+    const positivePrompt = buildCharacterPrompt(active, sceneName, quickMood, !!active.locked, outfitOrAngle, identityMode);
 
     if (!allImages.length) {
       onNav && onNav('images', { positivePrompt, negativePrompt: STANDARD_NEGATIVE });
       return;
     }
 
-    const refImage = allImages[activeRef] || allImages[0];
     setGenerating(true);
     setGenImages([]);
     setGenError('');
@@ -481,7 +532,9 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         engineId: quickEngine,
         positivePrompt,
         negativePrompt: STANDARD_NEGATIVE,
-        characterImage: refImage,
+        characterImage: allImages[activeRef] || allImages[0],
+        anchorImages: allImages,   // all anchors — backend uses all for Gemini
+        mode: identityMode,
         batchSize: quickBatch,
       });
       const imgs = result.images || [];
@@ -493,12 +546,34 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
           engine: quickEngine,
           scene: sceneName || undefined,
           mood: quickMood,
+          mode: identityMode,
         }).catch(() => {});
       });
     } catch (e) {
       setGenError(e.message || 'Generation failed');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleSaveAsAnchor = async (url) => {
+    if (!active) return;
+    try {
+      const compressed = await compressImage(url);
+      const updated = characters.map(c => {
+        if (c.id !== activeId) return c;
+        const existing = getAllImages(c);
+        // Deduplicate by checking if this exact data URL already exists
+        if (existing.includes(compressed)) return c;
+        const newRefs = [...existing, compressed];
+        return { ...c, refImages: newRefs, image: newRefs[0] };
+      });
+      saveCharacters(updated);
+      setCharacters(updated);
+      setAnchorSaved(true);
+      setTimeout(() => setAnchorSaved(false), 2000);
+    } catch (e) {
+      console.warn('Save as anchor failed:', e);
     }
   };
 
@@ -1054,56 +1129,99 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             </div>
           </div>
 
-          {/* Scene */}
+          {/* Identity Mode selector */}
           <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>Scene</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {QUICK_SCENES.map(sc => (
-                <PillButton key={sc.id} active={quickScene === sc.id} onClick={() => setQuickScene(sc.id)}>
-                  <Icon name={sc.icon} size={13} strokeWidth={1.75} /> {sc.name}
-                </PillButton>
-              ))}
+            <div style={{ ...LABEL, marginBottom: 10 }}>Mode</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <PillButton active={identityMode === 'portrait'} onClick={() => setIdentityMode('portrait')}>
+                <Icon name="user" size={13} strokeWidth={1.75} /> Portrait Anchor
+              </PillButton>
+              <PillButton active={identityMode === 'lifestyle'} onClick={() => setIdentityMode('lifestyle')}>
+                <Icon name="layout" size={13} strokeWidth={1.75} /> Lifestyle Scene
+              </PillButton>
             </div>
-          </div>
-
-          {/* Outfit */}
-          <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>
-              Outfit
-              {quickOutfit !== 'default' && (
-                <button
-                  onClick={() => setQuickOutfit('default')}
-                  style={{ marginLeft: 10, font: '500 0.72rem/1 var(--font-ui)', color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
-                >
-                  reset
-                </button>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-              {QUICK_OUTFITS.map(o => (
-                <PillButton key={o.id} active={quickOutfit === o.id} onClick={() => setQuickOutfit(o.id)} style={{ flexShrink: 0 }}>
-                  {o.label}
-                </PillButton>
-              ))}
-            </div>
-            {quickOutfit !== 'default' && (
-              <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', marginTop: 6, lineHeight: 1.4 }}>
-                {QUICK_OUTFITS.find(o => o.id === quickOutfit)?.prompt}
+            {identityMode === 'portrait' && (
+              <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
+                Simple angle portrait — preserves identity with minimal scene variables.
+              </div>
+            )}
+            {identityMode === 'lifestyle' && getAllImages(active).length === 1 && (
+              <div style={{ font: 'var(--text-xs)', color: '#c47a00', background: '#fff8e1', border: '1px solid #f0c040', borderRadius: 'var(--radius-md)', padding: '7px 10px', marginTop: 8, lineHeight: 1.5 }}>
+                For stronger identity consistency, add 2–4 more reference photos to this creator.
               </div>
             )}
           </div>
 
-          {/* Mood */}
-          <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>Mood</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {QUICK_MOODS.map(m => (
-                <PillButton key={m} active={quickMood === m} onClick={() => setQuickMood(m)}>
-                  {m}
-                </PillButton>
-              ))}
+          {/* Portrait Angle selector — shown only in portrait mode */}
+          {identityMode === 'portrait' && (
+            <div>
+              <div style={{ ...LABEL, marginBottom: 10 }}>Camera Angle</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {PORTRAIT_ANGLES.map(angle => (
+                  <PillButton key={angle} active={quickAngle === angle} onClick={() => setQuickAngle(angle)}>
+                    {angle}
+                  </PillButton>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Scene — hidden in portrait mode */}
+          {identityMode === 'lifestyle' && (
+            <div>
+              <div style={{ ...LABEL, marginBottom: 10 }}>Scene</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {QUICK_SCENES.map(sc => (
+                  <PillButton key={sc.id} active={quickScene === sc.id} onClick={() => setQuickScene(sc.id)}>
+                    <Icon name={sc.icon} size={13} strokeWidth={1.75} /> {sc.name}
+                  </PillButton>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Outfit — hidden in portrait mode */}
+          {identityMode === 'lifestyle' && (
+            <div>
+              <div style={{ ...LABEL, marginBottom: 10 }}>
+                Outfit
+                {quickOutfit !== 'default' && (
+                  <button
+                    onClick={() => setQuickOutfit('default')}
+                    style={{ marginLeft: 10, font: '500 0.72rem/1 var(--font-ui)', color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    reset
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+                {QUICK_OUTFITS.map(o => (
+                  <PillButton key={o.id} active={quickOutfit === o.id} onClick={() => setQuickOutfit(o.id)} style={{ flexShrink: 0 }}>
+                    {o.label}
+                  </PillButton>
+                ))}
+              </div>
+              {quickOutfit !== 'default' && (
+                <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', marginTop: 6, lineHeight: 1.4 }}>
+                  {QUICK_OUTFITS.find(o => o.id === quickOutfit)?.prompt}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Mood — hidden in portrait mode */}
+          {identityMode === 'lifestyle' && (
+            <div>
+              <div style={{ ...LABEL, marginBottom: 10 }}>Mood</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {QUICK_MOODS.map(m => (
+                  <PillButton key={m} active={quickMood === m} onClick={() => setQuickMood(m)}>
+                    {m}
+                  </PillButton>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Batch size */}
           <div>
@@ -1132,6 +1250,12 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>
           )}
 
+          {anchorSaved && (
+            <div style={{ font: 'var(--text-sm)', color: 'var(--accent-deep)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="check" size={14} /> Saved as anchor photo!
+            </div>
+          )}
+
           {genImages.length > 0 && (
             <div>
               <div style={{ ...LABEL, marginBottom: 12 }}>
@@ -1148,6 +1272,9 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
                         <Icon name="download" size={13} /> Download
                       </Button>
                     </a>
+                    <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }} onClick={() => handleSaveAsAnchor(url)}>
+                      <Icon name="bookmark" size={13} /> Save as Anchor
+                    </Button>
                   </div>
                 ))}
               </div>

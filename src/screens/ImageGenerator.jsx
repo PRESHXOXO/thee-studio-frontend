@@ -277,8 +277,16 @@ export function ImageGenerator({ initialPrompts }) {
       const list = (choices?.length ? choices : FALLBACK_ENGINES);
       const opts = list.map(c => ({ value: c, label: c }));
       setEngineOptions(opts);
-      const ready = list.find(c => !c.includes('Setup Needed') && !c.includes('Disabled'));
-      setEngine(ready || list[0]);
+
+      const readyList = list.filter(c => !c.includes('Setup Needed') && !c.includes('Disabled'));
+      // Prefer cloud engines over local ComfyUI when auto-selecting
+      const preferred = readyList.find(c =>
+        c.toLowerCase().includes('openai') ||
+        c.toLowerCase().includes('fal') ||
+        c.toLowerCase().includes('gemini') ||
+        c.toLowerCase().includes('replicate')
+      ) || readyList[0] || list[0];
+      setEngine(preferred);
     });
   }, []);
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { saveApiKey, saveGeminiKey, saveReplicateKey } from '../api/studio.js';
+import { saveApiKey, saveGeminiKey, saveReplicateKey, saveFalKey } from '../api/studio.js';
 
 const ENGINES = [
   { id: 'openai',              name: 'OpenAI — gpt-image-2',           desc: 'Cloud · photorealistic studio quality',              status: 'dynamic',     statusKey: 'ts_openai_configured',    icon: 'cloud' },
@@ -10,7 +10,9 @@ const ENGINES = [
   { id: 'photomaker',          name: 'PhotoMaker — Identity Lock',      desc: 'Replicate · face-locked from your reference photo',  status: 'dynamic',     statusKey: 'ts_replicate_configured', icon: 'scan-face' },
   { id: 'instantid',           name: 'InstantID',                      desc: 'Replicate · SDXL face-locked character shots',       status: 'dynamic',     statusKey: 'ts_replicate_configured', icon: 'fingerprint' },
   { id: 'flux_schnell',        name: 'FLUX Schnell',                   desc: 'Replicate · fast editorial proofs',                  status: 'dynamic',     statusKey: 'ts_replicate_configured', icon: 'flame' },
-  { id: 'uncensored_xl',        name: 'Uncensored Portrait XL',         desc: 'Local ComfyUI · epiCRealism XL · no restrictions',   status: 'needs-setup', statusKey: null,                      icon: 'unlock' },
+  { id: 'fal_flux_ultra',      name: 'FAL FLUX Ultra',                 desc: 'FAL.ai · FLUX Pro 1.1 Ultra · highest quality · uncensored', status: 'dynamic', statusKey: 'ts_fal_configured',      icon: 'star' },
+  { id: 'fal_flux_dev',        name: 'FAL FLUX Dev',                   desc: 'FAL.ai · FLUX Dev · fast & high quality · uncensored', status: 'dynamic',   statusKey: 'ts_fal_configured',      icon: 'zap' },
+  { id: 'uncensored_xl',       name: 'Uncensored Portrait XL',         desc: 'Local ComfyUI · epiCRealism XL · no restrictions',   status: 'needs-setup', statusKey: null,                      icon: 'unlock' },
   { id: 'comfyui',             name: 'Local ComfyUI',                  desc: 'On your machine · full control',                     status: 'needs-setup', statusKey: null,                      icon: 'cpu' },
   { id: 'prompt',              name: 'Prompt Only',                    desc: 'No image engine · writes prompts',                   status: 'idle',        statusKey: null,                      icon: 'type' },
 ];
@@ -151,6 +153,17 @@ export function Settings() {
           placeholder="r8_..."
           localStorageKey="ts_replicate_configured"
           onSave={saveReplicateKey}
+          onSaved={onKeySaved}
+        />
+
+        <div style={{ borderTop: '1px solid var(--border)', margin: '0 -4px' }} />
+
+        <KeyField
+          label="FAL.ai API Key"
+          description="Required for FAL FLUX Ultra and FAL FLUX Dev — highest quality uncensored generation. Get your key at fal.ai."
+          placeholder="your-fal-key..."
+          localStorageKey="ts_fal_configured"
+          onSave={saveFalKey}
           onSaved={onKeySaved}
         />
 

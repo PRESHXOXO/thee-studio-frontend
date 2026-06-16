@@ -3,6 +3,7 @@ import { Card } from '../components/surfaces/Card.jsx';
 import { Select } from '../components/forms/Select.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
+import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 import { generateImage, characterGenerate, fetchEngineChoices, sanitizeForOpenAI } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
 import {
@@ -339,9 +340,18 @@ export function ImageGenerator({ initialPrompts }) {
           <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 10px' }}>Image Generator</h1>
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 480 }}>Create studio-grade imagery with precision and style.</p>
         </div>
-        <Button variant="primary" loading={loading} onClick={handleGenerate} disabled={!engine}>
-          <Icon name="sparkles" size={15} /> Generate
-        </Button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+          <Button variant="primary" loading={loading} onClick={handleGenerate} disabled={!engine}>
+            <Icon name="sparkles" size={15} /> Generate
+          </Button>
+          <GenerationProgress
+            active={loading}
+            identityLocked={!!(selectedChar?.refImages?.length && engine?.toLowerCase().includes('openai'))}
+            engine={engine}
+            batchSize={1}
+            style={{ width: 280 }}
+          />
+        </div>
       </div>
 
       {/* Prompt Builder */}

@@ -3,6 +3,7 @@ import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
+import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 import { analyzeCharacterImage, characterGenerate, extractFaceAnchor, generateCharacterSeed, generateCharacterVariations } from '../api/studio.js';
 import { GENDERS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, JEWELRY_OPTIONS, CLOTHING_VIBES, STANDARD_NEGATIVE } from '../lib/promptData.js';
 import { Select } from '../components/forms/Select.jsx';
@@ -1257,15 +1258,16 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Button variant="primary" onClick={handleQuickShoot} loading={generating} disabled={generating} style={{ alignSelf: 'flex-start' }}>
               <Icon name="zap" size={15} /> {generating ? 'Generating…' : 'Build + Generate'}
             </Button>
-            {generating && (
-              <span style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                {quickBatch > 1 ? `Generating ${quickBatch} images…` : 'Using your portrait as visual reference…'}
-              </span>
-            )}
+            <GenerationProgress
+              active={generating}
+              identityLocked={!!active?.locked}
+              engine={quickEngine}
+              batchSize={quickBatch}
+            />
           </div>
 
           {genError && (

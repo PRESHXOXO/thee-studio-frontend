@@ -11,15 +11,16 @@ import { Campaigns } from './screens/Campaigns.jsx';
 import { Library } from './screens/Library.jsx';
 import { History } from './screens/History.jsx';
 import { Settings } from './screens/Settings.jsx';
+import { loadLibrary } from './lib/library.js';
 
-const NAV_ITEMS = [
+const BASE_NAV = [
   { section: 'Create' },
   { id: 'home',       label: 'Studio',          icon: 'layout-dashboard' },
   { id: 'director',   label: 'Thee Director',   icon: 'clapperboard' },
   { id: 'images',     label: 'Image Generator', icon: 'image' },
   { id: 'characters', label: 'Characters',      icon: 'sparkles' },
   { id: 'scenes',     label: 'Scenes',          icon: 'mountain-snow' },
-  { id: 'references', label: 'References',      icon: 'images', badge: '24' },
+  { id: 'references', label: 'References',      icon: 'images' },
   { section: 'Workspace' },
   { id: 'campaigns',  label: 'Campaigns',       icon: 'megaphone' },
   { id: 'library',    label: 'Library',         icon: 'folder-open' },
@@ -40,22 +41,53 @@ const SCREENS = {
   settings:   { label: 'Engine Library',   component: Settings },
 };
 
+// Poll Gradio /config to determine backend connectivity.
+function useBackendStatus() {
+  const [status, setStatus] = React.useState('checking'); // 'checking' | 'online' | 'offline'
+  React.useEffect(() => {
+    let cancelled = false;
+    async function check() {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch('/gradio_api/config', { signal: controller.signal });
+        clearTimeout(timer);
+        if (!cancelled) setStatus(res.ok ? 'online' : 'offline');
+      } catch {
+        if (!cancelled) setStatus('offline');
+      }
+    }
+    check();
+    const interval = setInterval(check, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+  return status;
+}
+
 export default function App() {
-  const [activeNav, setActiveNav]       = React.useState('home');
+  const [activeNav, setActiveNav]             = React.useState('home');
   const [pendingPrompts,   setPendingPrompts]   = React.useState(null);
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
   const [pendingDirector,  setPendingDirector]  = React.useState(null);
   const [activeCharacter,  setActiveCharacter]  = React.useState(null);
+  const [libCount, setLibCount]               = React.useState(() => loadLibrary().length);
+  const backendStatus = useBackendStatus();
 
-  function handleNav(id, data) {
-    if (id === 'images'    && data) setPendingPrompts(data);
-    if (id === 'characters'&& data) setPendingCharacter(data);
-    if (id === 'director'  && data) setPendingDirector(data);
+  // Refresh library count whenever user navigates (catches new saves)
+  const handleNav = React.useCallback((id, data) => {
+    setLibCount(loadLibrary().length);
+    if (id === 'images'     && data) setPendingPrompts(data);
+    if (id === 'characters' && data) setPendingCharacter(data);
+    if (id === 'director'   && data) setPendingDirector(data);
     if (id !== 'images')     setPendingPrompts(null);
     if (id !== 'characters' || !data) setPendingCharacter(null);
     if (id !== 'director'  || !data) setPendingDirector(null);
     setActiveNav(id);
-  }
+  }, []);
+
+  const navItems = React.useMemo(() => BASE_NAV.map(item =>
+    item.id === 'library' && libCount > 0 ? { ...item, badge: String(libCount) } : item
+  ), [libCount]);
 
   const Screen = SCREENS[activeNav]?.component || StudioHome;
   const screenLabel = SCREENS[activeNav]?.label || 'Studio Home';
@@ -69,12 +101,29 @@ export default function App() {
     screenProps.initialVision = pendingDirector.vision || '';
   }
 
+  const statusColor = backendStatus === 'online' ? '#22c55e' : backendStatus === 'offline' ? '#ef4444' : '#f59e0b';
+  const statusLabel = backendStatus === 'online' ? 'Backend online' : backendStatus === 'offline' ? 'Backend offline' : 'Connecting…';
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>
-      <Sidebar items={NAV_ITEMS} active={activeNav} onNavigate={id => handleNav(id)} activeCharacter={activeCharacter} />
+      <Sidebar items={navItems} active={activeNav} onNavigate={id => handleNav(id)} activeCharacter={activeCharacter} />
       <div style={{ marginLeft: 'var(--sidebar-w, 248px)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-        <Topbar context={screenLabel} />
-        <main style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1 }}>
+        <Topbar
+          context={screenLabel}
+          actions={
+            <div title={statusLabel} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)', border: '1px solid var(--border)', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0,
+                animation: backendStatus === 'online' ? 'none' : 'status-pulse 1.5s ease-in-out infinite',
+              }} />
+              {statusLabel}
+            </div>
+          }
+        />
+        <main
+          key={activeNav}
+          style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1, animation: 'screen-in 0.18s ease-out both' }}
+        >
           <Screen {...screenProps} />
         </main>
       </div>

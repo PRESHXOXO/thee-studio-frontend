@@ -482,7 +482,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
       // Run both in parallel — general fields + precise face anchor
       const [result, faceAnchor] = await Promise.all([
         analyzeCharacterImage(imageDataUrl),
-        extractFaceAnchor(imageDataUrl).catch(() => ''),
+        extractFaceAnchor(imageDataUrl).catch(e => { console.warn('Face anchor extraction failed:', e); return ''; }),
       ]);
       setEditing(ed => ({
         ...(ed || currentEditing),

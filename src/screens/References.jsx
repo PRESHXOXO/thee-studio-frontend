@@ -84,7 +84,7 @@ export function References({ onNav }) {
   };
 
   const handleUpload = (files) => {
-    const readers = files.map((file, i) => new Promise(resolve => {
+    const readers = files.map((file, i) => new Promise((resolve, reject) => {
       const fr = new FileReader();
       fr.onload = ev => resolve({
         id: `ref_${Date.now()}_${i}`,
@@ -93,6 +93,7 @@ export function References({ onNav }) {
         caption: file.name.replace(/\.[^.]+$/, ''),
         tag: 'Uploaded',
       });
+      fr.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
       fr.readAsDataURL(file);
     }));
     Promise.all(readers).then(newRefs => {
@@ -101,7 +102,7 @@ export function References({ onNav }) {
         saveRefs(updated);
         return updated;
       });
-    });
+    }).catch(err => console.error('Reference upload failed:', err));
   };
 
   return (
@@ -114,9 +115,6 @@ export function References({ onNav }) {
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 480 }}>Curate the visual language that keeps every creator on-brand.</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button variant="secondary" onClick={() => {}}>
-            <Icon name="folder-tree" size={15} /> Organize
-          </Button>
           <Button variant="primary" onClick={() => document.getElementById('ref-upload').click()}>
             <Icon name="plus" size={15} /> Add Reference
             <input id="ref-upload" type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => handleUpload(Array.from(e.target.files))} />

@@ -32,6 +32,7 @@ export async function compressForLibrary(src, maxPx = 640, quality = 0.82) {
   let dataUrl = src;
   if (!src.startsWith('data:')) {
     const res = await fetch(src);
+    if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
     const blob = await res.blob();
     dataUrl = await new Promise((res, rej) => {
       const fr = new FileReader();
@@ -44,6 +45,7 @@ export async function compressForLibrary(src, maxPx = 640, quality = 0.82) {
 }
 
 export async function saveToLibrary(src, metadata = {}) {
+  metadata = { source: '', engine: '', prompt: '', character: '', ...metadata };
   let url;
   try {
     url = await compressForLibrary(src);

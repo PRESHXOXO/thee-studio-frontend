@@ -289,13 +289,6 @@ export async function saveFalKey(key) {
   return parsed;
 }
 
-export async function saveWavespeedKey(key) {
-  const raw = await callNamedEndpoint('save_wavespeed_key', [key]);
-  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
-  if (parsed.error) throw new Error(parsed.error);
-  return parsed;
-}
-
 export async function generateImage({
   engine = '',
   performanceMode = 'Balanced',

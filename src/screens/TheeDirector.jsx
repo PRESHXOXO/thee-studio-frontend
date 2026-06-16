@@ -264,7 +264,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
         const desc = await describeOutfitImage(dataUrl);
         setOutfitPhotoDesc(desc);
       } catch (err) {
-        setOutfitPhotoDesc('');
+        setOutfitPhotoDesc('⚠ Could not analyze outfit — check your OpenAI key or try a clearer photo.');
       } finally {
         setOutfitPhotoAnalyzing(false);
       }

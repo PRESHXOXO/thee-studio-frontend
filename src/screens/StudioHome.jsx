@@ -8,10 +8,10 @@ function loadCharacters() {
 }
 
 const SHORTCUTS = [
-  { icon: 'clapperboard', label: 'Thee Director',  sub: 'Build a prompt',  nav: 'director' },
-  { icon: 'image',        label: 'Generate',        sub: 'Create imagery',  nav: 'images' },
-  { icon: 'sparkles',     label: 'Characters',      sub: 'Manage cast',     nav: 'characters' },
-  { icon: 'megaphone',    label: 'Campaigns',       sub: 'Launch a shoot',  nav: 'campaigns' },
+  { icon: 'user-plus',    label: 'New Creator',     sub: 'Build your cast',  nav: 'characters' },
+  { icon: 'image',        label: 'Image Generator', sub: 'Create imagery',   nav: 'images' },
+  { icon: 'clapperboard', label: 'Thee Director',   sub: 'Build a prompt',   nav: 'director' },
+  { icon: 'megaphone',    label: 'Campaigns',       sub: 'Launch a shoot',   nav: 'campaigns' },
 ];
 
 function ShortcutCard({ item, onNav }) {
@@ -92,7 +92,7 @@ export function StudioHome({ onNav }) {
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
           <Button variant="secondary" onClick={handleImport}><Icon name="upload" size={15} /> Import Creator</Button>
-          <Button variant="primary" onClick={() => onNav && onNav('characters')}><Icon name="sparkles" size={15} /> Open Characters</Button>
+          <Button variant="primary" onClick={() => onNav && onNav('characters')}><Icon name="user-plus" size={15} /> New Creator</Button>
         </div>
 
         {/* Live stats */}

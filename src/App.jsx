@@ -16,8 +16,8 @@ import { loadLibrary } from './lib/library.js';
 const BASE_NAV = [
   { section: 'Create' },
   { id: 'home',       label: 'Studio',          icon: 'layout-dashboard' },
-  { id: 'director',   label: 'Thee Director',   icon: 'clapperboard' },
   { id: 'images',     label: 'Image Generator', icon: 'image' },
+  { id: 'director',   label: 'Thee Director',   icon: 'clapperboard' },
   { id: 'characters', label: 'Characters',      icon: 'sparkles' },
   { id: 'scenes',     label: 'Scenes',          icon: 'mountain-snow' },
   { id: 'references', label: 'References',      icon: 'images' },

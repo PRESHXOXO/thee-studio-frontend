@@ -11,7 +11,7 @@ import { buildDirectorOutputs, generateImage, characterGenerate, sanitizeForOpen
 import { saveToLibrary } from '../lib/library.js';
 import {
   CONTENT_TYPES, MOODS, LOCATIONS, GENDERS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS,
-  EYE_DETAILS, JEWELRY_OPTIONS, CLOTHING_VIBES, SPECIAL_FEATURES, STANDARD_NEGATIVE,
+  EYE_DETAILS, JEWELRY_OPTIONS, CLOTHING_VIBES, SPECIAL_FEATURES, PHYSIQUE, STANDARD_NEGATIVE,
   buildStructuredVision, buildFluxVision,
 } from '../lib/promptData.js';
 
@@ -201,6 +201,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
   const [mood,         setMood]         = React.useState('Clean');
   const [scene,        setScene]        = React.useState(initialScene);
   const [gender,       setGender]       = React.useState('Unspecified');
+  const [physique,     setPhysique]     = React.useState('Unspecified');
   const [skinTone,     setSkinTone]     = React.useState('Unspecified');
   const [hairStyle,    setHairStyle]    = React.useState('Unspecified');
   const [hairColor,    setHairColor]    = React.useState('Unspecified');
@@ -238,7 +239,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
 
   // Collect current form params
   const formParams = () => ({
-    vision, gender, skinTone, hairStyle, hairColor,
+    vision, gender, physique, skinTone, hairStyle, hairColor,
     eyeDetail, jewelry,
     clothing: selectedChar && outfitOverride !== 'Unspecified' ? outfitOverride : clothing,
     features, mood, contentType, scene,
@@ -605,6 +606,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
             <Field label="Gender"><Select value={gender} onChange={setGender} options={GENDERS} /></Field>
             <Field label="Skin Tone"><Select value={skinTone} onChange={setSkinTone} options={SKIN_TONES} placeholder="Select…" /></Field>
           </div>
+          <Field label="Body Type / Build"><Select value={physique} onChange={setPhysique} options={PHYSIQUE} placeholder="Select…" /></Field>
           <Field label="Hair Style"><Select value={hairStyle} onChange={setHairStyle} options={HAIR_STYLES} placeholder="Select…" /></Field>
           <Field label="Hair Color"><Select value={hairColor} onChange={setHairColor} options={HAIR_COLORS} placeholder="Select…" /></Field>
           <Field label="Eyes"><Select value={eyeDetail} onChange={setEyeDetail} options={EYE_DETAILS} placeholder="Select…" /></Field>

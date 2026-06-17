@@ -205,7 +205,7 @@ export const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy ski
 export function buildStructuredVision({ vision = '', gender = 'Unspecified', physique = 'Unspecified', skinTone = 'Unspecified', hairStyle = 'Unspecified', hairColor = 'Unspecified', eyeDetail = 'Unspecified', jewelry = 'None', clothing = 'Unspecified', features = 'None', mood = 'Clean', contentType = 'Portrait', scene = 'None', character = null, shootHairStyle = 'Unspecified', shootHairColor = 'Unspecified', shootJewelry = 'None', outfitPhotoDesc = '' } = {}) {
   const s = [];
 
-  s.push('Ultra-realistic 4K commercial lifestyle fashion photography. Shot for a premium fashion and lifestyle brand campaign. The final image must look like a high-end professional photograph captured on a real camera — realistic, polished, editorial, and not illustrated or overly stylized.');
+  s.push('Ultra-realistic 4K lifestyle and fashion photography. Shot for a premium brand. The final image must look like a high-end professional photograph captured on a real camera — realistic, natural, and not illustrated or overly stylized.');
 
   if (character) {
     const f = character.fields || {};
@@ -251,12 +251,16 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     if (skinTone !== 'Unspecified') talentParts.push(`${skinTone} complexion, realistic skin texture with visible pores and natural tone variation`);
     if (eyeDetail !== 'Unspecified') talentParts.push(`${eyeDetail} eyes, sharp and dimensional`);
     const basePresence = isMale
-      ? 'Strong natural facial structure, sharp jawline, defined cheekbones, short groomed beard or clean-shaven, grounded masculine expression — confident but not forced. Not a model-perfect face — a real man with character, distinct features, and lived-in skin.'
+      ? 'Natural masculine facial structure — strong jaw, full face, real proportions. Short groomed beard or clean-shaven. Grounded confident expression, not forced. The face of a real man, not a fashion model — broader, athletic, lived-in.'
       : 'Natural facial structure with real bone structure and expressive eyes. Grounded confident expression. Not a model-perfect face — individual features, real character, not AI-averaged beauty.';
     s.push(`TALENT: ${who}. ${talentParts.join('. ')}${talentParts.length ? '. ' : ''}${basePresence}.`);
 
     const presenceParts = [];
-    if (physique !== 'Unspecified') presenceParts.push(physique);
+    if (physique !== 'Unspecified') {
+      presenceParts.push(physique);
+    } else if (isMale) {
+      presenceParts.push('Athletic build — broad shoulders, muscular arms, naturally fit. Clothes fit his body, not a hanger.');
+    }
     if (features !== 'None') presenceParts.push(features);
     if (presenceParts.length) s.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
 
@@ -280,7 +284,7 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
   }
   if (vision) s.push(`ART DIRECTION: ${vision}`);
 
-  s.push(`CAMPAIGN FEEL: ${[contentType, mood].filter(Boolean).join(' — ')}. Premium editorial spread energy.`);
+  s.push(`SHOOT FEEL: ${[contentType, mood].filter(Boolean).join(' — ')}. Premium brand energy — aspirational but real, not over-styled.`);
 
   const isMaleSubject = gender === 'Man' || character?.fields?.gender === 'Man';
   const poseDir = isMaleSubject
@@ -291,7 +295,7 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
   s.push('LIGHTING: Soft dimensional natural or studio lighting. Light wraps realistically around the subject. Warm refined color grading.');
   s.push('CAMERA & DETAIL: Shot on Canon EOS R5 with 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face, hair, jewelry, and styling details.');
   s.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. Hair has individual strand detail and natural movement. Jewelry catches light realistically. No AI over-smoothing. No plastic skin. No wax finish. No studio-generic backdrop.');
-  s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a luxury campaign.');
+  s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography.');
 
   return s.join('\n\n');
 }

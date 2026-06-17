@@ -242,18 +242,24 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     if (jewelryUsed) hairAccessParts.push(`Accessories: ${jewelryUsed}`);
     if (hairAccessParts.length) s.push(`HAIR & ACCESSORIES: ${hairAccessParts.join('. ')}.`);
   } else {
-    // Standalone talent block
+    // Standalone blank canvas — anchor with authenticity directive so the model generates
+    // a specific real-looking individual instead of a generic AI influencer face.
     const isMale = gender === 'Man';
+    const whoLabel = gender !== 'Unspecified' ? gender : 'person';
+    const authenticityAnchor = isMale
+      ? `SUBJECT DIRECTION: Generate a specific, real-looking ${whoLabel} with a distinct authentic identity — NOT a generic AI model face or stock photo archetype. This individual has real character: authentic bone structure with slight natural asymmetry, lived-in skin texture with real pores and tone variation, a specific personality visible in their expression. Sharp, present eyes. Believable facial hair or clean-shaven — looks like a real person captured on camera. Do not generate a composite beauty ideal. Do not over-smooth the skin. Do not create a generic influencer face.`
+      : `SUBJECT DIRECTION: Generate a specific, real-looking ${whoLabel} with a distinct authentic identity — NOT a generic AI model face or stock photo archetype. This individual has real character: authentic bone structure, lived-in skin texture with natural pores and tone variation, expressive eyes with depth, a specific personality in their expression. They look like a real person captured on camera — not a composite beauty ideal. Do not over-smooth the skin. Do not create a generic influencer face.`;
+    s.push(authenticityAnchor);
+
     const hasSubject = gender !== 'Unspecified' || skinTone !== 'Unspecified' || eyeDetail !== 'Unspecified';
     if (hasSubject) {
-      const who = gender !== 'Unspecified' ? gender : 'Talent';
       const talentParts = [];
       if (skinTone !== 'Unspecified') talentParts.push(`${skinTone} complexion, realistic skin texture with visible pores and natural tone variation`);
       if (eyeDetail !== 'Unspecified') talentParts.push(`${eyeDetail} eyes, sharp and dimensional`);
       const basePresence = isMale
         ? 'Strong natural facial structure, sharp jawline, short groomed beard or clean-shaven, grounded masculine expression — confident but not forced'
-        : 'Natural facial structure, expressive eyes, grounded confident expression';
-      s.push(`TALENT: ${who}. ${talentParts.join('. ')}${talentParts.length ? '. ' : ''}${basePresence}.`);
+        : 'Natural facial structure, full expressive lips, grounded confident expression — warm and present';
+      s.push(`TALENT: ${gender !== 'Unspecified' ? gender : 'Talent'}. ${talentParts.join('. ')}${talentParts.length ? '. ' : ''}${basePresence}.`);
     }
 
     const presenceParts = [];
@@ -261,22 +267,22 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     if (features !== 'None') presenceParts.push(features);
     if (presenceParts.length) s.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
 
-    if (clothing !== 'Unspecified') s.push(`OUTFIT: ${clothing}.`);
+    if (clothing !== 'Unspecified') s.push(`OUTFIT: ${clothing}. Fabric has real weight and texture — accurate drape, natural folds, no stiff or plastic-looking material.`);
 
     const hairAccessParts = [];
     if (hairStyle !== 'Unspecified' || hairColor !== 'Unspecified') {
       const hair = [hairStyle !== 'Unspecified' ? hairStyle : '', hairColor !== 'Unspecified' ? `in ${hairColor}` : ''].filter(Boolean).join(', ');
-      hairAccessParts.push(`Hair: ${hair}, full strand detail and natural texture`);
+      hairAccessParts.push(`Hair: ${hair} — individual strand detail, natural movement, realistic texture`);
     }
-    if (jewelry !== 'None') hairAccessParts.push(`Accessories: ${jewelry}`);
+    if (jewelry !== 'None') hairAccessParts.push(`Accessories: ${jewelry} — catches light realistically, accurate weight and material`);
     if (hairAccessParts.length) s.push(`HAIR & ACCESSORIES: ${hairAccessParts.join('. ')}.`);
   }
 
   if (scene && scene !== 'None') {
     const isMale = gender === 'Man' || (character?.fields?.gender === 'Man');
     const sceneExtra = isMale
-      ? 'Authentic architectural detail, dark hardwood or concrete floors, warm ambient light through large windows, premium interior elements visible in background.'
-      : 'Premium environment, authentic architectural detail, controlled depth.';
+      ? 'Authentic architectural detail — dark hardwood or concrete floors, warm ambient light through large windows, premium interior elements and depth visible in background. Real environment, not a studio backdrop.'
+      : 'Premium environment with authentic architectural detail — real surfaces, controlled depth, lifestyle context visible in background. Natural light interaction with the space. Not a studio backdrop.';
     s.push(`SCENE: ${scene}. ${sceneExtra}`);
   }
   if (vision) s.push(`ART DIRECTION: ${vision}`);
@@ -289,9 +295,9 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     : 'Three-quarter body editorial portrait so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, realistic anatomy, relaxed hands.';
   s.push(`POSE & COMPOSITION: ${poseDir}`);
 
-  s.push('LIGHTING: Soft dimensional natural or studio lighting. Light wraps realistically around the subject. Warm refined color grading.');
-  s.push('CAMERA & DETAIL: Shot on Canon EOS R5 with 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face, hair, jewelry, and styling details.');
-  s.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. Hair has individual strand detail and natural movement. Jewelry reflects light accurately.');
+  s.push('LIGHTING: Soft dimensional natural or studio lighting. Light wraps realistically around the subject — creates depth, casts natural shadows under the jaw and cheekbones. Warm refined color grading. No flat lighting. No harsh flash.');
+  s.push('CAMERA & DETAIL: Shot on Canon EOS R5 with 85mm portrait lens at f/1.8. Shallow depth of field with natural bokeh. Crisp focus on face, hair, jewelry, and fabric texture. Subject sharp, environment softly rendered.');
+  s.push('QUALITY & TEXTURE: The final image must look like it was shot by a professional photographer on a real camera. Preserve healthy natural skin texture — visible pores, natural highlights, slight natural skin tone variation. Accurate fabric weight, natural folds and drape. Hair has individual strand detail and natural movement. Jewelry catches light accurately. No AI over-smoothing. No plastic skin. No wax finish. No generic influencer aesthetic.');
   s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a luxury campaign.');
 
   return s.join('\n\n');

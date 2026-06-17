@@ -343,7 +343,7 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
   const s = [];
   const isMale = gender === 'Man' || character?.fields?.gender === 'Man';
 
-  s.push('Ultra-realistic 4K lifestyle and fashion photography for a premium brand campaign. Professional photograph taken on a real camera — crisp, natural, and alive.');
+  s.push('Ultra-realistic 4K lifestyle and fashion photography for a premium brand campaign. The final image should feel like it was captured by a real photographer on set — polished, natural, dimensional, expensive, and believable. No illustration, no plastic AI finish, no over-stylized fantasy gloss.');
 
   if (character) {
     const f = character.fields || {};
@@ -375,25 +375,25 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     const effectiveHairStyle = shootHairStyle !== 'Unspecified' ? shootHairStyle : (f.hair || null);
     const effectiveHairColor = shootHairColor !== 'Unspecified' ? shootHairColor : null;
     const hairDesc = [effectiveHairStyle, effectiveHairColor ? `in ${effectiveHairColor}` : null].filter(Boolean).join(', ');
-    if (hairDesc) hairAccessParts.push(`Hair: ${hairDesc}, full strand detail and natural texture`);
+    if (hairDesc) hairAccessParts.push(`Hair: ${hairDesc}, full strand detail, natural texture, and realistic movement`);
     const jewelryUsed = (shootJewelry && shootJewelry !== 'None') ? shootJewelry : (jewelry !== 'None' ? jewelry : null);
-    if (jewelryUsed) hairAccessParts.push(`Accessories: ${jewelryUsed} — catches light realistically`);
+    if (jewelryUsed) hairAccessParts.push(`Accessories: ${jewelryUsed} — styled cleanly, catches light naturally without looking fake or overly polished`);
     if (hairAccessParts.length) s.push(`HAIR & ACCESSORIES: ${hairAccessParts.join('. ')}.`);
   } else {
     // SUBJECT DIRECTION — director's brief, not a warning
     const subjectDir = isMale
-      ? 'SUBJECT DIRECTION: A real, specific man with distinct bone structure, individual features, and lived-in skin texture. Slight natural asymmetry. He has character — the kind of face you remember. Not a generic face, not a designed hero.'
-      : 'SUBJECT DIRECTION: A real, specific woman with distinct bone structure, expressive eyes, and individual features. Slight natural asymmetry. She has character — aspirational but human, not AI-averaged or model-perfect.';
+      ? 'SUBJECT DIRECTION: Create a man who feels like a real person, not a recycled AI face. His features should feel specific, grounded, and memorable: distinct bone structure, slight natural asymmetry, visible pores, lived-in skin texture, and facial details that feel individual instead of averaged, airbrushed, or generic.'
+      : 'SUBJECT DIRECTION: Create a woman who feels like a real person, not a recycled AI face. Her features should feel specific, grounded, and memorable: distinct bone structure, slight natural asymmetry, lived-in skin texture, and facial details that feel individual instead of averaged, airbrushed, or generic.';
     s.push(subjectDir);
 
     // TALENT
     const who = gender !== 'Unspecified' ? gender : 'Talent';
     const talentParts = [];
-    if (skinTone !== 'Unspecified') talentParts.push(`${skinTone} complexion, realistic skin texture with visible pores and natural tone variation`);
-    if (eyeDetail !== 'Unspecified') talentParts.push(`${eyeDetail}, sharp and dimensional`);
+    if (skinTone !== 'Unspecified') talentParts.push(`${skinTone} complexion, realistic skin texture, visible pores, natural tone variation, and dimensional highlights`);
+    if (eyeDetail !== 'Unspecified') talentParts.push(`${eyeDetail} — sharp, expressive, and alive`);
     const basePresence = isMale
-      ? 'Natural masculine facial structure — strong jaw, distinct bone structure, believable proportions. Short groomed beard or clean-shaven. Grounded, confident expression that feels natural and unforced. Aspirational but real — not a runway model face.'
-      : 'Natural facial structure with real bone structure and expressive eyes. Grounded, confident expression. Individual features that feel specific and memorable — aspirational but human.';
+      ? 'Natural masculine facial structure with a strong jaw, fuller face, believable proportions, and a short groomed beard. Expression is calm, confident, and unforced — the kind of confidence that does not need to announce itself. Authentic, masculine, aspirational, and human. Not overly polished. Not waxy. A real man with presence.'
+      : 'Natural facial structure with real bone structure, expressive eyes, and believable proportions. Expression is calm, confident, and unforced. Aspirational but human — individual features that feel specific and memorable, not model-perfect or AI-averaged.';
     s.push(`TALENT: ${who}. ${talentParts.join('. ')}${talentParts.length ? '. ' : ''}${basePresence}`);
 
     // BUILD & PRESENCE
@@ -402,43 +402,43 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
       presenceParts.push(physique);
     } else {
       presenceParts.push(isMale
-        ? 'Lean athletic build with a clean masculine silhouette. Visible strong frame. Clothes fit his actual body.'
-        : 'Confident feminine silhouette. Clothes fit and drape naturally on her frame.');
+        ? 'Lean athletic build with a clean masculine silhouette. Strong grounded presence with quiet confidence.'
+        : 'Confident feminine silhouette. Strong grounded presence. Clothes fit and drape naturally on her frame.');
     }
     if (features !== 'None') presenceParts.push(features);
     s.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
 
     // OUTFIT
     if (clothing !== 'Unspecified') {
-      s.push(`OUTFIT: ${clothing}. Clothing feels premium and believable — real fabric weight, accurate drape, natural folds, no stiff or plastic-looking material.`);
+      s.push(`OUTFIT: ${clothing}. The clothing should feel real and expensive — accurate fabric weight, natural folds, believable drape, and structure that moves naturally with the body. Nothing stiff, shiny, cheap, or plastic-looking.`);
     } else if (isMale) {
-      s.push('OUTFIT: Choose a specific, complete outfit that fits the scene and feels real — varsity jacket with dark jeans and clean sneakers, a tailored suit, a premium hoodie and sweats, a linen shirt and chinos, or a bomber jacket with dark jeans. Clothing feels premium and believable — real fabric weight, accurate drape, natural folds.');
+      s.push('OUTFIT: Choose a specific, complete outfit that fits the scene — varsity jacket with dark jeans and clean sneakers, a tailored suit, a premium hoodie and sweats, a linen shirt and chinos, or a bomber jacket with dark jeans. The clothing should feel real and expensive — accurate fabric weight, natural folds, believable drape, and structure that moves naturally with the body. Nothing stiff, shiny, cheap, or plastic-looking.');
     } else {
-      s.push('OUTFIT: Choose a specific, complete outfit that fits the scene and feels real — a slip dress, tailored blazer set, matching coord, satin midi dress, or elevated casual look. Clothing feels premium and believable — real fabric weight, accurate drape, natural folds.');
+      s.push('OUTFIT: Choose a specific, complete outfit that fits the scene — a slip dress, tailored blazer set, matching coord, satin midi dress, or elevated casual look. The clothing should feel real and expensive — accurate fabric weight, natural folds, believable drape, and structure that moves naturally with the body. Nothing stiff, shiny, cheap, or plastic-looking.');
     }
 
     // HAIR & ACCESSORIES
     const hairAccessParts = [];
     if (hairStyle !== 'Unspecified' || hairColor !== 'Unspecified') {
       const hair = [hairStyle !== 'Unspecified' ? hairStyle : '', hairColor !== 'Unspecified' ? `in ${hairColor}` : ''].filter(Boolean).join(', ');
-      hairAccessParts.push(`Hair: ${hair}, full strand detail and natural texture`);
+      hairAccessParts.push(`Hair: ${hair}, full strand detail, natural texture, and realistic movement`);
     } else if (isMale) {
-      hairAccessParts.push('Hair: Clean fade or natural cut — full strand detail and natural texture');
+      hairAccessParts.push('Hair: Clean fade or natural cut — full strand detail, natural texture, and realistic movement');
     }
-    if (jewelry !== 'None') hairAccessParts.push(`Accessories: ${jewelry} — catches light realistically`);
+    if (jewelry !== 'None') hairAccessParts.push(`Accessories: ${jewelry} — styled cleanly, catches light naturally without looking fake or overly polished`);
     if (hairAccessParts.length) s.push(`HAIR & ACCESSORIES: ${hairAccessParts.join('. ')}.`);
   }
 
   // SCENE
   if (scene && scene !== 'None') {
     const sceneExtra = isMale
-      ? 'Real environment with authentic architectural detail, premium materials, and warm ambient light.'
-      : 'Real environment with premium authentic architectural detail and genuine environmental context.';
+      ? 'The space should feel authentic and lived-in, with premium materials, warm ambient light, subtle reflections, and a believable lifestyle atmosphere. No generic studio backdrop.'
+      : 'The space should feel authentic and lived-in, with premium materials, natural or warm ambient light, and a believable lifestyle atmosphere. No generic studio backdrop.';
     s.push(`SCENE: ${scene}. ${sceneExtra}`);
   } else {
     const defaultScene = isMale
-      ? 'SCENE: Choose a real, specific location that fits a premium lifestyle — beside a sleek luxury car at a modern hotel entrance, a city rooftop at golden hour, a premium urban interior, or a well-lit city street. Authentic architectural detail, warm ambient light, believable atmosphere.'
-      : 'SCENE: Choose a real, specific location — rooftop terrace at golden hour, luxury apartment interior, upscale restaurant, boutique hotel lobby, or a city street. Authentic architectural detail, natural or warm ambient light.';
+      ? 'SCENE: The subject stands beside a sleek luxury car in a real upscale environment — a modern hotel entrance, private driveway, or luxury parking structure with architectural presence. The space should feel authentic and lived-in, with premium materials, warm ambient light, subtle reflections, and a believable lifestyle atmosphere. No generic studio backdrop.'
+      : 'SCENE: Choose a real, specific location — rooftop terrace at golden hour, luxury apartment interior, upscale restaurant, boutique hotel lobby, or a city street with architectural character. The space should feel authentic and lived-in, with premium materials, natural or warm ambient light, and a believable lifestyle atmosphere. No generic studio backdrop.';
     s.push(defaultScene);
   }
 
@@ -447,18 +447,21 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
   // SHOOT FEEL
   const shootFeelParts = [contentType !== 'Portrait' ? contentType : '', mood !== 'Clean' ? mood : ''].filter(Boolean);
   const shootFeelBase = shootFeelParts.length ? `${shootFeelParts.join(' — ')}. ` : '';
-  s.push(`SHOOT FEEL: ${shootFeelBase}Premium brand energy — aspirational but real, stylish but not overdone.`);
+  const shootFeelClose = isMale
+    ? 'Bold beauty with premium brand energy. Aspirational but real. Stylish but not overworked. Masculine, clean, editorial, and expensive without feeling forced.'
+    : 'Premium brand energy. Aspirational but real. Stylish but not overworked. Feminine, clean, editorial, and expensive without feeling forced.';
+  s.push(`SHOOT FEEL: ${shootFeelBase}${shootFeelClose}`);
 
   // POSE & COMPOSITION
   const poseDir = isMale
-    ? 'Three-quarter or full-body shot so the outfit reads clearly. Natural grounded posture — leaning against a surface, one hand in pocket, or standing relaxed. Weight shifted naturally. Masculine composed energy without stiffness.'
-    : 'Three-quarter body portrait so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, relaxed hands.';
+    ? 'Three-quarter to full-body editorial fashion shot so the outfit reads clearly. Natural grounded posture — leaning against the car or a surface, one hand in pocket, or standing relaxed with weight shifted naturally. Masculine composed energy, relaxed hands, real body balance, and no stiffness.'
+    : 'Three-quarter body editorial portrait so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, relaxed hands, real body balance.';
   s.push(`POSE & COMPOSITION: ${poseDir}`);
 
-  s.push('LIGHTING: Soft dimensional natural or studio lighting that wraps realistically around the subject. Warm refined color grading. Dimensional highlights, realistic shadows, natural skin texture in light.');
-  s.push('CAMERA & DETAIL: Shot on Canon EOS R5 with 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face, hair, jewelry, and styling details.');
-  s.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. Hair has individual strand detail and natural movement. Jewelry catches light realistically. Skin looks human — dimensional, textured, and alive.');
-  s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography.');
+  s.push('LIGHTING: Soft dimensional natural or studio-style lighting that wraps realistically around the subject. Warm refined color grading, natural shadows, believable highlights, and depth in the skin, clothing, jewelry, and any environmental reflections.');
+  s.push('CAMERA & DETAIL: Shot on a Canon EOS R5 with an 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on the face, eyes, hair, jewelry, tattoos, and styling details.');
+  s.push('QUALITY & TEXTURE: Commercial-level retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds, believable clothing structure, and individual hair strand detail. The image should feel premium and finished without erasing the humanity of the subject. Avoid AI over-smoothing, plastic skin, waxy texture, distorted hands, warped fingers, extra limbs, melted fabric, fake-looking jewelry, stiff clothing, generic faces, and studio-backdrop energy.');
+  s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a premium editorial campaign.');
 
   return s.join('\n\n');
 }

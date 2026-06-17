@@ -158,7 +158,7 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
   if (sceneName) parts.push(`SCENE: ${sceneName}. Premium environment, authentic architectural detail, controlled depth.`);
 
   // CAMPAIGN FEEL
-  const campaignParts = [mood || 'Editorial'].filter(Boolean);
+  const campaignParts = [mood || 'Clean'].filter(Boolean);
   if (f.niche) campaignParts.push(f.niche);
   parts.push(`CAMPAIGN FEEL: ${campaignParts.join(' — ')}. Premium editorial spread energy.`);
 

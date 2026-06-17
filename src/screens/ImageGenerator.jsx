@@ -270,7 +270,7 @@ export function ImageGenerator({ initialPrompts }) {
   const [engineOptions, setEngineOptions] = React.useState([]);
   const [engine, setEngine]               = React.useState('OpenAI Image');
   const [perf, setPerf]                   = React.useState('Balanced');
-  const [style, setStyle]                 = React.useState('Editorial Portrait');
+  const [style, setStyle]                 = React.useState('Lifestyle Creator');
   const [format, setFormat]               = React.useState('Vertical 9:16');
   const [quality, setQuality]             = React.useState('High');
   const [positivePrompt, setPositive]     = React.useState('');

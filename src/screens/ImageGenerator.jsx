@@ -268,7 +268,7 @@ function PromptBuilder({ engine, onApply, onCharChange }) {
 
 export function ImageGenerator({ initialPrompts }) {
   const [engineOptions, setEngineOptions] = React.useState([]);
-  const [engine, setEngine]               = React.useState('');
+  const [engine, setEngine]               = React.useState('OpenAI Image');
   const [perf, setPerf]                   = React.useState('Balanced');
   const [style, setStyle]                 = React.useState('Editorial Portrait');
   const [format, setFormat]               = React.useState('Vertical 9:16');
@@ -287,29 +287,18 @@ export function ImageGenerator({ initialPrompts }) {
       const opts = list.map(c => ({ value: c, label: c }));
       setEngineOptions(opts);
 
-      // Pick best default engine — backend marks ready engines without "Setup Needed" suffix,
-      // so we trust the label directly. Prefer cloud engines (OpenAI > FAL > Gemini > Replicate)
-      // over local ComfyUI, for any that are actually configured (no "Setup Needed" in label).
-      const isReady = c => !c.includes('Setup Needed') && !c.includes('Disabled');
-      const cloudPick =
-        list.find(c => isReady(c) && c.toLowerCase().includes('openai')) ||
-        list.find(c => isReady(c) && c.toLowerCase().includes('fal')) ||
-        list.find(c => isReady(c) && (c.toLowerCase().includes('gemini') || c.toLowerCase().includes('nano'))) ||
-        list.find(c => isReady(c) && c.toLowerCase().includes('flux schnell'));
-
-      const readyLocal = list.find(isReady);
-      setEngine(cloudPick || readyLocal || list[0]);
+      // Always default to OpenAI. Fall back only if OpenAI isn't in the list at all.
+      const openai = list.find(c => c.toLowerCase().includes('openai'));
+      if (openai) {
+        setEngine(openai);
+      } else {
+        const isReady = c => !c.includes('Setup Needed') && !c.includes('Disabled');
+        setEngine(list.find(isReady) || list[0]);
+      }
     });
   }, []);
 
-  React.useEffect(() => {
-    if (!engineOptions.length || !engine) return;
-    const valid = engineOptions.some(o => o.value === engine);
-    if (!valid) {
-      const ready = engineOptions.find(o => !o.value.includes('Setup Needed'));
-      if (ready) setEngine(ready.value);
-    }
-  }, [engineOptions]);
+  // No override effect — engine is set once on load and respects user changes after that.
 
   React.useEffect(() => {
     if (initialPrompts?.positivePrompt) setPositive(initialPrompts.positivePrompt);

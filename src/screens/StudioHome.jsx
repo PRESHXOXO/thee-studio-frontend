@@ -8,7 +8,7 @@ function loadCharacters() {
 }
 
 const SHORTCUTS = [
-  { icon: 'user-plus',    label: 'New Creator',     sub: 'Build your cast',  nav: 'characters' },
+  { icon: 'upload',       label: 'Import Character', sub: 'Add to your cast', nav: 'characters' },
   { icon: 'image',        label: 'Image Generator', sub: 'Create imagery',   nav: 'images' },
   { icon: 'clapperboard', label: 'Thee Director',   sub: 'Build a prompt',   nav: 'director' },
   { icon: 'megaphone',    label: 'Campaigns',       sub: 'Launch a shoot',   nav: 'campaigns' },
@@ -92,7 +92,7 @@ export function StudioHome({ onNav }) {
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
           <Button variant="secondary" onClick={handleImport}><Icon name="upload" size={15} /> Import Creator</Button>
-          <Button variant="primary" onClick={() => onNav && onNav('characters')}><Icon name="user-plus" size={15} /> New Creator</Button>
+          <Button variant="primary" onClick={() => onNav && onNav('characters')}><Icon name="upload" size={15} /> Import Character</Button>
         </div>
 
         {/* Live stats */}

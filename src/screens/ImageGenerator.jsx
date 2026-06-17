@@ -6,12 +6,6 @@ import { Icon } from '../components/core/Icon.jsx';
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 import { generateImage, characterGenerate, fetchEngineChoices, sanitizeForOpenAI } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
-import {
-  CONTENT_TYPES, MOODS, LOCATIONS, SKIN_TONES, HAIR_COLORS,
-  EYE_DETAILS, SPECIAL_FEATURES, GENDERS,
-  STANDARD_NEGATIVE, buildStructuredVision, buildFluxVision,
-  getPhysiqueOptions, getHairStyleOptions, getClothingOptions, getJewelryOptions,
-} from '../lib/promptData.js';
 
 const FALLBACK_ENGINES = [
   'Fast Draft',
@@ -54,10 +48,6 @@ const TEXTAREA = {
   lineHeight: 1.5, outline: 'none', fontFamily: 'inherit',
 };
 
-function loadCharacters() {
-  try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
-}
-
 function ImageResult({ src, index }) {
   const [hovered, setHovered] = React.useState(false);
   return (
@@ -90,203 +80,28 @@ function ImageResult({ src, index }) {
   );
 }
 
-function PromptBuilder({ engine, onApply, onCharChange }) {
-  const [open, setOpen]           = React.useState(false);
-  const [characters, setChars]    = React.useState(loadCharacters);
-  const [charId, setCharId]       = React.useState('none');
-  const [contentType, setContent] = React.useState('Portrait');
-  const [mood, setMood]           = React.useState('Clean');
-  const [scene, setScene]         = React.useState('None');
-  const [gender, setGender]       = React.useState('Unspecified');
-  const [skinTone, setSkin]       = React.useState('Unspecified');
-  const [hairStyle, setHairStyle] = React.useState('Unspecified');
-  const [hairColor, setHairColor] = React.useState('Unspecified');
-  const [eyeDetail, setEye]       = React.useState('Unspecified');
-  const [jewelry, setJewelry]     = React.useState('None');
-  const [clothing, setClothing]   = React.useState('Unspecified');
-  const [features, setFeatures]   = React.useState('None');
-  const [physique, setPhysique]   = React.useState('Unspecified');
-  const [vision, setVision]       = React.useState('');
+const VIBES     = ['Clean', 'Bold', 'Luxury', 'Raw', 'Romantic', 'Cinematic', 'Moody', 'Soft'];
+const LIGHTINGS = ['Natural', 'Golden Hour', 'Blue Hour', 'Studio', 'Night', 'Overcast'];
 
-  React.useEffect(() => {
-    if (open) setChars(loadCharacters());
-  }, [open]);
-
-  const selectedChar = characters.find(c => String(c.id) === String(charId)) || null;
-  const isFlux = engine?.toLowerCase().includes('flux');
-
-  // Filtered options based on selected gender
-  const physiqueOptions  = getPhysiqueOptions(gender);
-  const hairStyleOptions = getHairStyleOptions(gender);
-  const clothingOptions  = getClothingOptions(gender);
-  const jewelryOptions   = getJewelryOptions(gender);
-
-  // Handle gender change: update gender and immediately reset any incompatible field values
-  const handleGenderChange = (newGender) => {
-    const newPhysique  = getPhysiqueOptions(newGender).find(o => o.value === physique)  ? physique  : 'Unspecified';
-    const newHairStyle = getHairStyleOptions(newGender).find(o => o.value === hairStyle) ? hairStyle : 'Unspecified';
-    const newClothing  = getClothingOptions(newGender).find(o => o.value === clothing)   ? clothing  : 'Unspecified';
-    const newJewelry   = getJewelryOptions(newGender).find(o => o.value === jewelry)     ? jewelry   : 'None';
-    setGender(newGender);
-    setPhysique(newPhysique);
-    setHairStyle(newHairStyle);
-    setClothing(newClothing);
-    setJewelry(newJewelry);
-  };
-
-  React.useEffect(() => {
-    onCharChange?.(selectedChar);
-  }, [charId, characters]);
-
-  const charOptions = [
-    { value: 'none', label: 'No Character — build subject from scratch' },
-    ...characters.map(c => ({ value: c.id, label: c.name })),
-  ];
-
-  const handleBuild = () => {
-    const params = {
-      vision, gender, physique, skinTone, hairStyle, hairColor, eyeDetail,
-      jewelry, clothing, features, mood, contentType, scene,
-      character: selectedChar,
-    };
-    const positive = isFlux ? buildFluxVision(params) : buildStructuredVision(params);
-    onApply({ positive, negative: STANDARD_NEGATIVE });
-  };
-
+function Pill({ label, active, onClick }) {
   return (
-    <Card style={{ padding: 0, overflow: 'hidden' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', background: 'none', border: 'none', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '14px 20px', textAlign: 'left',
-        }}
-      >
-        <div style={{
-          width: 30, height: 30, borderRadius: 'var(--radius)',
-          background: 'var(--rose-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--accent-deep)', flexShrink: 0,
-        }}>
-          <Icon name="wand-2" size={15} strokeWidth={1.75} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ font: '600 0.85rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Prompt Builder</div>
-          <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 2 }}>
-            {open ? 'Configure your shoot — build a rich structured prompt in one click' : 'Click to open the structured prompt builder'}
-          </div>
-        </div>
-        <Icon name={open ? 'chevron-up' : 'chevron-down'} size={16} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
-      </button>
-
-      {open && (
-        <div style={{ borderTop: '1px solid var(--border)', padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Character or Subject */}
-          <div>
-            <div style={LABEL}>Character</div>
-            <Select value={charId} onChange={setCharId} options={charOptions} />
-          </div>
-
-          {/* Subject fields — only when no character */}
-          {!selectedChar && (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                <div>
-                  <div style={LABEL}>Gender</div>
-                  <Select value={gender} onChange={handleGenderChange} options={GENDERS} />
-                </div>
-                <div>
-                  <div style={LABEL}>Skin Tone</div>
-                  <Select value={skinTone} onChange={setSkin} options={SKIN_TONES} />
-                </div>
-                <div>
-                  <div style={LABEL}>Eye Detail</div>
-                  <Select value={eyeDetail} onChange={setEye} options={EYE_DETAILS} />
-                </div>
-                <div>
-                  <div style={LABEL}>Special Feature</div>
-                  <Select value={features} onChange={setFeatures} options={SPECIAL_FEATURES} />
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <div style={LABEL}>Body Type / Build</div>
-                  <Select value={physique} onChange={setPhysique} options={physiqueOptions} />
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Hair — only when no character */}
-          {!selectedChar && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <div style={LABEL}>Hair Style</div>
-                <Select value={hairStyle} onChange={setHairStyle} options={hairStyleOptions} />
-              </div>
-              <div>
-                <div style={LABEL}>Hair Color</div>
-                <Select value={hairColor} onChange={setHairColor} options={HAIR_COLORS} />
-              </div>
-            </div>
-          )}
-
-          {/* Shoot settings */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            <div>
-              <div style={LABEL}>Content Type</div>
-              <Select value={contentType} onChange={setContent} options={CONTENT_TYPES} />
-            </div>
-            <div>
-              <div style={LABEL}>Mood</div>
-              <Select value={mood} onChange={setMood} options={MOODS} />
-            </div>
-            <div>
-              <div style={LABEL}>Scene / Location</div>
-              <Select value={scene} onChange={setScene} options={LOCATIONS} />
-            </div>
-          </div>
-
-          {/* Outfit */}
-          <div>
-            <div style={LABEL}>Outfit</div>
-            <Select value={clothing} onChange={setClothing} options={clothingOptions} />
-          </div>
-
-          {/* Jewelry */}
-          <div>
-            <div style={LABEL}>Jewelry & Accessories</div>
-            <Select value={jewelry} onChange={setJewelry} options={jewelryOptions} />
-          </div>
-
-          {/* Vision / art direction */}
-          <div>
-            <div style={LABEL}>Art Direction / Vision</div>
-            <textarea
-              style={{ ...TEXTAREA, minHeight: 60 }}
-              value={vision}
-              onChange={e => setVision(e.target.value)}
-              placeholder="Any specific direction, angle, lighting, or campaign brief notes…"
-            />
-          </div>
-
-          {/* Action row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Button variant="primary" onClick={handleBuild} style={{ flexShrink: 0 }}>
-              <Icon name="wand-2" size={14} /> Build Prompt
-            </Button>
-            <span style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>
-              {isFlux ? 'FLUX-style prompt' : 'Structured editorial prompt'} · fills both prompt fields
-            </span>
-          </div>
-        </div>
-      )}
-    </Card>
+    <button
+      onClick={onClick}
+      style={{
+        padding: '6px 14px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+        border: `1.5px solid ${active ? 'var(--accent-deep)' : 'var(--border)'}`,
+        background: active ? 'var(--rose-deep)' : 'transparent',
+        color: active ? 'var(--accent-deep)' : 'var(--text-muted)',
+        font: '500 0.78rem/1 var(--font-ui)',
+        transition: 'all var(--t-fast)',
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
-export function ImageGenerator({ initialPrompts }) {
+export function ImageGenerator({ initialPrompts, onNav }) {
   const [engineOptions, setEngineOptions] = React.useState([]);
   const [engine, setEngine]               = React.useState('OpenAI Image');
   const [perf, setPerf]                   = React.useState('Balanced');
@@ -300,6 +115,8 @@ export function ImageGenerator({ initialPrompts }) {
   const [status, setStatus]               = React.useState('');
   const [images, setImages]               = React.useState([]);
   const [selectedChar, setSelectedChar]   = React.useState(null);
+  const [vibe, setVibe]                   = React.useState('');
+  const [lighting, setLighting]           = React.useState('');
 
   React.useEffect(() => {
     fetchEngineChoices().then(choices => {
@@ -342,7 +159,9 @@ export function ImageGenerator({ initialPrompts }) {
 
       const [width, height] = FORMAT_DIMS[format] || [832, 1216];
       const isOpenAI = safeEngine.toLowerCase().includes('openai');
-      const finalPositive = isOpenAI ? sanitizeForOpenAI(positivePrompt) : positivePrompt;
+      const modifiers = [vibe, lighting].filter(Boolean).join(', ');
+      const builtPrompt = modifiers ? `${positivePrompt}${positivePrompt ? '. ' : ''}${modifiers} lighting and vibe.` : positivePrompt;
+      const finalPositive = isOpenAI ? sanitizeForOpenAI(builtPrompt) : builtPrompt;
 
       // When a character with a reference photo is selected on an OpenAI engine,
       // route through images.edit() for identity lock instead of pure text generation
@@ -416,9 +235,45 @@ export function ImageGenerator({ initialPrompts }) {
       </div>
 
       {/* Prompt Builder */}
-      <PromptBuilder engine={engine} onApply={({ positive, negative }) => { setPositive(positive); setNegative(negative); }} onCharChange={setSelectedChar} />
+      <Card style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div>
+            <div style={{ font: '600 0.9rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Prompt</div>
+            <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 3 }}>Describe your shot, or let Thee Studio build it for you</div>
+          </div>
+          <Button variant="secondary" onClick={() => onNav?.('director')}>
+            <Icon name="clapperboard" size={14} /> Build with Thee Studio
+          </Button>
+        </div>
 
-      {/* Controls + prompts */}
+        <textarea
+          style={{ ...TEXTAREA, minHeight: 110 }}
+          value={positivePrompt}
+          onChange={e => setPositive(e.target.value)}
+          placeholder="Describe your shot — subject, scene, style, energy…"
+        />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <div style={{ ...LABEL, marginBottom: 8 }}>Vibe</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {VIBES.map(v => (
+                <Pill key={v} label={v} active={vibe === v} onClick={() => setVibe(vibe === v ? '' : v)} />
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ ...LABEL, marginBottom: 8 }}>Lighting</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {LIGHTINGS.map(l => (
+                <Pill key={l} label={l} active={lighting === l} onClick={() => setLighting(lighting === l ? '' : l)} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Engine + output settings */}
       <Card style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
           <div>
@@ -448,25 +303,14 @@ export function ImageGenerator({ initialPrompts }) {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <div>
-            <div style={LABEL}>Positive Prompt</div>
-            <textarea
-              style={TEXTAREA}
-              value={positivePrompt}
-              onChange={e => setPositive(e.target.value)}
-              placeholder="Describe what you want to generate…"
-            />
-          </div>
-          <div>
-            <div style={LABEL}>Negative Prompt</div>
-            <textarea
-              style={TEXTAREA}
-              value={negativePrompt}
-              onChange={e => setNegative(e.target.value)}
-              placeholder="Describe what to avoid…"
-            />
-          </div>
+        <div>
+          <div style={LABEL}>Negative Prompt</div>
+          <textarea
+            style={{ ...TEXTAREA, minHeight: 60 }}
+            value={negativePrompt}
+            onChange={e => setNegative(e.target.value)}
+            placeholder="Describe what to avoid…"
+          />
         </div>
       </Card>
 

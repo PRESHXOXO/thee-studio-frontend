@@ -4,8 +4,8 @@ import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
-import { analyzeCharacterImage, characterGenerate, extractFaceAnchor, generateCharacterSeed, generateCharacterVariations } from '../api/studio.js';
-import { GENDERS, SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, STANDARD_NEGATIVE, getHairStyleOptions, getClothingOptions, getJewelryOptions } from '../lib/promptData.js';
+import { analyzeCharacterImage, characterGenerate, extractFaceAnchor } from '../api/studio.js';
+import { SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, STANDARD_NEGATIVE } from '../lib/promptData.js';
 import { Select } from '../components/forms/Select.jsx';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
 
@@ -392,58 +392,6 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [saveError, setSaveError]   = React.useState('');
   const [saved, setSaved]           = React.useState(false);
 
-  // AI Generate Creator state
-  const [aiGenOpen,     setAiGenOpen]     = React.useState(false);
-  const [aiGenName,     setAiGenName]     = React.useState('');
-  const [aiGenGender,   setAiGenGender]   = React.useState('Woman');
-  const [aiGenSkin,     setAiGenSkin]     = React.useState('Unspecified');
-  const [aiGenHairSt,   setAiGenHairSt]   = React.useState('Unspecified');
-  const [aiGenHairCo,   setAiGenHairCo]   = React.useState('Unspecified');
-  const [aiGenEye,      setAiGenEye]      = React.useState('Unspecified');
-  const [aiGenBody,     setAiGenBody]     = React.useState('');
-  const [aiGenFeatures, setAiGenFeatures] = React.useState('None');
-  const [aiGenJewelry,  setAiGenJewelry]  = React.useState('None');
-  const [aiGenClothing, setAiGenClothing] = React.useState('Unspecified');
-  const [aiGenNiche,    setAiGenNiche]    = React.useState('');
-  const [aiGenVision,   setAiGenVision]   = React.useState('');
-  const [aiGenStep,     setAiGenStep]     = React.useState('');
-  const [aiGenImages,   setAiGenImages]   = React.useState([]);
-  const [aiGenAnchor,   setAiGenAnchor]   = React.useState('');
-  const [aiGenLoading,  setAiGenLoading]  = React.useState(false);
-  const [aiGenError,    setAiGenError]    = React.useState('');
-  const [aiGenProgress, setAiGenProgress] = React.useState(0); // smooth 0-100
-
-  // Filtered options for AI Generate form
-  const aiGenHairOptions     = getHairStyleOptions(aiGenGender);
-  const aiGenClothingOptions = getClothingOptions(aiGenGender);
-  const aiGenJewelryOptions  = getJewelryOptions(aiGenGender);
-
-  const handleAiGenGenderChange = (newGender) => {
-    const newHair    = getHairStyleOptions(newGender).find(o => o.value === aiGenHairSt)   ? aiGenHairSt   : 'Unspecified';
-    const newClothing= getClothingOptions(newGender).find(o => o.value === aiGenClothing)  ? aiGenClothing : 'Unspecified';
-    const newJewelry = getJewelryOptions(newGender).find(o => o.value === aiGenJewelry)    ? aiGenJewelry  : 'None';
-    setAiGenGender(newGender);
-    setAiGenHairSt(newHair);
-    setAiGenClothing(newClothing);
-    setAiGenJewelry(newJewelry);
-  };
-
-  // Smooth progress animation — ticks toward ceiling, ceiling unlocks as images arrive
-  React.useEffect(() => {
-    if (!aiGenLoading && aiGenImages.length === 0) { setAiGenProgress(0); return; }
-    if (!aiGenLoading) { setAiGenProgress(100); return; }
-    const ceilings = [14, 32, 52, 70, 88, 100];
-    const ceiling  = ceilings[Math.min(aiGenImages.length, 5)];
-    const id = setInterval(() => {
-      setAiGenProgress(prev => {
-        if (prev >= ceiling) return prev;
-        const step = Math.max(0.2, (ceiling - prev) * 0.04);
-        return Math.min(ceiling, prev + step);
-      });
-    }, 40);
-    return () => clearInterval(id);
-  }, [aiGenLoading, aiGenImages.length]);
-
   // Quick Shoot state
   const [quickScene,    setQuickScene]    = React.useState('none');
   const [quickMood,     setQuickMood]     = React.useState('Clean');
@@ -671,74 +619,6 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleAiGenerate = async () => {
-    setAiGenLoading(true);
-    setAiGenError('');
-    setAiGenImages([]);
-    setAiGenAnchor('');
-    setAiGenProgress(0);
-    const params = {
-      name: aiGenName || 'Creator',
-      gender: aiGenGender,
-      skinTone: aiGenSkin,
-      hairStyle: aiGenHairSt,
-      hairColor: aiGenHairCo,
-      eyeDetail: aiGenEye,
-      body: aiGenBody,
-      features: aiGenFeatures,
-      jewelry: aiGenJewelry,
-      clothing: aiGenClothing,
-      niche: aiGenNiche,
-      vision: aiGenVision,
-    };
-    try {
-      // Step 1: generate seed headshot + face anchor
-      setAiGenStep('Generating headshot…');
-      const seedResult = await generateCharacterSeed(params);
-      setAiGenImages([seedResult.image]);
-      setAiGenAnchor(seedResult.faceAnchor || '');
-
-      // Step 2: generate 4 variations — bust up, 3/4 left, 3/4 right, full body
-      setAiGenStep('Generating bust up & 3/4 shots…');
-      const varResult = await generateCharacterVariations({
-        ...params,
-        seedImage: seedResult.image,
-        faceAnchor: seedResult.faceAnchor || '',
-      });
-      const varImages = (varResult.images || []).map(img =>
-        typeof img === 'string' && img.startsWith('ERROR:') ? null : img
-      );
-      const errors = (varResult.images || []).filter(img => typeof img === 'string' && img.startsWith('ERROR:'));
-      if (errors.length) console.warn('Shot errors:', errors);
-      setAiGenImages([seedResult.image, ...varImages]);
-      if (errors.length) setAiGenError(`${errors.length} shot(s) failed: ${errors[0].slice(6, 200)}`);
-      setAiGenStep('');
-    } catch (e) {
-      setAiGenError(e.message || 'Generation failed');
-      setAiGenStep('');
-    } finally {
-      setAiGenLoading(false);
-    }
-  };
-
-  const handleAiGenUse = async () => {
-    if (!aiGenImages.length) return;
-    const validImgs = aiGenImages.filter(img => img && !img.startsWith('ERROR:'));
-    if (!validImgs.length) return;
-    const compressed = await Promise.all(validImgs.slice(0, 5).map(img => compressImage(img)));
-    const newEditing = {
-      name: aiGenName || 'Creator',
-      faceAnchor: aiGenAnchor,
-      refImages: compressed,
-      fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])),
-    };
-    setEditing(newEditing);
-    setActiveId(null);
-    setAiGenOpen(false);
-    // Auto-analyze the first generated photo to fill in fields
-    if (compressed[0]) runAnalysis(aiGenImages[0], newEditing);
-  };
-
   const handleDelete = (id) => {
     const char = characters.find(c => c.id === id);
     setConfirm({
@@ -847,10 +727,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             </Button>
           )}
           {!editing && active && <Button variant="secondary" onClick={() => handleEdit(active)}><Icon name="pencil" size={14} /> Edit</Button>}
-          <Button variant="secondary" onClick={() => { setAiGenOpen(o => !o); setEditing(null); }}>
-            <Icon name="wand-2" size={15} /> Build With Thee Studio
-          </Button>
-          <Button variant="secondary" onClick={handleNew}><Icon name="plus" size={15} /> New Creator</Button>
+          <Button variant="secondary" onClick={handleNew}><Icon name="upload" size={15} /> Import Creator</Button>
         </div>
       </div>
 
@@ -863,172 +740,6 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>
           Save failed: {saveError}
         </p>
-      )}
-
-      {/* AI Generate Creator Panel */}
-      {aiGenOpen && (
-        <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 'var(--radius)', background: 'var(--rose-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-deep)', flexShrink: 0 }}>
-              <Icon name="wand-2" size={18} strokeWidth={1.75} />
-            </div>
-            <div>
-              <div style={{ font: '600 0.9rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Build Creator with Thee Studio</div>
-              <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 3 }}>Describe your creator — AI generates 4 reference photos and locks their face automatically.</div>
-            </div>
-          </div>
-
-          {/* Form */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {/* Row 1: Name + Gender */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={LABEL}>Creator Name</label>
-                <input value={aiGenName} onChange={e => setAiGenName(e.target.value)} placeholder="e.g. Angel, Maya, Jade…" style={INPUT_STYLE} />
-              </div>
-              <div>
-                <label style={LABEL}>Gender</label>
-                <Select value={aiGenGender} onChange={handleAiGenGenderChange} options={GENDERS} />
-              </div>
-            </div>
-            {/* Row 2: Skin + Eye */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={LABEL}>Skin Tone</label>
-                <Select value={aiGenSkin} onChange={setAiGenSkin} options={SKIN_TONES} />
-              </div>
-              <div>
-                <label style={LABEL}>Eye Detail</label>
-                <Select value={aiGenEye} onChange={setAiGenEye} options={EYE_DETAILS} />
-              </div>
-            </div>
-            {/* Row 3: Hair Style + Hair Color */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={LABEL}>Hair Style</label>
-                <Select value={aiGenHairSt} onChange={setAiGenHairSt} options={aiGenHairOptions} />
-              </div>
-              <div>
-                <label style={LABEL}>Hair Color</label>
-                <Select value={aiGenHairCo} onChange={setAiGenHairCo} options={HAIR_COLORS} />
-              </div>
-            </div>
-            {/* Row 4: Special Features + Jewelry */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={LABEL}>Special Features</label>
-                <Select value={aiGenFeatures} onChange={setAiGenFeatures} options={SPECIAL_FEATURES} />
-              </div>
-              <div>
-                <label style={LABEL}>Signature Jewelry</label>
-                <Select value={aiGenJewelry} onChange={setAiGenJewelry} options={aiGenJewelryOptions} />
-              </div>
-            </div>
-            {/* Row 5: Body + Niche */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={LABEL}>Body / Build</label>
-                <input value={aiGenBody} onChange={e => setAiGenBody(e.target.value)} placeholder="e.g. slim, curvy, athletic, petite…" style={INPUT_STYLE} />
-              </div>
-              <div>
-                <label style={LABEL}>Content Niche</label>
-                <input value={aiGenNiche} onChange={e => setAiGenNiche(e.target.value)} placeholder="e.g. fashion, fitness, beauty, lifestyle…" style={INPUT_STYLE} />
-              </div>
-            </div>
-            {/* Row 6: Clothing (full width) */}
-            <div>
-              <label style={LABEL}>Signature Look / Clothing</label>
-              <Select value={aiGenClothing} onChange={setAiGenClothing} options={aiGenClothingOptions} />
-            </div>
-            {/* Row 7: Vision (full width) */}
-            <div>
-              <label style={LABEL}>Vision / Style Direction</label>
-              <input value={aiGenVision} onChange={e => setAiGenVision(e.target.value)} placeholder="e.g. Editorial luxury, sophisticated energy, warm and approachable…" style={INPUT_STYLE} />
-            </div>
-          </div>
-
-          {aiGenError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{aiGenError}</p>}
-
-          {/* Progress bar — visible while loading or once images arrive */}
-          {(aiGenLoading || aiGenImages.length > 0) && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, font: '500 0.8rem/1 var(--font-ui)' }}>
-                  {aiGenLoading && <Icon name="sparkles" size={14} strokeWidth={1.75} style={{ animation: 'spin 1.4s linear infinite' }} />}
-                  <span style={{ color: aiGenLoading ? 'var(--accent-deep)' : 'var(--text-muted)' }}>
-                    {aiGenLoading ? (aiGenStep || 'Working…') : 'Complete'}
-                  </span>
-                </div>
-                <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                  {Math.round(aiGenProgress)}%
-                </span>
-              </div>
-              <div style={{ height: 6, background: 'var(--rose-deep)', borderRadius: 99, overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${aiGenProgress}%`,
-                  background: 'var(--grad-coral)',
-                  borderRadius: 99,
-                }} />
-              </div>
-              {/* Shot labels under the bar */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
-                {['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'].map((label, i) => (
-                  <div key={i} style={{ textAlign: 'center', font: '500 0.6rem/1 var(--font-ui)', letterSpacing: '0.03em', textTransform: 'uppercase', color: aiGenImages[i] ? 'var(--accent-deep)' : 'var(--text-faint)', transition: 'color 0.4s ease' }}>
-                    {label}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Generated image preview */}
-          {aiGenImages.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                Reference Photos · {aiGenImages.length}/5
-                {aiGenAnchor && <span style={{ color: 'var(--accent-deep)', marginLeft: 10 }}>● Face Lock Ready</span>}
-              </div>
-              {(() => {
-                const SHOT_LABELS = ['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'];
-                return (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
-                    {SHOT_LABELS.map((label, i) => (
-                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        <div style={{ aspectRatio: '2/3', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--rose-glass)', border: '1px solid var(--border)' }}>
-                          {aiGenImages[i]
-                            ? <img src={aiGenImages[i]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={label} />
-                            : aiGenLoading && <div style={{ width: '100%', height: '100%', background: 'var(--grad-portrait)', opacity: 0.4 }} />
-                          }
-                        </div>
-                        <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.65rem' }}>{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Button
-              variant="primary"
-              loading={aiGenLoading}
-              onClick={aiGenImages.length ? handleAiGenUse : handleAiGenerate}
-              disabled={aiGenLoading}
-            >
-              <Icon name={aiGenImages.length ? 'user-check' : 'sparkles'} size={15} />
-              {aiGenLoading ? (aiGenStep || 'Generating…') : aiGenImages.length ? 'Use These Photos & Create Creator' : 'Generate 5 Reference Photos'}
-            </Button>
-            {aiGenImages.length > 0 && !aiGenLoading && (
-              <Button variant="secondary" onClick={handleAiGenerate}>
-                <Icon name="refresh-cw" size={14} /> Regenerate
-              </Button>
-            )}
-            <Button variant="secondary" onClick={() => setAiGenOpen(false)}>Cancel</Button>
-          </div>
-        </div>
       )}
 
       {/* Detail panel */}

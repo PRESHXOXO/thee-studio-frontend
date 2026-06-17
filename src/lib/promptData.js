@@ -182,9 +182,27 @@ export const SPECIAL_FEATURES = [
 
 export const GENDERS = ['Unspecified', 'Woman', 'Man', 'Non-binary', 'Femme', 'Androgynous'].map(v => ({ value: v, label: v }));
 
+export const PHYSIQUE = [
+  { value: 'Unspecified', label: 'Unspecified' },
+  // Men
+  { value: 'athletic muscular build, broad shoulders, defined chest and arms',           label: 'Men — Athletic / Muscular' },
+  { value: 'tall lean athletic build, long limbs, naturally defined physique',            label: 'Men — Tall & Lean' },
+  { value: 'stocky powerful build, thick neck, wide frame, solid presence',              label: 'Men — Stocky / Powerful' },
+  { value: 'slim trim build, clean silhouette, clothes hang perfectly',                  label: 'Men — Slim / Trim' },
+  { value: 'average everyday build, natural relaxed frame, approachable',                label: 'Men — Average / Everyday' },
+  { value: 'dad bod, soft natural build, confident and comfortable',                     label: 'Men — Dad Bod' },
+  // Women
+  { value: 'curvy hourglass figure, full hips, defined waist, confident stance',         label: 'Women — Curvy / Hourglass' },
+  { value: 'slim petite frame, delicate proportions, graceful posture',                  label: 'Women — Slim / Petite' },
+  { value: 'tall model frame, long legs, editorial proportions',                         label: 'Women — Tall / Model Frame' },
+  { value: 'athletic toned build, visible arm definition, active lifestyle energy',      label: 'Women — Athletic / Toned' },
+  { value: 'full-figured plus size build, curves, confident and powerful presence',      label: 'Women — Plus Size / Full-Figured' },
+  { value: 'average natural build, relatable proportions, authentic presence',           label: 'Women — Average / Natural' },
+];
+
 export const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, missing fingers, broken anatomy, unnatural body proportions, stiff pose, flat lighting, harsh flash, oversaturated colors, cluttered background, cartoon styling, floating tattoos, fake jewelry, bad fabric physics, cropped limbs, generic photo, artificial smile, lifeless expression, overprocessed HDR, grainy, noisy, unrealistic skin color, washed-out skin, plastic hair, duplicate body parts, distorted face, text on clothing, visible brand names, graphic prints on garments, fake logos, illegible text, random letters on fabric, misspelled words, hallucinated typography';
 
-export function buildStructuredVision({ vision = '', gender = 'Unspecified', skinTone = 'Unspecified', hairStyle = 'Unspecified', hairColor = 'Unspecified', eyeDetail = 'Unspecified', jewelry = 'None', clothing = 'Unspecified', features = 'None', mood = 'Clean', contentType = 'Portrait', scene = 'None', character = null, shootHairStyle = 'Unspecified', shootHairColor = 'Unspecified', shootJewelry = 'None', outfitPhotoDesc = '' } = {}) {
+export function buildStructuredVision({ vision = '', gender = 'Unspecified', physique = 'Unspecified', skinTone = 'Unspecified', hairStyle = 'Unspecified', hairColor = 'Unspecified', eyeDetail = 'Unspecified', jewelry = 'None', clothing = 'Unspecified', features = 'None', mood = 'Clean', contentType = 'Portrait', scene = 'None', character = null, shootHairStyle = 'Unspecified', shootHairColor = 'Unspecified', shootJewelry = 'None', outfitPhotoDesc = '' } = {}) {
   const s = [];
 
   s.push('Ultra-realistic 4K commercial lifestyle fashion photography. Shot for a premium fashion and lifestyle brand campaign. The final image must look like a high-end professional photograph captured on a real camera — realistic, polished, editorial, and not illustrated or overly stylized.');
@@ -225,15 +243,23 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', ski
     if (hairAccessParts.length) s.push(`HAIR & ACCESSORIES: ${hairAccessParts.join('. ')}.`);
   } else {
     // Standalone talent block
+    const isMale = gender === 'Man';
     const hasSubject = gender !== 'Unspecified' || skinTone !== 'Unspecified' || eyeDetail !== 'Unspecified';
     if (hasSubject) {
       const who = gender !== 'Unspecified' ? gender : 'Talent';
       const talentParts = [];
       if (skinTone !== 'Unspecified') talentParts.push(`${skinTone} complexion, realistic skin texture with visible pores and natural tone variation`);
       if (eyeDetail !== 'Unspecified') talentParts.push(`${eyeDetail} eyes, sharp and dimensional`);
-      s.push(`TALENT: ${who}. ${talentParts.join('. ')}${talentParts.length ? '. ' : ''}Natural facial structure, grounded expression.`);
+      const basePresence = isMale
+        ? 'Strong natural facial structure, sharp jawline, short groomed beard or clean-shaven, grounded masculine expression — confident but not forced'
+        : 'Natural facial structure, expressive eyes, grounded confident expression';
+      s.push(`TALENT: ${who}. ${talentParts.join('. ')}${talentParts.length ? '. ' : ''}${basePresence}.`);
     }
-    if (features !== 'None') s.push(`BUILD & PRESENCE: ${features}.`);
+
+    const presenceParts = [];
+    if (physique !== 'Unspecified') presenceParts.push(physique);
+    if (features !== 'None') presenceParts.push(features);
+    if (presenceParts.length) s.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
 
     if (clothing !== 'Unspecified') s.push(`OUTFIT: ${clothing}.`);
 
@@ -246,11 +272,23 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', ski
     if (hairAccessParts.length) s.push(`HAIR & ACCESSORIES: ${hairAccessParts.join('. ')}.`);
   }
 
-  if (scene && scene !== 'None') s.push(`SCENE: ${scene}. Premium environment, authentic architectural detail, controlled depth.`);
+  if (scene && scene !== 'None') {
+    const isMale = gender === 'Man' || (character?.fields?.gender === 'Man');
+    const sceneExtra = isMale
+      ? 'Authentic architectural detail, dark hardwood or concrete floors, warm ambient light through large windows, premium interior elements visible in background.'
+      : 'Premium environment, authentic architectural detail, controlled depth.';
+    s.push(`SCENE: ${scene}. ${sceneExtra}`);
+  }
   if (vision) s.push(`ART DIRECTION: ${vision}`);
 
   s.push(`CAMPAIGN FEEL: ${[contentType, mood].filter(Boolean).join(' — ')}. Premium editorial spread energy.`);
-  s.push('POSE & COMPOSITION: Three-quarter body editorial portrait so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, realistic anatomy, relaxed hands.');
+
+  const isMaleSubject = gender === 'Man' || character?.fields?.gender === 'Man';
+  const poseDir = isMaleSubject
+    ? 'Three-quarter or full-body editorial shot so the outfit reads clearly. Natural grounded posture — leaning against a surface, hand in pocket, or standing relaxed. Weight shifted naturally. Masculine composed energy, not stiff. Strong frame without forcing it.'
+    : 'Three-quarter body editorial portrait so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, realistic anatomy, relaxed hands.';
+  s.push(`POSE & COMPOSITION: ${poseDir}`);
+
   s.push('LIGHTING: Soft dimensional natural or studio lighting. Light wraps realistically around the subject. Warm refined color grading.');
   s.push('CAMERA & DETAIL: Shot on Canon EOS R5 with 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face, hair, jewelry, and styling details.');
   s.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. Hair has individual strand detail and natural movement. Jewelry reflects light accurately.');

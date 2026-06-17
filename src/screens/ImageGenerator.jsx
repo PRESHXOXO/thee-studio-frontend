@@ -8,7 +8,7 @@ import { generateImage, characterGenerate, fetchEngineChoices, sanitizeForOpenAI
 import { saveToLibrary } from '../lib/library.js';
 import {
   CONTENT_TYPES, MOODS, LOCATIONS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS,
-  EYE_DETAILS, JEWELRY_OPTIONS, CLOTHING_VIBES, SPECIAL_FEATURES, GENDERS,
+  EYE_DETAILS, JEWELRY_OPTIONS, CLOTHING_VIBES, SPECIAL_FEATURES, GENDERS, PHYSIQUE,
   STANDARD_NEGATIVE, buildStructuredVision, buildFluxVision,
 } from '../lib/promptData.js';
 
@@ -104,6 +104,7 @@ function PromptBuilder({ engine, onApply, onCharChange }) {
   const [jewelry, setJewelry]     = React.useState('None');
   const [clothing, setClothing]   = React.useState('Unspecified');
   const [features, setFeatures]   = React.useState('None');
+  const [physique, setPhysique]   = React.useState('Unspecified');
   const [vision, setVision]       = React.useState('');
 
   React.useEffect(() => {
@@ -124,7 +125,7 @@ function PromptBuilder({ engine, onApply, onCharChange }) {
 
   const handleBuild = () => {
     const params = {
-      vision, gender, skinTone, hairStyle, hairColor, eyeDetail,
+      vision, gender, physique, skinTone, hairStyle, hairColor, eyeDetail,
       jewelry, clothing, features, mood, contentType, scene,
       character: selectedChar,
     };
@@ -169,24 +170,32 @@ function PromptBuilder({ engine, onApply, onCharChange }) {
 
           {/* Subject fields — only when no character */}
           {!selectedChar && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-              <div>
-                <div style={LABEL}>Gender</div>
-                <Select value={gender} onChange={setGender} options={GENDERS} />
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                <div>
+                  <div style={LABEL}>Gender</div>
+                  <Select value={gender} onChange={setGender} options={GENDERS} />
+                </div>
+                <div>
+                  <div style={LABEL}>Skin Tone</div>
+                  <Select value={skinTone} onChange={setSkin} options={SKIN_TONES} />
+                </div>
+                <div>
+                  <div style={LABEL}>Eye Detail</div>
+                  <Select value={eyeDetail} onChange={setEye} options={EYE_DETAILS} />
+                </div>
+                <div>
+                  <div style={LABEL}>Special Feature</div>
+                  <Select value={features} onChange={setFeatures} options={SPECIAL_FEATURES} />
+                </div>
               </div>
-              <div>
-                <div style={LABEL}>Skin Tone</div>
-                <Select value={skinTone} onChange={setSkin} options={SKIN_TONES} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <div style={LABEL}>Body Type / Build</div>
+                  <Select value={physique} onChange={setPhysique} options={PHYSIQUE} />
+                </div>
               </div>
-              <div>
-                <div style={LABEL}>Eye Detail</div>
-                <Select value={eyeDetail} onChange={setEye} options={EYE_DETAILS} />
-              </div>
-              <div>
-                <div style={LABEL}>Special Feature</div>
-                <Select value={features} onChange={setFeatures} options={SPECIAL_FEATURES} />
-              </div>
-            </div>
+            </>
           )}
 
           {/* Hair — only when no character */}

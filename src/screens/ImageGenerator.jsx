@@ -262,6 +262,7 @@ export function ImageGenerator({ initialPrompts, onNav }) {
         ...params,
         seedImage: seedResult.image,
         faceAnchor: seedResult.faceAnchor || '',
+        skinToneLock: seedResult.skinToneLock || '',
       });
       const varImages = (varResult.images || []).map(img =>
         typeof img === 'string' && img.startsWith('ERROR:') ? null : img

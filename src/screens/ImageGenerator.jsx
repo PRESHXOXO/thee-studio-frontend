@@ -268,6 +268,27 @@ export function ImageGenerator({ initialPrompts, onNav }) {
     }
   };
 
+  const handleSaveCreator = async () => {
+    if (!aiGenImages.length) return;
+    const validImgs = aiGenImages.filter(img => img && !img.startsWith('ERROR:'));
+    if (!validImgs.length) return;
+    const compressed = await Promise.all(validImgs.slice(0, 5).map(img => compressImage(img)));
+    const newChar = {
+      id: Date.now().toString(),
+      name: aiGenName || 'Creator',
+      faceAnchor: aiGenAnchor,
+      refImages: compressed,
+      locked: true,
+      fields: { tone: aiGenSkin !== 'Unspecified' ? aiGenSkin : '', hair: aiGenHairSt !== 'Unspecified' ? aiGenHairSt : '', face: aiGenEye !== 'Unspecified' ? aiGenEye : '', body: aiGenBody || '', wardrobe: aiGenClothing !== 'Unspecified' ? aiGenClothing : '', personality: aiGenVision || '', niche: aiGenNiche || '' },
+    };
+    try {
+      const existing = JSON.parse(localStorage.getItem('ts_characters') || '[]');
+      existing.push(newChar);
+      localStorage.setItem('ts_characters', JSON.stringify(existing));
+    } catch {}
+    onNav?.('characters');
+  };
+
   const handleAiGenUse = async () => {
     if (!aiGenImages.length) return;
     const validImgs = aiGenImages.filter(img => img && !img.startsWith('ERROR:'));
@@ -370,18 +391,6 @@ export function ImageGenerator({ initialPrompts, onNav }) {
           <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 10 }}>Image Generator</div>
           <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 10px' }}>Image Generator</h1>
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 480 }}>Create studio-grade imagery with precision and style.</p>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
-          <Button variant="primary" loading={loading} onClick={handleGenerate} disabled={!engine}>
-            <Icon name="sparkles" size={15} /> Generate
-          </Button>
-          <GenerationProgress
-            active={loading}
-            identityLocked={!!(selectedChar?.refImages?.length && engine?.toLowerCase().includes('openai'))}
-            engine={engine}
-            batchSize={1}
-            style={{ width: 280 }}
-          />
         </div>
       </div>
 
@@ -530,11 +539,16 @@ export function ImageGenerator({ initialPrompts, onNav }) {
             )}
 
             {/* Actions */}
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <Button variant="primary" loading={aiGenLoading} onClick={aiGenImages.length ? handleAiGenUse : handleAiGenerate} disabled={aiGenLoading}>
-                <Icon name={aiGenImages.length ? 'user-check' : 'sparkles'} size={15} />
-                {aiGenLoading ? (aiGenStep || 'Generating…') : aiGenImages.length ? 'Use These Photos & Lock Identity' : 'Generate 5 Reference Photos'}
+                <Icon name={aiGenImages.length ? 'user-check' : 'sparkles'} size={15} style={aiGenLoading ? { animation: 'spin 1s linear infinite' } : {}} />
+                {aiGenLoading ? (aiGenStep || 'Generating…') : aiGenImages.length ? 'Lock Identity' : 'Generate 5 Reference Photos'}
               </Button>
+              {aiGenImages.length > 0 && !aiGenLoading && (
+                <Button variant="secondary" onClick={handleSaveCreator}>
+                  <Icon name="user-plus" size={14} /> Save Creator
+                </Button>
+              )}
               {aiGenImages.length > 0 && !aiGenLoading && (
                 <Button variant="secondary" onClick={handleAiGenerate}>
                   <Icon name="refresh-cw" size={14} /> Regenerate
@@ -622,8 +636,10 @@ export function ImageGenerator({ initialPrompts, onNav }) {
         </div>
       </Card>
 
-      {/* Engine + output settings */}
+      {/* Generation Settings */}
       <Card style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ font: '600 0.88rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Generation Settings</div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
           <div>
             <div style={LABEL}>Engine</div>
@@ -656,10 +672,23 @@ export function ImageGenerator({ initialPrompts, onNav }) {
             placeholder="Describe what to avoid…"
           />
         </div>
-      </Card>
 
-      {error  && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
-      {status && !error && <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', margin: 0 }}>{status}</p>}
+        {error  && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
+        {status && !error && <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', margin: 0 }}>{status}</p>}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <Button variant="primary" loading={loading} onClick={handleGenerate} disabled={!engine} style={{ minWidth: 140 }}>
+            <Icon name="sparkles" size={15} style={loading ? { animation: 'spin 1s linear infinite' } : {}} /> Generate
+          </Button>
+          <GenerationProgress
+            active={loading}
+            identityLocked={!!(selectedChar?.refImages?.length && engine?.toLowerCase().includes('openai'))}
+            engine={engine}
+            batchSize={1}
+            style={{ flex: 1 }}
+          />
+        </div>
+      </Card>
 
       {/* Output canvas */}
       {images.length > 0 ? (

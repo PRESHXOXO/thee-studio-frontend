@@ -682,7 +682,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
         {error && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
 
         <Button variant="primary" loading={loading} onClick={handleBuild} style={{ width: '100%' }}>
-          <Icon name={BUILD_MODES.find(m => m.id === buildMode)?.icon || 'zap'} size={15} />
+          <Icon name={BUILD_MODES.find(m => m.id === buildMode)?.icon || 'zap'} size={15} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
           {loading ? 'Building…' : 'Build Direction'}
         </Button>
 
@@ -725,7 +725,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
         {outputs?.positivePrompt && (
           <>
             <Button variant="primary" loading={generating} onClick={handleGenerate} style={{ width: '100%' }}>
-              <Icon name="sparkles" size={15} />
+              <Icon name="sparkles" size={15} style={generating ? { animation: 'spin 1s linear infinite' } : {}} />
               {generating ? 'Generating…' : selectedChar && getCharacterImage(selectedChar) ? `Generate as ${selectedChar.name}` : 'Generate Here'}
             </Button>
             <GenerationProgress

@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 import { Button } from '../core/Button.jsx';
 import { Icon } from '../core/Icon.jsx';
 
@@ -12,11 +13,11 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Delete', o
 
   if (!open) return null;
 
-  return (
+  return ReactDOM.createPortal(
     <div
       onClick={onCancel}
       style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
+        position: 'fixed', inset: 0, zIndex: 9999,
         background: 'rgba(30, 12, 8, 0.45)',
         backdropFilter: 'blur(4px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -64,6 +65,7 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Delete', o
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

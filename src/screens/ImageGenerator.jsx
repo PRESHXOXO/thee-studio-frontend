@@ -7,9 +7,10 @@ import { GenerationProgress } from '../components/feedback/GenerationProgress.js
 import { generateImage, characterGenerate, fetchEngineChoices, sanitizeForOpenAI } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
 import {
-  CONTENT_TYPES, MOODS, LOCATIONS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS,
-  EYE_DETAILS, JEWELRY_OPTIONS, CLOTHING_VIBES, SPECIAL_FEATURES, GENDERS, PHYSIQUE,
+  CONTENT_TYPES, MOODS, LOCATIONS, SKIN_TONES, HAIR_COLORS,
+  EYE_DETAILS, SPECIAL_FEATURES, GENDERS,
   STANDARD_NEGATIVE, buildStructuredVision, buildFluxVision,
+  getPhysiqueOptions, getHairStyleOptions, getClothingOptions, getJewelryOptions,
 } from '../lib/promptData.js';
 
 const FALLBACK_ENGINES = [
@@ -114,6 +115,20 @@ function PromptBuilder({ engine, onApply, onCharChange }) {
   const selectedChar = characters.find(c => String(c.id) === String(charId)) || null;
   const isFlux = engine?.toLowerCase().includes('flux');
 
+  // Filtered options based on selected gender
+  const physiqueOptions = getPhysiqueOptions(gender);
+  const hairStyleOptions = getHairStyleOptions(gender);
+  const clothingOptions  = getClothingOptions(gender);
+  const jewelryOptions   = getJewelryOptions(gender);
+
+  // When gender changes, reset fields whose current value belongs to the wrong gender set
+  React.useEffect(() => {
+    if (!physiqueOptions.find(o => o.value === physique))  setPhysique('Unspecified');
+    if (!hairStyleOptions.find(o => o.value === hairStyle)) setHairStyle('Unspecified');
+    if (!clothingOptions.find(o => o.value === clothing))   setClothing('Unspecified');
+    if (!jewelryOptions.find(o => o.value === jewelry))     setJewelry('None');
+  }, [gender]); // eslint-disable-line react-hooks/exhaustive-deps
+
   React.useEffect(() => {
     onCharChange?.(selectedChar);
   }, [charId, characters]);
@@ -192,7 +207,7 @@ function PromptBuilder({ engine, onApply, onCharChange }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <div style={LABEL}>Body Type / Build</div>
-                  <Select value={physique} onChange={setPhysique} options={PHYSIQUE} />
+                  <Select value={physique} onChange={setPhysique} options={physiqueOptions} />
                 </div>
               </div>
             </>
@@ -203,7 +218,7 @@ function PromptBuilder({ engine, onApply, onCharChange }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <div style={LABEL}>Hair Style</div>
-                <Select value={hairStyle} onChange={setHairStyle} options={HAIR_STYLES} />
+                <Select value={hairStyle} onChange={setHairStyle} options={hairStyleOptions} />
               </div>
               <div>
                 <div style={LABEL}>Hair Color</div>
@@ -231,13 +246,13 @@ function PromptBuilder({ engine, onApply, onCharChange }) {
           {/* Outfit */}
           <div>
             <div style={LABEL}>Outfit</div>
-            <Select value={clothing} onChange={setClothing} options={CLOTHING_VIBES} />
+            <Select value={clothing} onChange={setClothing} options={clothingOptions} />
           </div>
 
           {/* Jewelry */}
           <div>
             <div style={LABEL}>Jewelry & Accessories</div>
-            <Select value={jewelry} onChange={setJewelry} options={JEWELRY_OPTIONS} />
+            <Select value={jewelry} onChange={setJewelry} options={jewelryOptions} />
           </div>
 
           {/* Vision / art direction */}

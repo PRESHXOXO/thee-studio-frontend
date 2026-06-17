@@ -29,43 +29,80 @@ export const SKIN_TONES = [
   { value: 'porcelain fair with cool pink undertones', label: 'Porcelain — cool pink' },
 ];
 
-export const HAIR_STYLES = [
+// Hair styles split by gender for filtering
+export const HAIR_STYLES_WOMEN = [
   { value: 'Unspecified', label: 'Unspecified' },
-  { value: 'box braids, waist length',         label: 'Box Braids — waist' },
-  { value: 'knotless braids, shoulder length', label: 'Knotless Braids — shoulder' },
-  { value: 'Senegalese twists',                label: 'Senegalese Twists' },
-  { value: 'goddess locs',                     label: 'Goddess Locs' },
-  { value: 'faux locs, bohemian',              label: 'Faux Locs — bohemian' },
-  { value: 'traditional dreadlocks',           label: 'Traditional Locs' },
-  { value: 'sisterlocks',                      label: 'Sisterlocks' },
-  { value: 'cornrows, sleek',                  label: 'Cornrows — sleek' },
-  { value: 'full natural afro',                label: 'Full Natural Afro' },
-  { value: 'TWA tapered natural',              label: 'TWA — tapered' },
-  { value: 'bantu knots',                      label: 'Bantu Knots' },
-  { value: 'silk press, bone straight',        label: 'Silk Press — bone straight' },
-  { value: 'sleek blowout, voluminous',        label: 'Sleek Blowout' },
-  { value: 'sleek high ponytail',              label: 'Sleek High Ponytail' },
-  { value: 'long loose curls, natural',        label: 'Long Loose Curls' },
-  { value: 'beachy waves',                     label: 'Beachy Waves' },
-  { value: 'body waves, glossy',               label: 'Body Waves — glossy' },
-  { value: 'finger waves, vintage',            label: 'Finger Waves — vintage' },
-  { value: 'sleek bob, chin length',           label: 'Sleek Bob' },
-  { value: 'long straight, ultra sleek',       label: 'Long Straight — sleek' },
-  { value: 'pixie cut',                        label: 'Pixie Cut' },
-  { value: 'space buns',                       label: 'Space Buns' },
-  { value: 'low fade, clean lined',            label: 'Low Fade — Men' },
-  { value: 'high fade with waves on top',      label: 'High Fade + Waves — Men' },
-  { value: 'taper fade, fresh edge up',        label: 'Taper Fade — Men' },
-  { value: 'low cut cesar, waves 360',         label: '360 Waves — Men' },
-  { value: 'short dreadlocks, neat',           label: 'Short Locs — Men' },
-  { value: 'medium dreadlocks, free-hanging',  label: 'Medium Locs — Men' },
-  { value: 'braids with fade',                 label: 'Braids + Fade — Men' },
-  { value: 'cornrows, straight back',          label: 'Cornrows — straight back' },
-  { value: 'low cut natural afro, shaped',     label: 'Low Natural — Men' },
-  { value: 'buzz cut, clean',                  label: 'Buzz Cut' },
-  { value: 'curly top with fade',              label: 'Curly Top + Fade — Men' },
-  { value: 'textured crop, modern',            label: 'Textured Crop — Men' },
+  // — Natural & protective —
+  { value: 'box braids, waist length',                      label: 'Box Braids — waist' },
+  { value: 'knotless braids, shoulder length',              label: 'Knotless Braids — shoulder' },
+  { value: 'Senegalese twists',                             label: 'Senegalese Twists' },
+  { value: 'goddess locs',                                  label: 'Goddess Locs' },
+  { value: 'faux locs, bohemian',                           label: 'Faux Locs — bohemian' },
+  { value: 'invisible locs, long and flowing',              label: 'Invisible Locs — long' },
+  { value: 'traditional dreadlocks, long',                  label: 'Traditional Locs — long' },
+  { value: 'sisterlocks',                                   label: 'Sisterlocks' },
+  { value: 'cornrows, sleek',                               label: 'Cornrows — sleek' },
+  { value: 'Dutch braids, two plaits',                      label: 'Dutch Braids — two' },
+  { value: 'full natural afro, voluminous',                 label: 'Full Natural Afro' },
+  { value: 'TWA tapered natural',                           label: 'TWA — tapered' },
+  { value: 'kinky coils, defined natural texture',          label: 'Kinky Coils — defined' },
+  { value: 'bantu knots',                                   label: 'Bantu Knots' },
+  // — Styled & blown out —
+  { value: 'silk press, bone straight',                     label: 'Silk Press — bone straight' },
+  { value: 'sleek blowout, voluminous',                     label: 'Sleek Blowout' },
+  { value: 'sleek high ponytail',                           label: 'Sleek High Ponytail' },
+  { value: 'sleek low bun, center part',                    label: 'Sleek Low Bun' },
+  { value: 'top knot bun, sleek editorial',                 label: 'Top Knot Bun' },
+  { value: 'loose effortless updo, romantic',               label: 'Effortless Updo — romantic' },
+  { value: 'half-up half-down, voluminous curls',           label: 'Half-Up Half-Down Curls' },
+  // — Waves & curls —
+  { value: 'long loose curls, natural',                     label: 'Long Loose Curls' },
+  { value: 'beachy waves',                                  label: 'Beachy Waves' },
+  { value: 'body waves, glossy',                            label: 'Body Waves — glossy' },
+  { value: 'curtain bangs with loose waves',                label: 'Curtain Bangs + Waves' },
+  { value: 'finger waves, vintage glam',                    label: 'Finger Waves — vintage' },
+  // — Short & cut —
+  { value: 'sleek bob, chin length, center part',           label: 'Sleek Bob' },
+  { value: 'blunt cut bob, jaw length',                     label: 'Blunt Cut Bob' },
+  { value: 'long straight, ultra sleek',                    label: 'Long Straight — sleek' },
+  { value: 'side part with face-framing layers',            label: 'Side Part + Layers' },
+  { value: 'pixie cut, sharp and modern',                   label: 'Pixie Cut' },
+  { value: 'space buns',                                    label: 'Space Buns' },
 ];
+
+export const HAIR_STYLES_MEN = [
+  { value: 'Unspecified', label: 'Unspecified' },
+  // — Fades & cuts —
+  { value: 'low fade, clean lined edge up',                 label: 'Low Fade — clean' },
+  { value: 'high fade, sharp edge up',                      label: 'High Fade — sharp' },
+  { value: 'taper fade, fresh edge up',                     label: 'Taper Fade' },
+  { value: 'skin fade, bald fade',                          label: 'Skin / Bald Fade' },
+  { value: 'buzz cut, clean',                               label: 'Buzz Cut' },
+  { value: 'shaved head, clean',                            label: 'Shaved / Bald' },
+  { value: 'textured crop, modern fade',                    label: 'Textured Crop' },
+  { value: 'curly top with low fade',                       label: 'Curly Top + Fade' },
+  { value: 'afro with sharp shape up and edge',             label: 'Afro + Shape Up' },
+  { value: 'low cut natural afro, shaped and defined',      label: 'Low Natural — shaped' },
+  { value: 'low cut with designed parts, creative fade',    label: 'Designed Parts — fade' },
+  // — Waves —
+  { value: 'low cut cesar, 360 waves',                      label: '360 Waves' },
+  { value: 'high fade with deep waves on top',              label: 'High Fade + Waves' },
+  // — Locs & braids —
+  { value: 'short dreadlocks, neat and uniform',            label: 'Short Locs — neat' },
+  { value: 'medium dreadlocks, free-hanging',               label: 'Medium Locs' },
+  { value: 'long dreadlocks, pulled back loosely',          label: 'Long Locs — pulled back' },
+  { value: 'short box braids, men\'s style',                label: 'Short Box Braids' },
+  { value: 'braids with fade on sides',                     label: 'Braids + Fade' },
+  { value: 'cornrows, straight back',                       label: 'Cornrows — straight back' },
+  { value: 'two-strand twists, short',                      label: 'Two-Strand Twists' },
+];
+
+// Backwards-compat combined export (used by Flux builder and characters)
+export const HAIR_STYLES = [
+  ...HAIR_STYLES_WOMEN.filter(h => h.value !== 'Unspecified'),
+  ...HAIR_STYLES_MEN.filter(h => h.value !== 'Unspecified'),
+];
+HAIR_STYLES.unshift({ value: 'Unspecified', label: 'Unspecified' });
 
 export const HAIR_COLORS = [
   { value: 'Unspecified', label: 'Unspecified' },
@@ -104,65 +141,132 @@ export const EYE_DETAILS = [
   { value: 'bold graphic liner, editorial',  label: 'Bold Graphic Liner' },
 ];
 
-export const JEWELRY_OPTIONS = [
+export const JEWELRY_WOMEN = [
   { value: 'None', label: 'None / Minimal' },
   { value: 'small diamond studs, understated',                                     label: 'Diamond Studs' },
   { value: 'gold hoops, medium size',                                               label: 'Gold Hoops' },
   { value: 'statement oversized earrings',                                          label: 'Statement Earrings' },
+  { value: 'diamond ear cuff, edgy',                                                label: 'Diamond Ear Cuff' },
   { value: 'layered gold chains, textured',                                         label: 'Layered Gold Chains' },
   { value: 'diamond tennis necklace',                                               label: 'Tennis Necklace' },
-  { value: 'gold love bracelet, textured bangle, luxury finish',                     label: 'Gold Love Bracelet' },
+  { value: 'clover pendant necklace, delicate gold, fine jewelry',                  label: 'Clover Pendant' },
+  { value: 'gold love bracelet, textured bangle, luxury finish',                    label: 'Gold Love Bracelet' },
+  { value: 'diamond tennis bracelet',                                               label: 'Tennis Bracelet' },
   { value: 'luxury gold watch, premium timepiece, polished case',                   label: 'Luxury Watch' },
-  { value: 'clover pendant necklace, delicate gold, fine jewelry',                  label: 'Clover Pendant Necklace' },
   { value: 'stacked gold rings, editorial',                                         label: 'Stacked Gold Rings' },
   { value: 'body chain, gold delicate',                                             label: 'Delicate Body Chain' },
   { value: 'full luxury set: necklace, earrings, bracelet, rings',                  label: 'Full Luxury Set' },
   { value: 'pearl accents, modern',                                                 label: 'Modern Pearls' },
-  { value: 'diamond ear cuff, edgy',                                                label: 'Diamond Ear Cuff' },
 ];
 
+export const JEWELRY_MEN = [
+  { value: 'None', label: 'None / Minimal' },
+  { value: 'single gold chain, clean and simple',                                   label: 'Single Gold Chain' },
+  { value: 'layered gold chains, two or three — stacked',                           label: 'Layered Gold Chains' },
+  { value: 'thick Cuban link chain, gold',                                          label: 'Cuban Link Chain' },
+  { value: 'rope chain, gold, medium thickness',                                    label: 'Rope Chain' },
+  { value: 'cross pendant on gold chain',                                           label: 'Cross Pendant' },
+  { value: 'luxury gold watch, premium timepiece, polished case',                   label: 'Luxury Watch' },
+  { value: 'gold ID bracelet, clean',                                               label: 'Gold ID Bracelet' },
+  { value: 'gold chain bracelet, simple',                                           label: 'Gold Chain Bracelet' },
+  { value: 'beaded bracelet, natural stones — subtle',                              label: 'Beaded Bracelet' },
+  { value: 'diamond stud, single ear, small and clean',                             label: 'Diamond Stud — one ear' },
+  { value: 'gold chain and watch combo — stacked',                                  label: 'Chain + Watch Combo' },
+];
+
+// Combined for unspecified gender
+export const JEWELRY_OPTIONS = [
+  { value: 'None', label: 'None / Minimal' },
+  ...JEWELRY_WOMEN.filter(j => j.value !== 'None'),
+  ...JEWELRY_MEN.filter(j => j.value !== 'None'),
+];
+
+export const CLOTHING_WOMEN = [
+  { value: 'Unspecified', label: 'Unspecified' },
+  // — Casual —
+  { value: 'fitted white tee, high-waist dark jeans, clean sneakers, minimal gold jewelry',                                                  label: 'Casual — jeans + tee' },
+  { value: 'denim maxi skirt, fitted tank top, sneakers, gold jewelry — casual cool',                                                         label: 'Denim Maxi Skirt' },
+  { value: 'tennis skirt, cropped hoodie, platform sneakers, minimal accessories — sport luxe',                                               label: 'Tennis Skirt + Hoodie' },
+  { value: 'vintage denim jacket, straight-leg jeans, fitted white tee, ankle boots',                                                         label: 'Elevated Denim' },
+  // — Athleisure —
+  { value: 'matching athletic set, sports bra, biker shorts, sleek sneakers',                                                                  label: 'Athleisure — athletic set' },
+  { value: 'fitted seamless bodysuit, cycling shorts, oversized hoodie, clean sneakers, gold hoops — no logos, no text on clothing',           label: 'Elevated Athleisure — Seamless Set' },
+  // — Brunch & daytime —
+  { value: 'flowy floral mini sundress, strappy sandals, dainty gold jewelry, sunglasses',                                                     label: 'Sundress — casual chic' },
+  { value: 'linen coord set, strappy mules, sun hat, gold necklace — elevated summer daytime',                                                 label: 'Summer Brunch — linen' },
+  { value: 'wrap dress, midi length, cinched waist, strappy heels — feminine and polished',                                                    label: 'Wrap Dress — midi' },
+  { value: 'two-piece ribbed knit coord set, fitted top and wide-leg bottoms, heels',                                                          label: 'Knit Coord Set' },
+  { value: 'sheer printed blouse, wide-leg silk trousers, strappy heels, minimal jewelry — luxe daytime',                                      label: 'Sheer Blouse + Silk Trousers' },
+  // — Evening & night out —
+  { value: 'satin slip dress, strappy stiletto heels, diamond studs, sleek clutch — elegant and alluring',                                     label: 'Date Night — satin slip' },
+  { value: 'fitted little black dress, pointed-toe pumps, minimal gold jewelry — classic and polished',                                        label: 'LBD — classic' },
+  { value: 'bodycon ruched dress, strappy heels, bold jewelry — night out energy',                                                             label: 'Bodycon Ruched Dress' },
+  { value: 'chic tailored blazer over a bodysuit, wide-leg trousers, heels, bold statement earrings',                                          label: 'Night Out — blazer moment' },
+  { value: 'oversized blazer dress, belt, knee-high boots — power feminine',                                                                   label: 'Blazer Dress + Knee Boots' },
+  { value: 'corset top, high-waist wide-leg trousers, heels — fashion forward',                                                                label: 'Corset + Wide-Leg Trousers' },
+  { value: 'crystal-embellished mini dress, platform stilettos, full glam makeup, bold jewelry',                                               label: 'Club Ready — crystal mini' },
+  { value: 'sequin mini dress, heels, bold lip, statement jewelry — high-energy glam',                                                         label: 'Party Glam — sequin' },
+  // — Business —
+  { value: 'fitted blazer, tailored trousers, silk blouse, block heels — polished and professional',                                           label: 'Business Casual — blazer' },
+  { value: 'structured monochrome suit, pointed pumps, minimal accessories — commanding',                                                       label: 'Power Suit — monochrome' },
+  { value: 'pencil skirt, tucked silk blouse, pointed heels, structured bag — corporate chic',                                                  label: 'Corporate Chic — pencil skirt' },
+  // — Luxury & editorial —
+  { value: 'leather pants, fitted blazer, heels, minimal jewelry — edgy chic',                                                                 label: 'Leather Pants + Blazer' },
+  { value: 'cashmere knit, wide-leg cream trousers, loafers, structured bag — quiet luxury old money',                                          label: 'Old Money — quiet luxury' },
+  { value: 'head-to-toe tonal look, one color palette, minimal accessories — solid fabrics only',                                               label: 'Monochrome Minimal' },
+  { value: 'linen coord set, designer slides, gold jewelry — effortless expensive, no logos',                                                   label: 'Luxury Casual' },
+  { value: 'clean oversized hoodie, relaxed cargo pants, premium chunky sneakers — no logos, no text',                                          label: 'Streetwear Luxury' },
+  { value: 'trench coat, minimal outfit underneath, ankle boots — classic and chic',                                                            label: 'Trench Coat Moment' },
+  { value: 'oversized tailored coat, ribbed turtleneck, knee-high boots, structured bag — cold weather',                                        label: 'Winter Coat Moment' },
+  { value: 'avant-garde structured silhouette, architectural draping — solid fabrics, no visible logos',                                        label: 'High Fashion — architectural' },
+  // — Resort & swim —
+  { value: 'flowy printed maxi dress, woven sun hat, strappy sandals, gold jewelry — resort lifestyle',                                         label: 'Resort Glam' },
+  { value: 'designer bikini, lightweight sarong wrap, oversized sunglasses, gold body jewelry',                                                  label: 'Beach — designer bikini' },
+  { value: 'luxury one-piece swimsuit, designer slides, oversized beach hat, linen cover-up',                                                   label: 'Poolside — luxury one-piece' },
+  { value: 'high-end bikini or one-piece, resort lifestyle, body confidence, luxury vacation',                                                   label: 'Swimwear — resort luxury' },
+  // — Vibe & era —
+  { value: 'Y2K revival: low-rise jeans, rhinestone crop top, butterfly clips, platform sandals',                                               label: 'Y2K Glam — revival' },
+  { value: 'silk robe, fitted lace bodysuit, soft natural confidence, tasteful studio look',                                                     label: 'Studio Editorial — silk robe' },
+  { value: 'designer intimates set, lace bodysuit, tasteful and elegant',                                                                        label: 'Intimates Editorial' },
+];
+
+export const CLOTHING_MEN = [
+  { value: 'Unspecified', label: 'Unspecified' },
+  // — Casual streetwear —
+  { value: 'fitted clean white tee, dark slim jeans, clean white sneakers, minimal gold chain — effortless casual',                             label: 'Casual Streetwear' },
+  { value: 'denim jacket, plain white tee, slim jeans, white sneakers — clean americana',                                                       label: 'Denim Jacket + Jeans' },
+  { value: 'fitted crewneck sweater, slim chinos, clean sneakers — everyday elevated',                                                          label: 'Crewneck + Chinos' },
+  { value: 'cargo pants, fitted plain tee, chunky sneakers, minimal accessories — urban',                                                       label: 'Cargo + Tee' },
+  { value: 'bomber jacket, slim dark jeans, crisp plain tee, fresh sneakers — street ready',                                                    label: 'Bomber + Denim' },
+  { value: 'varsity jacket, plain white tee, slim dark jeans, clean sneakers',                                                                  label: 'Varsity Jacket' },
+  { value: 'coach jacket, fitted plain tee, athletic pants, clean sneakers — street luxury',                                                    label: 'Coach Jacket — street luxury' },
+  // — Elevated streetwear —
+  { value: 'premium hoodie in solid neutral tone, relaxed joggers, clean sneakers, no logos — elevated streetwear',                             label: 'Elevated Streetwear — hoodie' },
+  { value: 'luxury tracksuit in solid color, clean sneakers, no logos — athleisure',                                                            label: 'Luxury Tracksuit' },
+  { value: 'clean oversized hoodie, relaxed cargo pants, premium sneakers — no logos, no text',                                                 label: 'Streetwear Luxury' },
+  // — Smart casual —
+  { value: 'polo shirt, tailored chinos, clean leather loafers — smart casual',                                                                 label: 'Polo + Chinos' },
+  { value: 'button-up shirt, open collar, tucked into dark trousers, leather loafers — polished casual',                                        label: 'Button-Up + Trousers' },
+  { value: 'linen shirt, tailored chinos, leather loafers, simple watch — quiet luxury',                                                        label: 'Old Money Linen' },
+  { value: 'linen coord set (matching shirt and trousers), loafers, no undershirt — summer luxury',                                             label: 'Linen Coord Set' },
+  { value: 'luxury knit sweater, tailored trousers, Chelsea boots — elevated casual',                                                           label: 'Knit Sweater + Trousers' },
+  // — Business —
+  { value: 'tailored slim suit, no tie, crisp dress shirt open at collar, oxford shoes — sharp',                                                label: 'Tailored Suit' },
+  { value: 'business casual: fitted blazer, chinos, loafers, clean watch, no tie',                                                              label: 'Business Casual' },
+  { value: 'all-black outfit: slim trousers, fitted turtleneck, clean leather shoes — monochrome',                                              label: 'Monochrome Black' },
+  // — Luxury editorial —
+  { value: 'leather jacket, white tee, black slim jeans, boots — classic cool',                                                                 label: 'Leather Jacket' },
+  { value: 'structured overcoat, turtleneck, slim trousers, leather boots — winter luxury',                                                     label: 'Overcoat Editorial' },
+  // — Resort & summer —
+  { value: 'designer short set (matching shorts and shirt), premium sneakers, gold chain — summer luxury',                                       label: 'Designer Short Set' },
+  { value: 'swim trunks, no shirt, sun-kissed skin, poolside or beach — lifestyle',                                                             label: 'Poolside / Beach' },
+];
+
+// Combined export for contexts where gender isn't specified
 export const CLOTHING_VIBES = [
   { value: 'Unspecified', label: 'Unspecified' },
-  { value: 'casual: fitted white tee, high-waist dark jeans, clean sneakers, minimal accessories',                            label: 'Casual — jeans + tee' },
-  { value: 'athleisure: matching athletic set, sports bra, biker shorts, sleek sneakers',                                     label: 'Athleisure — athletic set' },
-  { value: 'fitted seamless bodysuit, cycling shorts, oversized hoodie, clean sneakers, gold hoops — no logos, no text on clothing',    label: 'Elevated Athleisure — Seamless Set' },
-  { value: 'flowy floral mini sundress, strappy sandals, dainty gold jewelry, sunglasses',                                    label: 'Sundress — casual chic' },
-  { value: 'linen coord set, strappy mules, sun hat, gold necklace — elevated summer daytime',                                label: 'Summer Brunch — linen' },
-  { value: 'vintage denim jacket, straight-leg jeans, fitted white tee, ankle boots',                                         label: 'Elevated Denim' },
-  { value: 'satin slip dress, strappy stiletto heels, diamond studs, sleek clutch — elegant and alluring',                    label: 'Date Night — satin slip' },
-  { value: 'fitted little black dress, pointed-toe pumps, minimal gold jewelry — classic and polished',                       label: 'LBD — classic' },
-  { value: 'chic tailored blazer over a bodysuit, wide-leg trousers, heels, bold statement earrings',                         label: 'Night Out — blazer moment' },
-  { value: 'crystal-embellished mini dress, platform stilettos, full glam makeup, bold jewelry',                              label: 'Club Ready — crystal mini' },
-  { value: 'sequin mini dress, heels, bold lip, statement jewelry — high-energy glam',                                        label: 'Party Glam — sequin' },
-  { value: 'fitted blazer, tailored trousers, silk blouse, block heels — polished and professional',                          label: 'Business Casual — blazer' },
-  { value: 'structured monochrome suit, no undershirt, pointed pumps, minimal accessories — commanding',                      label: 'Power Suit — monochrome' },
-  { value: 'pencil skirt, tucked silk blouse, pointed heels, structured bag — corporate chic',                                label: 'Corporate Chic — pencil skirt' },
-  { value: 'streetwear luxury: clean oversized hoodie in a solid neutral tone, relaxed cargo pants, premium chunky sneakers — no logos, no text, no graphics',                     label: 'Streetwear Luxury' },
-  { value: 'high fashion editorial: avant-garde structured silhouette, architectural draping, fashion week styling — solid fabrics, no visible logos or text',                      label: 'High Fashion — editorial' },
-  { value: 'cashmere knit, wide-leg cream trousers, loafers, structured bag — quiet luxury old money',                        label: 'Old Money — quiet luxury' },
-  { value: 'head-to-toe tonal look, architectural clean lines, one color palette, minimal accessories — solid fabrics only',   label: 'Monochrome Minimal' },
-  { value: 'structured woven bag, linen coord set, designer slides, gold jewelry — effortless expensive, no logos',           label: 'Luxury Casual' },
-  { value: 'flowy printed maxi dress, woven sun hat, strappy sandals, gold jewelry — resort lifestyle',                       label: 'Resort Glam' },
-  { value: 'designer bikini, lightweight sarong wrap, oversized sunglasses, gold body jewelry',                                label: 'Beach — designer bikini' },
-  { value: 'luxury one-piece swimsuit, designer slides, oversized beach hat, linen cover-up',                                 label: 'Poolside — luxury one-piece' },
-  { value: 'oversized tailored coat, ribbed turtleneck, knee-high boots, structured bag — cold weather editorial',            label: 'Winter Coat Moment' },
-  { value: 'Y2K revival: low-rise jeans, rhinestone crop top, butterfly clips, platform sandals',                             label: 'Y2K Glam — revival' },
-  { value: 'silk robe, fitted lace bodysuit, soft natural confidence, tasteful editorial studio pose',                         label: 'Studio Editorial — silk robe' },
-  { value: 'designer intimates set, lace bodysuit and brief set, tasteful editorial styling — elegant and editorial',          label: 'Intimates Editorial' },
-  { value: 'high-end bikini or one-piece, resort lifestyle shoot, body confidence, luxury vacation',                          label: 'Swimwear — resort luxury' },
-  // — Men's looks —
-  { value: 'men: fitted clean white tee, dark slim jeans, clean white sneakers, minimal gold chain — effortless casual',       label: 'Men — Casual Streetwear' },
-  { value: 'men: premium hoodie in solid neutral tone, relaxed joggers, clean sneakers, no logos — elevated streetwear',       label: 'Men — Elevated Streetwear' },
-  { value: 'men: cargo pants, graphic-free fitted tee, chunky sneakers, minimal accessories — urban editorial',                label: 'Men — Urban Editorial' },
-  { value: 'men: tailored slim suit, no tie, crisp dress shirt open at collar, oxford shoes — sharp and polished',             label: 'Men — Tailored Suit' },
-  { value: 'men: all-black outfit, slim trousers, fitted turtleneck, clean leather shoes — sleek monochrome',                  label: 'Men — Monochrome Black' },
-  { value: 'men: linen shirt, tailored chinos, leather loafers, simple watch — quiet luxury old money',                       label: 'Men — Old Money Linen' },
-  { value: 'men: designer short set, premium sneakers, gold chain — summer luxury lifestyle',                                  label: 'Men — Designer Short Set' },
-  { value: 'men: swim trunks, sun-kissed skin, no shirt, poolside or beach — lifestyle editorial',                             label: 'Men — Poolside / Beach' },
-  { value: 'men: luxury tracksuit in solid color, clean sneakers, no logos — athleisure editorial',                            label: 'Men — Luxury Tracksuit' },
-  { value: 'men: bomber jacket, slim dark jeans, crisp tee, fresh sneakers — street ready',                                   label: 'Men — Bomber + Denim' },
-  { value: 'men: structured overcoat, turtleneck, slim trousers, leather boots — winter editorial',                            label: 'Men — Overcoat Editorial' },
-  { value: 'men: business casual — fitted blazer, chinos, loafers, clean watch, no tie',                                      label: 'Men — Business Casual' },
+  ...CLOTHING_WOMEN.filter(c => c.value !== 'Unspecified'),
+  ...CLOTHING_MEN.filter(c => c.value !== 'Unspecified'),
 ];
 
 export const SPECIAL_FEATURES = [
@@ -182,23 +286,56 @@ export const SPECIAL_FEATURES = [
 
 export const GENDERS = ['Unspecified', 'Woman', 'Man', 'Non-binary', 'Femme', 'Androgynous'].map(v => ({ value: v, label: v }));
 
+export const PHYSIQUE_MEN = [
+  { value: 'Unspecified', label: 'Unspecified' },
+  { value: 'athletic muscular build, broad shoulders, defined chest and arms',           label: 'Athletic / Muscular' },
+  { value: 'tall lean athletic build, long limbs, naturally defined physique',            label: 'Tall & Lean' },
+  { value: 'stocky powerful build, thick neck, wide frame, solid presence',              label: 'Stocky / Powerful' },
+  { value: 'slim trim build, clean silhouette, clothes hang perfectly',                  label: 'Slim / Trim' },
+  { value: 'average everyday build, natural relaxed frame, approachable',                label: 'Average / Everyday' },
+  { value: 'dad bod, soft natural build, confident and comfortable',                     label: 'Dad Bod' },
+];
+
+export const PHYSIQUE_WOMEN = [
+  { value: 'Unspecified', label: 'Unspecified' },
+  { value: 'curvy hourglass figure, full hips, defined waist, confident stance',         label: 'Curvy / Hourglass' },
+  { value: 'slim petite frame, delicate proportions, graceful posture',                  label: 'Slim / Petite' },
+  { value: 'tall model frame, long legs, editorial proportions',                         label: 'Tall / Model Frame' },
+  { value: 'athletic toned build, visible arm definition, active lifestyle energy',      label: 'Athletic / Toned' },
+  { value: 'full-figured plus size build, curves, confident and powerful presence',      label: 'Plus Size / Full-Figured' },
+  { value: 'average natural build, relatable proportions, authentic presence',           label: 'Average / Natural' },
+];
+
 export const PHYSIQUE = [
   { value: 'Unspecified', label: 'Unspecified' },
-  // Men
-  { value: 'athletic muscular build, broad shoulders, defined chest and arms',           label: 'Men — Athletic / Muscular' },
-  { value: 'tall lean athletic build, long limbs, naturally defined physique',            label: 'Men — Tall & Lean' },
-  { value: 'stocky powerful build, thick neck, wide frame, solid presence',              label: 'Men — Stocky / Powerful' },
-  { value: 'slim trim build, clean silhouette, clothes hang perfectly',                  label: 'Men — Slim / Trim' },
-  { value: 'average everyday build, natural relaxed frame, approachable',                label: 'Men — Average / Everyday' },
-  { value: 'dad bod, soft natural build, confident and comfortable',                     label: 'Men — Dad Bod' },
-  // Women
-  { value: 'curvy hourglass figure, full hips, defined waist, confident stance',         label: 'Women — Curvy / Hourglass' },
-  { value: 'slim petite frame, delicate proportions, graceful posture',                  label: 'Women — Slim / Petite' },
-  { value: 'tall model frame, long legs, editorial proportions',                         label: 'Women — Tall / Model Frame' },
-  { value: 'athletic toned build, visible arm definition, active lifestyle energy',      label: 'Women — Athletic / Toned' },
-  { value: 'full-figured plus size build, curves, confident and powerful presence',      label: 'Women — Plus Size / Full-Figured' },
-  { value: 'average natural build, relatable proportions, authentic presence',           label: 'Women — Average / Natural' },
+  ...PHYSIQUE_MEN.filter(p => p.value !== 'Unspecified').map(p => ({ ...p, label: `Men — ${p.label}` })),
+  ...PHYSIQUE_WOMEN.filter(p => p.value !== 'Unspecified').map(p => ({ ...p, label: `Women — ${p.label}` })),
 ];
+
+/** Returns the right options set for a given gender string. */
+export function getPhysiqueOptions(gender) {
+  if (gender === 'Man') return PHYSIQUE_MEN;
+  if (gender === 'Woman') return PHYSIQUE_WOMEN;
+  return PHYSIQUE;
+}
+
+export function getHairStyleOptions(gender) {
+  if (gender === 'Man') return HAIR_STYLES_MEN;
+  if (gender === 'Woman') return HAIR_STYLES_WOMEN;
+  return HAIR_STYLES;
+}
+
+export function getClothingOptions(gender) {
+  if (gender === 'Man') return CLOTHING_MEN;
+  if (gender === 'Woman') return CLOTHING_WOMEN;
+  return CLOTHING_VIBES;
+}
+
+export function getJewelryOptions(gender) {
+  if (gender === 'Man') return JEWELRY_MEN;
+  if (gender === 'Woman') return JEWELRY_WOMEN;
+  return JEWELRY_OPTIONS;
+}
 
 export const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, missing fingers, broken anatomy, unnatural body proportions, stiff pose, flat lighting, harsh flash, oversaturated colors, cluttered background, cartoon styling, floating tattoos, fake jewelry, bad fabric physics, cropped limbs, generic photo, artificial smile, lifeless expression, overprocessed HDR, grainy, noisy, unrealistic skin color, washed-out skin, plastic hair, duplicate body parts, distorted face, text on clothing, visible brand names, graphic prints on garments, fake logos, illegible text, random letters on fabric, misspelled words, hallucinated typography';
 

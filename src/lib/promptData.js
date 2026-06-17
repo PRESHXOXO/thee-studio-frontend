@@ -380,7 +380,7 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     if (hairAccessParts.length) s.push(`HAIR & ACCESSORIES: ${hairAccessParts.join('. ')}.`);
   } else {
     // Standalone talent block — no reference photo, so anchor the model hard
-    s.push('SUBJECT DIRECTION: NOT a generic AI model face. A real, specific person with distinct bone structure, lived-in skin texture, slight natural asymmetry, visible pores, and features that feel individual — not averaged or over-smoothed.');
+    s.push('MEDIUM: This is a real photograph. Not an illustration. Not CGI. Not a digital painting. Not concept art. Not a render. A camera was used. The output must look like a frame pulled from a professional photo shoot.');
 
     const isMale = gender === 'Man';
     const who = gender !== 'Unspecified' ? gender : 'Talent';
@@ -388,8 +388,8 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     if (skinTone !== 'Unspecified') talentParts.push(`${skinTone} complexion, realistic skin texture with visible pores and natural tone variation`);
     if (eyeDetail !== 'Unspecified') talentParts.push(`${eyeDetail} eyes, sharp and dimensional`);
     const basePresence = isMale
-      ? 'Natural masculine facial structure — strong jaw, full face, real proportions. Short groomed beard or clean-shaven. Grounded confident expression, not forced. The face of a real man, not a fashion model — broader, athletic, lived-in.'
-      : 'Natural facial structure with real bone structure and expressive eyes. Grounded confident expression. Not a model-perfect face — individual features, real character, not AI-averaged beauty.';
+      ? 'Photograph of a real man — not illustrated, not rendered, not a character. Ordinary masculine face with natural imperfections: slight asymmetry, realistic skin texture, natural pores, real eye whites. Grounded confident expression. Could be your neighbor, a friend, a coworker — real and specific, not a designed hero face.'
+      : 'Photograph of a real woman — not illustrated, not rendered. Natural facial structure with real bone structure, slight asymmetry, expressive eyes. Grounded confident expression. Individual features that feel specific — not AI-averaged or over-smoothed.';
     s.push(`TALENT: ${who}. ${talentParts.join('. ')}${talentParts.length ? '. ' : ''}${basePresence}.`);
 
     const presenceParts = [];
@@ -442,7 +442,7 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
 
   s.push('LIGHTING: Soft dimensional natural or studio lighting. Light wraps realistically around the subject. Warm refined color grading.');
   s.push('CAMERA & DETAIL: Shot on Canon EOS R5 with 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face, hair, jewelry, and styling details.');
-  s.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. Hair has individual strand detail and natural movement. Jewelry catches light realistically. No AI over-smoothing. No plastic skin. No wax finish. No studio-generic backdrop.');
+  s.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. Hair has individual strand detail and natural movement. Jewelry catches light realistically. No AI over-smoothing. No plastic skin. No wax finish. No studio-generic backdrop. NOT illustrated. NOT CGI. NOT a render. NOT digital art. Photographic only.');
   s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography.');
 
   return s.join('\n\n');

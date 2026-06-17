@@ -259,12 +259,18 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     if (physique !== 'Unspecified') {
       presenceParts.push(physique);
     } else if (isMale) {
-      presenceParts.push('Athletic build — broad shoulders, muscular arms, naturally fit. Clothes fit his body, not a hanger.');
+      presenceParts.push('Real masculine physique — choose a believable build: athletic, lean, stocky, or average. Not a runway model. Clothes fit his actual body.');
     }
     if (features !== 'None') presenceParts.push(features);
     if (presenceParts.length) s.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
 
-    if (clothing !== 'Unspecified') s.push(`OUTFIT: ${clothing}.`);
+    if (clothing !== 'Unspecified') {
+      s.push(`OUTFIT: ${clothing}. Fabric has real weight and texture — accurate drape, natural folds, no stiff or plastic-looking material.`);
+    } else if (isMale) {
+      s.push('OUTFIT: Choose a specific, complete outfit that feels real — fitted tee and dark jeans, a tailored suit, a premium hoodie and sweats, a linen shirt and chinos, or a bomber with dark jeans. Fabric has real weight and texture. No logos, no text on clothing.');
+    } else {
+      s.push('OUTFIT: Choose a specific, complete outfit that feels real — a slip dress, blazer set, matching coord, satin dress, or elevated casual look. Fabric has real weight and texture. No logos, no text on clothing.');
+    }
 
     const hairAccessParts = [];
     if (hairStyle !== 'Unspecified' || hairColor !== 'Unspecified') {
@@ -275,12 +281,17 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     if (hairAccessParts.length) s.push(`HAIR & ACCESSORIES: ${hairAccessParts.join('. ')}.`);
   }
 
+  const isMaleForScene = gender === 'Man' || (character?.fields?.gender === 'Man');
   if (scene && scene !== 'None') {
-    const isMale = gender === 'Man' || (character?.fields?.gender === 'Man');
-    const sceneExtra = isMale
+    const sceneExtra = isMaleForScene
       ? 'Real environment, not a studio backdrop. Authentic architectural detail, dark hardwood or concrete floors, warm ambient light through large windows, premium interior elements visible in background.'
       : 'Real environment, not a studio backdrop. Premium authentic architectural detail, controlled depth, genuine environmental context.';
     s.push(`SCENE: ${scene}. ${sceneExtra}`);
+  } else {
+    const defaultScene = isMaleForScene
+      ? 'SCENE: Choose a real, specific environment — luxury hotel lobby, city street, rooftop terrace, modern apartment interior, or upscale restaurant. Real architectural detail, warm natural or ambient light. Not a plain studio backdrop.'
+      : 'SCENE: Choose a real, specific environment — rooftop terrace at sunset, luxury apartment, upscale restaurant, city street, or boutique interior. Real architectural detail, natural or warm ambient light. Not a plain studio backdrop.';
+    s.push(defaultScene);
   }
   if (vision) s.push(`ART DIRECTION: ${vision}`);
 

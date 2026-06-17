@@ -294,7 +294,7 @@ export async function generateImage({
   performanceMode = 'Balanced',
   comfyServerUrl = 'http://127.0.0.1:8188',
   comfyWorkflowPath = '',
-  imageStyle = 'Editorial Portrait',
+  imageStyle = 'Lifestyle Creator',
   positivePrompt = '',
   negativePrompt = '',
   imageSize = 'Vertical 9:16',

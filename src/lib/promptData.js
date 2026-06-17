@@ -337,6 +337,18 @@ export function getJewelryOptions(gender) {
   return JEWELRY_OPTIONS;
 }
 
+export const CONTENT_NICHES = [
+  'Fashion & Style', 'Fitness & Wellness', 'Beauty & Glam',
+  'Lifestyle & Travel', 'Food & Culinary', 'Music & Entertainment',
+  'Business & Finance', 'Sports & Athletics', 'Art & Photography', 'Gaming & Tech',
+];
+
+export const STYLE_DIRECTIONS = [
+  'Editorial Luxury', 'Street & Urban', 'Soft & Romantic', 'Dark & Moody',
+  'Clean & Minimal', 'Bold & Vibrant', 'Natural & Earthy', 'Cinematic',
+  'High Fashion', 'Vintage & Retro',
+];
+
 export const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, missing fingers, broken anatomy, unnatural body proportions, stiff pose, flat lighting, harsh flash, oversaturated colors, cluttered background, cartoon styling, floating tattoos, fake jewelry, bad fabric physics, cropped limbs, generic photo, artificial smile, lifeless expression, overprocessed HDR, grainy, noisy, unrealistic skin color, washed-out skin, plastic hair, duplicate body parts, distorted face, text on clothing, visible brand names, graphic prints on garments, fake logos, illegible text, random letters on fabric, misspelled words, hallucinated typography';
 
 export function buildStructuredVision({ vision = '', gender = 'Unspecified', physique = 'Unspecified', skinTone = 'Unspecified', hairStyle = 'Unspecified', hairColor = 'Unspecified', eyeDetail = 'Unspecified', jewelry = 'None', clothing = 'Unspecified', features = 'None', mood = 'Clean', contentType = 'Portrait', scene = 'None', character = null, shootHairStyle = 'Unspecified', shootHairColor = 'Unspecified', shootJewelry = 'None', outfitPhotoDesc = '' } = {}) {

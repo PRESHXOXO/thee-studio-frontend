@@ -9,7 +9,8 @@ import { saveToLibrary } from '../lib/library.js';
 import {
   GENDERS, SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES,
   LOCATIONS, STANDARD_NEGATIVE, buildStructuredVision, buildFluxVision,
-  getHairStyleOptions, getClothingOptions, getJewelryOptions,
+  getHairStyleOptions, getClothingOptions, getJewelryOptions, getPhysiqueOptions,
+  CONTENT_NICHES, STYLE_DIRECTIONS,
 } from '../lib/promptData.js';
 import { ImageLightbox } from '../components/feedback/ImageLightbox.jsx';
 
@@ -162,7 +163,7 @@ export function ImageGenerator({ initialPrompts, onNav }) {
   const [aiGenHairSt,   setAiGenHairSt]   = React.useState('Unspecified');
   const [aiGenHairCo,   setAiGenHairCo]   = React.useState('Unspecified');
   const [aiGenEye,      setAiGenEye]      = React.useState('Unspecified');
-  const [aiGenBody,     setAiGenBody]     = React.useState('');
+  const [aiGenBody,     setAiGenBody]     = React.useState('Unspecified');
   const [aiGenFeatures, setAiGenFeatures] = React.useState('None');
   const [aiGenJewelry,  setAiGenJewelry]  = React.useState('None');
   const [aiGenClothing, setAiGenClothing] = React.useState('Unspecified');
@@ -183,13 +184,15 @@ export function ImageGenerator({ initialPrompts, onNav }) {
   const jewelryOptions       = getJewelryOptions('Unspecified');
 
   const handleAiGenGenderChange = (newGender) => {
-    const newHair    = getHairStyleOptions(newGender).find(o => o.value === aiGenHairSt)   ? aiGenHairSt   : 'Unspecified';
-    const newClothing= getClothingOptions(newGender).find(o => o.value === aiGenClothing)  ? aiGenClothing : 'Unspecified';
-    const newJewelry = getJewelryOptions(newGender).find(o => o.value === aiGenJewelry)    ? aiGenJewelry  : 'None';
+    const newHair     = getHairStyleOptions(newGender).find(o => o.value === aiGenHairSt)  ? aiGenHairSt   : 'Unspecified';
+    const newClothing = getClothingOptions(newGender).find(o => o.value === aiGenClothing) ? aiGenClothing : 'Unspecified';
+    const newJewelry  = getJewelryOptions(newGender).find(o => o.value === aiGenJewelry)   ? aiGenJewelry  : 'None';
+    const newBody     = getPhysiqueOptions(newGender).find(o => o.value === aiGenBody)      ? aiGenBody     : 'Unspecified';
     setAiGenGender(newGender);
     setAiGenHairSt(newHair);
     setAiGenClothing(newClothing);
     setAiGenJewelry(newJewelry);
+    setAiGenBody(newBody);
   };
 
   // Smooth progress animation for AI generation
@@ -287,7 +290,7 @@ export function ImageGenerator({ initialPrompts, onNav }) {
       faceAnchor: aiGenAnchor,
       refImages: compressed,
       locked: true,
-      fields: { tone: aiGenSkin !== 'Unspecified' ? aiGenSkin : '', hair: aiGenHairSt !== 'Unspecified' ? aiGenHairSt : '', face: aiGenEye !== 'Unspecified' ? aiGenEye : '', body: aiGenBody || '', wardrobe: aiGenClothing !== 'Unspecified' ? aiGenClothing : '', personality: aiGenVision || '', niche: aiGenNiche || '' },
+      fields: { tone: aiGenSkin !== 'Unspecified' ? aiGenSkin : '', hair: aiGenHairSt !== 'Unspecified' ? aiGenHairSt : '', face: aiGenEye !== 'Unspecified' ? aiGenEye : '', body: aiGenBody !== 'Unspecified' ? aiGenBody : '', wardrobe: aiGenClothing !== 'Unspecified' ? aiGenClothing : '', personality: aiGenVision || '', niche: aiGenNiche || '' },
     };
     try {
       const existing = JSON.parse(localStorage.getItem('ts_characters') || '[]');
@@ -472,26 +475,34 @@ export function ImageGenerator({ initialPrompts, onNav }) {
                 <Select value={aiGenJewelry} onChange={setAiGenJewelry} options={aiGenJewelryOptions} />
               </div>
             </div>
-            {/* Row 5: Body + Niche */}
+            {/* Row 5: Body + Clothing */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <div style={LABEL}>Body / Build</div>
-                <input value={aiGenBody} onChange={e => setAiGenBody(e.target.value)} placeholder="e.g. slim, curvy, athletic, petite…" style={INPUT_STYLE} />
+                <div style={LABEL}>Their Build</div>
+                <Select value={aiGenBody} onChange={setAiGenBody} options={getPhysiqueOptions(aiGenGender)} />
               </div>
               <div>
-                <div style={LABEL}>Content Niche</div>
-                <input value={aiGenNiche} onChange={e => setAiGenNiche(e.target.value)} placeholder="e.g. fashion, fitness, beauty, lifestyle…" style={INPUT_STYLE} />
+                <div style={LABEL}>Signature Look / Clothing</div>
+                <Select value={aiGenClothing} onChange={setAiGenClothing} options={aiGenClothingOptions} />
               </div>
             </div>
-            {/* Row 6: Clothing */}
+            {/* Row 6: Their World (Content Niche pills) */}
             <div>
-              <div style={LABEL}>Signature Look / Clothing</div>
-              <Select value={aiGenClothing} onChange={setAiGenClothing} options={aiGenClothingOptions} />
+              <div style={LABEL}>Their World</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                {CONTENT_NICHES.map(n => (
+                  <Pill key={n} label={n} active={aiGenNiche === n} onClick={() => setAiGenNiche(aiGenNiche === n ? '' : n)} />
+                ))}
+              </div>
             </div>
-            {/* Row 7: Vision */}
+            {/* Row 7: Their Energy (Style Direction pills) */}
             <div>
-              <div style={LABEL}>Vision / Style Direction</div>
-              <input value={aiGenVision} onChange={e => setAiGenVision(e.target.value)} placeholder="e.g. Editorial luxury, sophisticated energy, warm and approachable…" style={INPUT_STYLE} />
+              <div style={LABEL}>Their Energy</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                {STYLE_DIRECTIONS.map(d => (
+                  <Pill key={d} label={d} active={aiGenVision === d} onClick={() => setAiGenVision(aiGenVision === d ? '' : d)} />
+                ))}
+              </div>
             </div>
 
             {aiGenError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{aiGenError}</p>}
@@ -533,8 +544,11 @@ export function ImageGenerator({ initialPrompts, onNav }) {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
                   {['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'].map((label, i) => (
                     <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                      <div style={{ aspectRatio: '2/3', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--rose-glass)', border: '1px solid var(--border)' }}>
-                        {aiGenImages[i]
+                      <div
+                        onClick={() => aiGenImages[i] && !aiGenImages[i].startsWith('ERROR:') && setLightboxSrc(aiGenImages[i])}
+                        style={{ aspectRatio: '2/3', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--rose-glass)', border: '1px solid var(--border)', cursor: aiGenImages[i] ? 'zoom-in' : 'default' }}
+                      >
+                        {aiGenImages[i] && !aiGenImages[i].startsWith('ERROR:')
                           ? <img src={aiGenImages[i]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={label} />
                           : aiGenLoading && <div style={{ width: '100%', height: '100%', background: 'var(--grad-portrait)', opacity: 0.4 }} />
                         }

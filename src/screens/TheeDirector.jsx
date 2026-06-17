@@ -477,7 +477,9 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
     onNav && onNav('characters');
   };
 
-  const subjectDisabled = !!selectedChar;
+  // Fields locked per-character: Gender, Skin Tone, Eye Detail, Body Build
+  const identityLocked = !!selectedChar;
+  const LOCKED_STYLE = { opacity: 0.45, pointerEvents: 'none' };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
@@ -498,277 +500,284 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
         </Card>
       )}
 
-      {/* 3-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, alignItems: 'start' }}>
+      {/* Subject Details */}
+      <Card style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 style={LABEL}>Subject Details</h3>
+          {identityLocked && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, font: 'var(--text-xs)', color: 'var(--accent-deep)', background: 'var(--rose-deep)', padding: '3px 8px', borderRadius: 'var(--radius-pill)' }}>
+              <Icon name="lock" size={11} /> Identity locked · {selectedChar.name}
+            </span>
+          )}
+        </div>
 
-        {/* Col 1: Subject Details */}
-        <Card style={{ display: 'flex', flexDirection: 'column', gap: 14, opacity: subjectDisabled ? 0.45 : 1, transition: 'opacity var(--t-base)', pointerEvents: subjectDisabled ? 'none' : 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h3 style={LABEL}>Subject Details</h3>
-            {subjectDisabled && (
-              <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)', background: 'var(--rose-deep)', padding: '3px 8px', borderRadius: 'var(--radius-pill)' }}>
-                Using {selectedChar.name}
-              </span>
-            )}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        {/* Locked: Gender + Skin Tone */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={identityLocked ? LOCKED_STYLE : {}}>
             <Field label="Gender"><Select value={gender} onChange={handleGenderChange} options={GENDERS} /></Field>
+          </div>
+          <div style={identityLocked ? LOCKED_STYLE : {}}>
             <Field label="Skin Tone"><Select value={skinTone} onChange={setSkinTone} options={SKIN_TONES} placeholder="Select…" /></Field>
           </div>
-          <Field label="Body Type / Build"><Select value={physique} onChange={setPhysique} options={physiqueOptions} placeholder="Select…" /></Field>
+        </div>
+
+        {/* Locked: Body Build + Eyes */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={identityLocked ? LOCKED_STYLE : {}}>
+            <Field label="Body Type / Build"><Select value={physique} onChange={setPhysique} options={physiqueOptions} placeholder="Select…" /></Field>
+          </div>
+          <div style={identityLocked ? LOCKED_STYLE : {}}>
+            <Field label="Eyes"><Select value={eyeDetail} onChange={setEyeDetail} options={EYE_DETAILS} placeholder="Select…" /></Field>
+          </div>
+        </div>
+
+        {identityLocked && (
+          <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 5, marginTop: -4 }}>
+            <Icon name="info" size={11} /> Gender, skin tone, eyes, and body build are locked to {selectedChar.name}'s identity.
+          </div>
+        )}
+
+        {/* Editable: Hair + Jewelry + Clothing */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field label="Hair Style"><Select value={hairStyle} onChange={setHairStyle} options={hairStyleOptions} placeholder="Select…" /></Field>
           <Field label="Hair Color"><Select value={hairColor} onChange={setHairColor} options={HAIR_COLORS} placeholder="Select…" /></Field>
-          <Field label="Eyes"><Select value={eyeDetail} onChange={setEyeDetail} options={EYE_DETAILS} placeholder="Select…" /></Field>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field label="Jewelry"><Select value={jewelry} onChange={setJewelry} options={jewelryOptions} /></Field>
-          <Field label="Clothing / Brand Vibe"><Select value={clothing} onChange={setClothing} options={clothingOptions} placeholder="Select…" /></Field>
           <Field label="Special Features"><Select value={features} onChange={setFeatures} options={SPECIAL_FEATURES} /></Field>
+        </div>
+        <Field label="Clothing / Brand Vibe"><Select value={clothing} onChange={setClothing} options={clothingOptions} placeholder="Select…" /></Field>
 
-          {/* Shoot Styling — shown when character selected */}
-          {selectedChar && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ ...LABEL }}>Shoot Styling</div>
-                <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)', background: 'var(--rose-deep)', padding: '2px 7px', borderRadius: 'var(--radius-pill)' }}>
-                  overrides {selectedChar.name}'s defaults
-                </span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <Field label="Hair Style">
-                  <Select value={shootHairStyle} onChange={setShootHairStyle} options={hairStyleOptions} placeholder="Keep default…" />
-                </Field>
-                <Field label="Hair Color">
-                  <Select value={shootHairColor} onChange={setShootHairColor} options={HAIR_COLORS} placeholder="Keep default…" />
-                </Field>
-              </div>
-              <Field label="Jewelry">
-                <Select value={shootJewelry} onChange={setShootJewelry} options={jewelryOptions} />
+        {/* Shoot Styling overrides — only when character selected */}
+        {selectedChar && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={LABEL}>Shoot Styling</div>
+              <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)', background: 'var(--rose-deep)', padding: '2px 7px', borderRadius: 'var(--radius-pill)' }}>
+                overrides {selectedChar.name}'s defaults
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="Hair Style">
+                <Select value={shootHairStyle} onChange={setShootHairStyle} options={hairStyleOptions} placeholder="Keep default…" />
               </Field>
-              {/* Outfit photo upload */}
-              <input ref={outfitFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleOutfitPhotoUpload} />
-              {outfitPhotoUrl ? (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                  <div style={{ position: 'relative', flexShrink: 0 }}>
-                    <img src={outfitPhotoUrl} alt="Outfit" style={{ width: 52, height: 70, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }} />
-                    <button
-                      onClick={clearOutfitPhoto}
-                      style={{ position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%', background: 'var(--cherry)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 10, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-                    >✕</button>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {outfitPhotoAnalyzing ? (
-                      <p style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>Analyzing outfit…</p>
-                    ) : outfitPhotoDesc ? (
-                      <div style={{ padding: '8px 10px', background: 'var(--rose-glass)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                        <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 4 }}>Outfit Detected</div>
-                        <p style={{ font: 'var(--text-xs)', color: 'var(--text-body)', margin: 0, lineHeight: 1.5 }}>{outfitPhotoDesc}</p>
-                      </div>
-                    ) : null}
-                  </div>
+              <Field label="Hair Color">
+                <Select value={shootHairColor} onChange={setShootHairColor} options={HAIR_COLORS} placeholder="Keep default…" />
+              </Field>
+            </div>
+            <Field label="Jewelry">
+              <Select value={shootJewelry} onChange={setShootJewelry} options={jewelryOptions} />
+            </Field>
+            <input ref={outfitFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleOutfitPhotoUpload} />
+            {outfitPhotoUrl ? (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <img src={outfitPhotoUrl} alt="Outfit" style={{ width: 52, height: 70, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }} />
+                  <button onClick={clearOutfitPhoto} style={{ position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%', background: 'var(--cherry)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 10, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>✕</button>
                 </div>
-              ) : (
-                <button
-                  onClick={() => outfitFileRef.current?.click()}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 7,
-                    padding: '8px 12px', borderRadius: 'var(--radius-md)',
-                    border: '1.5px dashed var(--border)', background: 'transparent',
-                    color: 'var(--text-muted)', cursor: 'pointer',
-                    font: '500 0.8rem/1 var(--font-ui)', fontFamily: 'inherit',
-                    transition: 'border-color var(--t-fast)',
-                    width: '100%', justifyContent: 'center',
-                  }}
-                >
-                  <Icon name="upload" size={13} /> Upload Outfit Photo
-                </button>
-              )}
-            </div>
-          )}
-        </Card>
-
-        {/* Col 2: Direction Controls */}
-        <Card style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <h3 style={LABEL}>Direction Controls</h3>
-
-          <Field label="Vision" hint="Set the creative direction in your own words.">
-            <textarea
-              value={vision}
-              onChange={e => setVision(e.target.value)}
-              placeholder="e.g. Rooftop golden hour, quiet confidence, aspirational street energy…"
-              rows={3}
-              style={{
-                width: '100%', boxSizing: 'border-box', resize: 'vertical',
-                padding: '9px 12px', borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border)', background: 'var(--surface)',
-                color: 'var(--text-strong)', font: 'var(--text-sm)',
-                fontFamily: 'inherit', lineHeight: 1.5, outline: 'none',
-              }}
-            />
-          </Field>
-
-          <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>Shot Type</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-              {SHOT_TYPES.map(s => (
-                <button key={s} onClick={() => setContentType(s)} style={{
-                  padding: '6px 13px', borderRadius: 'var(--radius-pill)',
-                  border: `1.5px solid ${contentType === s ? 'var(--accent-deep)' : 'var(--border)'}`,
-                  background: contentType === s ? 'var(--rose-deep)' : 'transparent',
-                  color: contentType === s ? 'var(--accent-deep)' : 'var(--text-muted)',
-                  font: '500 0.78rem/1 var(--font-ui)', cursor: 'pointer',
-                  transition: 'all var(--t-fast)',
-                }}>{s}</button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>Energy</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-              {ENERGIES.map(e => (
-                <button key={e} onClick={() => setMood(e)} style={{
-                  padding: '6px 13px', borderRadius: 'var(--radius-pill)',
-                  border: `1.5px solid ${mood === e ? 'var(--accent-deep)' : 'var(--border)'}`,
-                  background: mood === e ? 'var(--rose-deep)' : 'transparent',
-                  color: mood === e ? 'var(--accent-deep)' : 'var(--text-muted)',
-                  font: '500 0.78rem/1 var(--font-ui)', cursor: 'pointer',
-                  transition: 'all var(--t-fast)',
-                }}>{e}</button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>Lighting</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-              {LIGHTINGS.map(l => (
-                <button key={l} onClick={() => setLighting(l)} style={{
-                  padding: '6px 13px', borderRadius: 'var(--radius-pill)',
-                  border: `1.5px solid ${lighting === l ? 'var(--accent-deep)' : 'var(--border)'}`,
-                  background: lighting === l ? 'var(--rose-deep)' : 'transparent',
-                  color: lighting === l ? 'var(--accent-deep)' : 'var(--text-muted)',
-                  font: '500 0.78rem/1 var(--font-ui)', cursor: 'pointer',
-                  transition: 'all var(--t-fast)',
-                }}>{l}</button>
-              ))}
-            </div>
-          </div>
-
-          <Field label="Scene">
-            <Select value={scene} onChange={setScene} options={LOCATIONS} />
-          </Field>
-
-          <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>Build Mode</div>
-            <PillToggle options={BUILD_MODES} value={buildMode} onChange={setBuildMode} />
-          </div>
-
-          {error && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
-
-          <Button variant="primary" loading={loading} onClick={handleBuild} style={{ width: '100%' }}>
-            <Icon name={BUILD_MODES.find(m => m.id === buildMode)?.icon || 'zap'} size={15} />
-            {loading ? 'Building…' : 'Build Direction'}
-          </Button>
-
-          {outputs?.positivePrompt && (
-            <Button
-              variant="secondary"
-              onClick={() => onNav && onNav('images', { positivePrompt: outputs.positivePrompt, negativePrompt: outputs.negativePrompt })}
-              style={{ width: '100%' }}
-            >
-              <Icon name="external-link" size={14} /> Open in Generator
-            </Button>
-          )}
-        </Card>
-
-        {/* Col 3: Build Prompt + Generate */}
-        <Card style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'sticky', top: 24 }}>
-          <h3 style={LABEL}>Build Prompt</h3>
-
-          <PromptOutput
-            label="Positive Prompt"
-            value={outputs?.positivePrompt}
-            placeholder="Your positive prompt will appear here after building."
-            maxHeight={200}
-          />
-          <PromptOutput
-            label="Negative Prompt"
-            value={outputs?.negativePrompt}
-            placeholder="Your negative prompt will appear here after building."
-            maxHeight={100}
-          />
-
-          {outputs?.recommendedEngine && (
-            <div style={{ padding: '10px 14px', background: 'var(--rose-glass)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-              <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Recommended Engine</div>
-              <div style={{ font: '600 0.9375rem/1.4 var(--font-ui)', color: 'var(--text-strong)' }}>{outputs.recommendedEngine}</div>
-              {outputs.reason && <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 4 }}>{outputs.reason}</div>}
-            </div>
-          )}
-
-          {outputs?.positivePrompt && (
-            <>
-              <Button
-                variant="primary"
-                loading={generating}
-                onClick={handleGenerate}
-                style={{ width: '100%' }}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {outfitPhotoAnalyzing ? (
+                    <p style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>Analyzing outfit…</p>
+                  ) : outfitPhotoDesc ? (
+                    <div style={{ padding: '8px 10px', background: 'var(--rose-glass)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                      <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 4 }}>Outfit Detected</div>
+                      <p style={{ font: 'var(--text-xs)', color: 'var(--text-body)', margin: 0, lineHeight: 1.5 }}>{outfitPhotoDesc}</p>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => outfitFileRef.current?.click()}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '8px 12px', borderRadius: 'var(--radius-md)',
+                  border: '1.5px dashed var(--border)', background: 'transparent',
+                  color: 'var(--text-muted)', cursor: 'pointer',
+                  font: '500 0.8rem/1 var(--font-ui)', fontFamily: 'inherit',
+                  width: '100%', justifyContent: 'center',
+                }}
               >
-                <Icon name="sparkles" size={15} />
-                {generating ? 'Generating…' : selectedChar && getCharacterImage(selectedChar) ? `Generate as ${selectedChar.name}` : 'Generate Here'}
+                <Icon name="upload" size={13} /> Upload Outfit Photo
+              </button>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* Direction Controls */}
+      <Card style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <h3 style={LABEL}>Direction Controls</h3>
+
+        <Field label="Vision" hint="Set the creative direction in your own words.">
+          <textarea
+            value={vision}
+            onChange={e => setVision(e.target.value)}
+            placeholder="e.g. Rooftop golden hour, quiet confidence, aspirational street energy…"
+            rows={3}
+            style={{
+              width: '100%', boxSizing: 'border-box', resize: 'vertical',
+              padding: '9px 12px', borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border)', background: 'var(--surface)',
+              color: 'var(--text-strong)', font: 'var(--text-sm)',
+              fontFamily: 'inherit', lineHeight: 1.5, outline: 'none',
+            }}
+          />
+        </Field>
+
+        <div>
+          <div style={{ ...LABEL, marginBottom: 10 }}>Shot Type</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+            {SHOT_TYPES.map(s => (
+              <button key={s} onClick={() => setContentType(s)} style={{
+                padding: '6px 13px', borderRadius: 'var(--radius-pill)',
+                border: `1.5px solid ${contentType === s ? 'var(--accent-deep)' : 'var(--border)'}`,
+                background: contentType === s ? 'var(--rose-deep)' : 'transparent',
+                color: contentType === s ? 'var(--accent-deep)' : 'var(--text-muted)',
+                font: '500 0.78rem/1 var(--font-ui)', cursor: 'pointer',
+                transition: 'all var(--t-fast)',
+              }}>{s}</button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div style={{ ...LABEL, marginBottom: 10 }}>Energy</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+            {ENERGIES.map(e => (
+              <button key={e} onClick={() => setMood(e)} style={{
+                padding: '6px 13px', borderRadius: 'var(--radius-pill)',
+                border: `1.5px solid ${mood === e ? 'var(--accent-deep)' : 'var(--border)'}`,
+                background: mood === e ? 'var(--rose-deep)' : 'transparent',
+                color: mood === e ? 'var(--accent-deep)' : 'var(--text-muted)',
+                font: '500 0.78rem/1 var(--font-ui)', cursor: 'pointer',
+                transition: 'all var(--t-fast)',
+              }}>{e}</button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div style={{ ...LABEL, marginBottom: 10 }}>Lighting</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+            {LIGHTINGS.map(l => (
+              <button key={l} onClick={() => setLighting(l)} style={{
+                padding: '6px 13px', borderRadius: 'var(--radius-pill)',
+                border: `1.5px solid ${lighting === l ? 'var(--accent-deep)' : 'var(--border)'}`,
+                background: lighting === l ? 'var(--rose-deep)' : 'transparent',
+                color: lighting === l ? 'var(--accent-deep)' : 'var(--text-muted)',
+                font: '500 0.78rem/1 var(--font-ui)', cursor: 'pointer',
+                transition: 'all var(--t-fast)',
+              }}>{l}</button>
+            ))}
+          </div>
+        </div>
+
+        <Field label="Scene">
+          <Select value={scene} onChange={setScene} options={LOCATIONS} />
+        </Field>
+
+        <div>
+          <div style={{ ...LABEL, marginBottom: 10 }}>Build Mode</div>
+          <PillToggle options={BUILD_MODES} value={buildMode} onChange={setBuildMode} />
+        </div>
+
+        {error && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
+
+        <Button variant="primary" loading={loading} onClick={handleBuild} style={{ width: '100%' }}>
+          <Icon name={BUILD_MODES.find(m => m.id === buildMode)?.icon || 'zap'} size={15} />
+          {loading ? 'Building…' : 'Build Direction'}
+        </Button>
+
+        {outputs?.positivePrompt && (
+          <Button
+            variant="secondary"
+            onClick={() => onNav && onNav('images', { positivePrompt: outputs.positivePrompt, negativePrompt: outputs.negativePrompt })}
+            style={{ width: '100%' }}
+          >
+            <Icon name="external-link" size={14} /> Open in Generator
+          </Button>
+        )}
+      </Card>
+
+      {/* Build Prompt + Generate */}
+      <Card style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <h3 style={LABEL}>Build Prompt</h3>
+
+        <PromptOutput
+          label="Positive Prompt"
+          value={outputs?.positivePrompt}
+          placeholder="Your positive prompt will appear here after building."
+          maxHeight={200}
+        />
+        <PromptOutput
+          label="Negative Prompt"
+          value={outputs?.negativePrompt}
+          placeholder="Your negative prompt will appear here after building."
+          maxHeight={100}
+        />
+
+        {outputs?.recommendedEngine && (
+          <div style={{ padding: '10px 14px', background: 'var(--rose-glass)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+            <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Recommended Engine</div>
+            <div style={{ font: '600 0.9375rem/1.4 var(--font-ui)', color: 'var(--text-strong)' }}>{outputs.recommendedEngine}</div>
+            {outputs.reason && <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 4 }}>{outputs.reason}</div>}
+          </div>
+        )}
+
+        {outputs?.positivePrompt && (
+          <>
+            <Button variant="primary" loading={generating} onClick={handleGenerate} style={{ width: '100%' }}>
+              <Icon name="sparkles" size={15} />
+              {generating ? 'Generating…' : selectedChar && getCharacterImage(selectedChar) ? `Generate as ${selectedChar.name}` : 'Generate Here'}
+            </Button>
+            <GenerationProgress
+              active={generating}
+              identityLocked={!!(selectedChar?.locked && getCharacterImage(selectedChar))}
+              engine={outputs?.recommendedEngine || ''}
+              batchSize={1}
+            />
+          </>
+        )}
+
+        {outputs?.positivePrompt && !selectedChar && (
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+            {!showSaveChar ? (
+              <Button variant="secondary" onClick={() => setShowSaveChar(true)} style={{ width: '100%' }}>
+                <Icon name="user-plus" size={14} /> Save as Creator
               </Button>
-              <GenerationProgress
-                active={generating}
-                identityLocked={!!(selectedChar?.locked && getCharacterImage(selectedChar))}
-                engine={outputs?.recommendedEngine || ''}
-                batchSize={1}
-              />
-            </>
-          )}
-
-          {/* Save as Creator — only when building a new subject (no character selected) */}
-          {outputs?.positivePrompt && !selectedChar && (
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-              {!showSaveChar ? (
-                <Button variant="secondary" onClick={() => setShowSaveChar(true)} style={{ width: '100%' }}>
-                  <Icon name="user-plus" size={14} /> Save as Creator
-                </Button>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                    Name this Creator
-                  </div>
-                  <input
-                    autoFocus
-                    value={saveCharName}
-                    onChange={e => setSaveCharName(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleSaveCharacter(); if (e.key === 'Escape') setShowSaveChar(false); }}
-                    placeholder="e.g. Angel, Maya, Jade…"
-                    style={{
-                      width: '100%', boxSizing: 'border-box',
-                      padding: '9px 12px', borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--border)', background: 'var(--input-bg, #fff)',
-                      font: 'var(--text-sm)', color: 'var(--text-body)',
-                      outline: 'none', fontFamily: 'inherit',
-                    }}
-                  />
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <Button variant="primary" onClick={handleSaveCharacter} disabled={!saveCharName.trim()} style={{ flex: 1 }}>
-                      <Icon name="user-check" size={13} /> Save & Go to Characters
-                    </Button>
-                    <Button variant="secondary" onClick={() => { setShowSaveChar(false); setSaveCharName(''); }}>
-                      <Icon name="x" size={13} />
-                    </Button>
-                  </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Name this Creator</div>
+                <input
+                  autoFocus
+                  value={saveCharName}
+                  onChange={e => setSaveCharName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveCharacter(); if (e.key === 'Escape') setShowSaveChar(false); }}
+                  placeholder="e.g. Angel, Maya, Jade…"
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '9px 12px', borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border)', background: 'var(--input-bg, #fff)',
+                    font: 'var(--text-sm)', color: 'var(--text-body)',
+                    outline: 'none', fontFamily: 'inherit',
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button variant="primary" onClick={handleSaveCharacter} disabled={!saveCharName.trim()} style={{ flex: 1 }}>
+                    <Icon name="user-check" size={13} /> Save & Go to Characters
+                  </Button>
+                  <Button variant="secondary" onClick={() => { setShowSaveChar(false); setSaveCharName(''); }}>
+                    <Icon name="x" size={13} />
+                  </Button>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
+        )}
 
-          {genError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>}
-        </Card>
-
-      </div>
+        {genError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>}
+      </Card>
 
       {/* Inline generation results */}
       {genImages.length > 0 && (

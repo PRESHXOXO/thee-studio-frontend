@@ -148,7 +148,6 @@ export function ImageGenerator({ initialPrompts, onNav }) {
   const [vision, setVision]     = React.useState('');
 
   // Build with Thee Studio (AI subject generation) state
-  const [studioOpen,    setStudioOpen]    = React.useState(false);
   const [aiGenName,     setAiGenName]     = React.useState('');
   const [aiGenGender,   setAiGenGender]   = React.useState('Woman');
   const [aiGenSkin,     setAiGenSkin]     = React.useState('Unspecified');
@@ -387,15 +386,8 @@ export function ImageGenerator({ initialPrompts, onNav }) {
       </div>
 
       {/* Build with Thee Studio — AI subject generation */}
-      <Card style={{ padding: 0, overflow: 'hidden' }}>
-        <button
-          onClick={() => setStudioOpen(o => !o)}
-          style={{
-            width: '100%', background: 'none', border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '16px 20px', textAlign: 'left',
-          }}
-        >
+      <Card style={{ padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
           <div style={{
             width: 34, height: 34, borderRadius: 'var(--radius)',
             background: 'var(--rose-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -403,7 +395,7 @@ export function ImageGenerator({ initialPrompts, onNav }) {
           }}>
             <Icon name="wand-2" size={16} strokeWidth={1.75} />
           </div>
-          <div style={{ flex: 1 }}>
+          <div>
             <div style={{ font: '600 0.88rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>
               Build with Thee Studio
               {selectedChar && (
@@ -413,25 +405,12 @@ export function ImageGenerator({ initialPrompts, onNav }) {
               )}
             </div>
             <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 3 }}>
-              {studioOpen
-                ? 'Describe your subject — AI generates 5 reference photos and locks their face for identity-consistent generation'
-                : selectedChar
-                  ? 'Subject locked — generate now or rebuild below'
-                  : 'Build a subject from scratch with AI-generated reference photos'}
+              Describe your subject — AI generates 5 reference photos and locks their face for identity-consistent generation
             </div>
           </div>
-          {selectedChar && !studioOpen && (
-            <div style={{ display: 'flex', gap: 6, marginRight: 8 }}>
-              {selectedChar.refImages?.slice(0, 3).map((img, i) => (
-                <img key={i} src={img} style={{ width: 32, height: 32, borderRadius: 'var(--radius)', objectFit: 'cover', border: '1px solid var(--border)' }} alt="" />
-              ))}
-            </div>
-          )}
-          <Icon name={studioOpen ? 'chevron-up' : 'chevron-down'} size={16} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
-        </button>
+        </div>
 
-        {studioOpen && (
-          <div style={{ borderTop: '1px solid var(--border)', padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Row 1: Name + Gender */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
@@ -561,10 +540,13 @@ export function ImageGenerator({ initialPrompts, onNav }) {
                   <Icon name="refresh-cw" size={14} /> Regenerate
                 </Button>
               )}
-              <Button variant="secondary" onClick={() => setStudioOpen(false)}>Close</Button>
+              {selectedChar && (
+                <Button variant="secondary" onClick={() => setSelectedChar(null)}>
+                  <Icon name="x" size={13} /> Clear Subject
+                </Button>
+              )}
             </div>
           </div>
-        )}
       </Card>
 
       {/* Prompt Builder */}

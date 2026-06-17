@@ -4,7 +4,7 @@ import { Select } from '../components/forms/Select.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
-import { generateImage, characterGenerate, fetchEngineChoices, sanitizeForOpenAI, generateCharacterSeed, generateCharacterVariations } from '../api/studio.js';
+import { generateImage, characterGenerate, fetchEngineChoices, sanitizeForOpenAI, generateCharacterSeed, generateCharacterVariations, generateCharacterVariationShot } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
 import {
   GENDERS, SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES,
@@ -276,29 +276,33 @@ export function ImageGenerator({ initialPrompts, onNav }) {
     }
   };
 
-  // Step 2 — user approved the headshot, fire lock animation then generate
+  // Step 2 — user approved, fire lock animation then generate 4 shots one at a time
   const handleAiGenApprove = async () => {
     if (!aiGenSeed) return;
-    setAiGenLocked(true);   // lock animation starts immediately
+    setAiGenLocked(true);
     setAiGenApproval(false);
     setAiGenLoading(true);
     setAiGenError('');
     setAiGenProgress(0);
+    const shotLabels = ['Bust Up', '¾ Left', '¾ Right', 'Full Body'];
+    const baseParams = {
+      ..._buildAiGenParams(),
+      seedImage: aiGenSeed.image,
+      faceAnchor: aiGenSeed.faceAnchor || '',
+      skinToneLock: aiGenSeed.skinToneLock || '',
+    };
     try {
-      setAiGenStep('Generating casting shots…');
-      const varResult = await generateCharacterVariations({
-        ..._buildAiGenParams(),
-        seedImage: aiGenSeed.image,
-        faceAnchor: aiGenSeed.faceAnchor || '',
-        skinToneLock: aiGenSeed.skinToneLock || '',
-      });
-      const varImages = (varResult.images || []).map(img =>
-        typeof img === 'string' && img.startsWith('ERROR:') ? null : img
-      );
-      const errors = (varResult.images || []).filter(img => typeof img === 'string' && img.startsWith('ERROR:'));
-      if (errors.length) console.warn('Shot errors:', errors);
-      setAiGenImages([aiGenSeed.image, ...varImages]);
-      if (errors.length) setAiGenError(`${errors.length} shot(s) failed: ${errors[0].slice(6, 200)}`);
+      for (let i = 0; i < 4; i++) {
+        setAiGenStep(`Generating ${shotLabels[i]}…`);
+        const result = await generateCharacterVariationShot({ ...baseParams, shotIndex: i });
+        const img = result.image || null;
+        // Append each image as it arrives — seed stays at index 0
+        setAiGenImages(prev => {
+          const next = [...prev];
+          next[i + 1] = img;
+          return next;
+        });
+      }
       setAiGenStep('');
     } catch (e) {
       setAiGenError(e.message || 'Generation failed');

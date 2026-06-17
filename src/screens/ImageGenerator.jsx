@@ -177,6 +177,7 @@ export function ImageGenerator({ initialPrompts, onNav }) {
   const [aiGenProgress,  setAiGenProgress]  = React.useState(0);
   const [aiGenSeed,      setAiGenSeed]      = React.useState(null); // { image, faceAnchor, skinToneLock }
   const [aiGenApproval,  setAiGenApproval]  = React.useState(false); // waiting for user to approve headshot
+  const [aiGenLocked,    setAiGenLocked]    = React.useState(false); // identity lock animation active
 
   const aiGenHairOptions     = getHairStyleOptions(aiGenGender);
   const aiGenClothingOptions = getClothingOptions(aiGenGender);
@@ -257,6 +258,7 @@ export function ImageGenerator({ initialPrompts, onNav }) {
     setAiGenAnchor('');
     setAiGenSeed(null);
     setAiGenApproval(false);
+    setAiGenLocked(false);
     setAiGenProgress(0);
     try {
       setAiGenStep('Generating headshot…');
@@ -274,12 +276,13 @@ export function ImageGenerator({ initialPrompts, onNav }) {
     }
   };
 
-  // Step 2 — user approved the headshot, generate the 4 variations
+  // Step 2 — user approved the headshot, fire lock animation then generate
   const handleAiGenApprove = async () => {
     if (!aiGenSeed) return;
+    setAiGenLocked(true);   // lock animation starts immediately
+    setAiGenApproval(false);
     setAiGenLoading(true);
     setAiGenError('');
-    setAiGenApproval(false);
     setAiGenProgress(0);
     try {
       setAiGenStep('Generating casting shots…');
@@ -566,20 +569,137 @@ export function ImageGenerator({ initialPrompts, onNav }) {
             {aiGenImages.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                  {aiGenApproval ? 'Headshot Preview' : `Reference Photos · ${aiGenImages.length}/5`}
-                  {aiGenAnchor && !aiGenApproval && <span style={{ color: 'var(--accent-deep)', marginLeft: 10 }}>● Face Lock Ready</span>}
+                  {aiGenLocked ? 'Identity Locked' : aiGenApproval ? 'Headshot Preview' : `Reference Photos · ${aiGenImages.length}/5`}
+                  {aiGenAnchor && !aiGenApproval && !aiGenLocked && <span style={{ color: 'var(--accent-deep)', marginLeft: 10 }}>● Face Lock Ready</span>}
                 </div>
-                {aiGenApproval ? (
-                  // Approval view — show headshot prominently, centered
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <div style={{ width: '45%' }}>
+                {(aiGenApproval || aiGenLocked) ? (
+                  // Approval / locked view — headshot centered with optional lock animation
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                    <style>{`
+                      @keyframes ts-scan {
+                        0%   { top: 0%; opacity: 1; }
+                        100% { top: 100%; opacity: 0; }
+                      }
+                      @keyframes ts-lock-pop {
+                        0%   { transform: translate(-50%,-50%) scale(0.4); opacity: 0; }
+                        60%  { transform: translate(-50%,-50%) scale(1.15); opacity: 1; }
+                        80%  { transform: translate(-50%,-50%) scale(0.95); }
+                        100% { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+                      }
+                      @keyframes ts-lock-ring {
+                        0%   { transform: translate(-50%,-50%) scale(1); opacity: 0.7; }
+                        100% { transform: translate(-50%,-50%) scale(2.2); opacity: 0; }
+                      }
+                      @keyframes ts-badge-in {
+                        0%   { opacity: 0; transform: translateY(6px) scale(0.95); }
+                        100% { opacity: 1; transform: translateY(0) scale(1); }
+                      }
+                      @keyframes ts-pulse-glow {
+                        0%, 100% { box-shadow: 0 0 0 0 rgba(220,80,80,0.35); }
+                        50%       { box-shadow: 0 0 0 8px rgba(220,80,80,0); }
+                      }
+                      @keyframes ts-corner-draw {
+                        0%   { stroke-dashoffset: 60; }
+                        100% { stroke-dashoffset: 0; }
+                      }
+                    `}</style>
+
+                    <div style={{ width: '45%', position: 'relative' }}>
+                      {/* Headshot */}
                       <div
-                        onClick={() => setLightboxSrc(aiGenImages[0])}
-                        style={{ aspectRatio: '2/3', borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '2px solid var(--accent-deep)', cursor: 'zoom-in' }}
+                        onClick={() => !aiGenLocked && setLightboxSrc(aiGenImages[0])}
+                        style={{
+                          aspectRatio: '2/3',
+                          borderRadius: 'var(--radius-lg)',
+                          overflow: 'hidden',
+                          border: aiGenLocked ? '2px solid var(--accent-deep)' : '2px solid var(--accent-deep)',
+                          cursor: aiGenLocked ? 'default' : 'zoom-in',
+                          position: 'relative',
+                          animation: aiGenLocked ? 'ts-pulse-glow 2s ease-in-out infinite' : 'none',
+                        }}
                       >
                         <img src={aiGenImages[0]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Headshot" />
+
+                        {/* Scan line — plays once on lock */}
+                        {aiGenLocked && (
+                          <div style={{
+                            position: 'absolute', left: 0, right: 0, height: 3,
+                            background: 'linear-gradient(90deg, transparent, var(--accent-deep), transparent)',
+                            top: 0,
+                            animation: 'ts-scan 0.9s ease-in forwards',
+                            animationDelay: '0.05s',
+                            pointerEvents: 'none',
+                          }} />
+                        )}
+
+                        {/* Corner brackets SVG overlay */}
+                        {aiGenLocked && (
+                          <svg viewBox="0 0 100 150" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+                            {[['0,0','20,0','0,0','0,20'],['80,0','100,0','100,0','100,20'],['0,130','0,150','0,150','20,150'],['80,150','100,150','100,150','100,130']].map(([a,b,c,d], idx) => (
+                              <polyline key={idx} points={`${a} ${b}`} fill="none" stroke="var(--accent-deep)" strokeWidth="3" strokeLinecap="round"
+                                style={{ strokeDasharray: 60, strokeDashoffset: 60, animation: `ts-corner-draw 0.4s ease forwards`, animationDelay: `${0.2 + idx * 0.06}s` }} />
+                            ))}
+                            {[['0,0','0,20'],['80,0','100,0'],['0,130','0,150'],['100,130','100,150']].map(([a,b], idx) => (
+                              <polyline key={`v${idx}`} points={`${a} ${b}`} fill="none" stroke="var(--accent-deep)" strokeWidth="3" strokeLinecap="round"
+                                style={{ strokeDasharray: 60, strokeDashoffset: 60, animation: `ts-corner-draw 0.4s ease forwards`, animationDelay: `${0.22 + idx * 0.06}s` }} />
+                            ))}
+                          </svg>
+                        )}
+
+                        {/* Lock icon pop */}
+                        {aiGenLocked && (
+                          <>
+                            <div style={{
+                              position: 'absolute', top: '50%', left: '50%',
+                              width: 56, height: 56, borderRadius: '50%',
+                              background: 'var(--accent-deep)',
+                              transform: 'translate(-50%,-50%)',
+                              animation: 'ts-lock-ring 0.7s ease-out forwards',
+                              animationDelay: '0.5s',
+                              opacity: 0,
+                              pointerEvents: 'none',
+                            }} />
+                            <div style={{
+                              position: 'absolute', top: '50%', left: '50%',
+                              width: 52, height: 52, borderRadius: '50%',
+                              background: 'rgba(0,0,0,0.72)',
+                              backdropFilter: 'blur(4px)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              animation: 'ts-lock-pop 0.5s cubic-bezier(.34,1.56,.64,1) forwards',
+                              animationDelay: '0.45s',
+                              opacity: 0,
+                              pointerEvents: 'none',
+                            }}>
+                              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2"/>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                              </svg>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
+
+                    {/* Identity locked badge */}
+                    {aiGenLocked && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 7,
+                        padding: '7px 14px', borderRadius: 99,
+                        background: 'var(--rose-deep)',
+                        border: '1px solid var(--accent-deep)',
+                        animation: 'ts-badge-in 0.4s ease forwards',
+                        animationDelay: '0.8s',
+                        opacity: 0,
+                      }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-deep)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2"/>
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                        <span style={{ font: '600 0.75rem/1 var(--font-ui)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent-deep)' }}>
+                          Identity Locked
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>

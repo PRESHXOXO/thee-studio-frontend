@@ -53,6 +53,18 @@ export const HAIR_STYLES = [
   { value: 'long straight, ultra sleek',       label: 'Long Straight — sleek' },
   { value: 'pixie cut',                        label: 'Pixie Cut' },
   { value: 'space buns',                       label: 'Space Buns' },
+  { value: 'low fade, clean lined',            label: 'Low Fade — Men' },
+  { value: 'high fade with waves on top',      label: 'High Fade + Waves — Men' },
+  { value: 'taper fade, fresh edge up',        label: 'Taper Fade — Men' },
+  { value: 'low cut cesar, waves 360',         label: '360 Waves — Men' },
+  { value: 'short dreadlocks, neat',           label: 'Short Locs — Men' },
+  { value: 'medium dreadlocks, free-hanging',  label: 'Medium Locs — Men' },
+  { value: 'braids with fade',                 label: 'Braids + Fade — Men' },
+  { value: 'cornrows, straight back',          label: 'Cornrows — straight back' },
+  { value: 'low cut natural afro, shaped',     label: 'Low Natural — Men' },
+  { value: 'buzz cut, clean',                  label: 'Buzz Cut' },
+  { value: 'curly top with fade',              label: 'Curly Top + Fade — Men' },
+  { value: 'textured crop, modern',            label: 'Textured Crop — Men' },
 ];
 
 export const HAIR_COLORS = [
@@ -138,6 +150,19 @@ export const CLOTHING_VIBES = [
   { value: 'silk robe, fitted lace bodysuit, soft natural confidence, tasteful editorial studio pose',                         label: 'Studio Editorial — silk robe' },
   { value: 'designer intimates set, lace bodysuit and brief set, tasteful editorial styling — elegant and editorial',          label: 'Intimates Editorial' },
   { value: 'high-end bikini or one-piece, resort lifestyle shoot, body confidence, luxury vacation',                          label: 'Swimwear — resort luxury' },
+  // — Men's looks —
+  { value: 'men: fitted clean white tee, dark slim jeans, clean white sneakers, minimal gold chain — effortless casual',       label: 'Men — Casual Streetwear' },
+  { value: 'men: premium hoodie in solid neutral tone, relaxed joggers, clean sneakers, no logos — elevated streetwear',       label: 'Men — Elevated Streetwear' },
+  { value: 'men: cargo pants, graphic-free fitted tee, chunky sneakers, minimal accessories — urban editorial',                label: 'Men — Urban Editorial' },
+  { value: 'men: tailored slim suit, no tie, crisp dress shirt open at collar, oxford shoes — sharp and polished',             label: 'Men — Tailored Suit' },
+  { value: 'men: all-black outfit, slim trousers, fitted turtleneck, clean leather shoes — sleek monochrome',                  label: 'Men — Monochrome Black' },
+  { value: 'men: linen shirt, tailored chinos, leather loafers, simple watch — quiet luxury old money',                       label: 'Men — Old Money Linen' },
+  { value: 'men: designer short set, premium sneakers, gold chain — summer luxury lifestyle',                                  label: 'Men — Designer Short Set' },
+  { value: 'men: swim trunks, sun-kissed skin, no shirt, poolside or beach — lifestyle editorial',                             label: 'Men — Poolside / Beach' },
+  { value: 'men: luxury tracksuit in solid color, clean sneakers, no logos — athleisure editorial',                            label: 'Men — Luxury Tracksuit' },
+  { value: 'men: bomber jacket, slim dark jeans, crisp tee, fresh sneakers — street ready',                                   label: 'Men — Bomber + Denim' },
+  { value: 'men: structured overcoat, turtleneck, slim trousers, leather boots — winter editorial',                            label: 'Men — Overcoat Editorial' },
+  { value: 'men: business casual — fitted blazer, chinos, loafers, clean watch, no tie',                                      label: 'Men — Business Casual' },
 ];
 
 export const SPECIAL_FEATURES = [

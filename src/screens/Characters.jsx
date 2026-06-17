@@ -81,6 +81,18 @@ const QUICK_OUTFITS = [
   { id: 'cozy_winter',      label: 'Winter Coat',            prompt: 'oversized tailored coat, turtleneck, knee-high boots, structured bag — cold weather editorial' },
   { id: 'y2k',              label: 'Y2K',                    prompt: 'Y2K revival: low-rise jeans, rhinestone crop top, butterfly clips, platform sandals' },
   { id: 'boudoir',          label: 'Studio Editorial',       prompt: 'silk robe, fitted lace bodysuit, soft natural confidence — tasteful editorial studio look' },
+  // — Men's looks —
+  { id: 'men_casual',       label: 'Men — Casual',           prompt: 'fitted white tee, dark slim jeans, clean white sneakers, minimal gold chain — effortless casual' },
+  { id: 'men_streetwear',   label: 'Men — Streetwear',       prompt: 'premium hoodie in solid neutral tone, relaxed joggers, clean sneakers — no logos, elevated streetwear' },
+  { id: 'men_suit',         label: 'Men — Suit',             prompt: 'tailored slim suit, no tie, crisp dress shirt open at collar, oxford shoes — sharp and polished' },
+  { id: 'men_monochrome',   label: 'Men — All Black',        prompt: 'all-black outfit, slim trousers, fitted turtleneck, clean leather shoes — sleek monochrome' },
+  { id: 'men_linen',        label: 'Men — Old Money',        prompt: 'linen shirt, tailored chinos, leather loafers, simple watch — quiet luxury old money' },
+  { id: 'men_designer_set', label: 'Men — Designer Set',     prompt: 'designer short set in solid color, premium sneakers, gold chain — summer luxury lifestyle' },
+  { id: 'men_poolside',     label: 'Men — Poolside',         prompt: 'swim trunks, sun-kissed skin, no shirt — poolside or beach lifestyle editorial' },
+  { id: 'men_tracksuit',    label: 'Men — Tracksuit',        prompt: 'luxury tracksuit in solid color, clean sneakers, no logos — athleisure editorial' },
+  { id: 'men_bomber',       label: 'Men — Bomber',           prompt: 'bomber jacket, slim dark jeans, crisp tee, fresh sneakers — street ready' },
+  { id: 'men_overcoat',     label: 'Men — Overcoat',         prompt: 'structured overcoat, turtleneck, slim trousers, leather boots — winter editorial' },
+  { id: 'men_biz',          label: 'Men — Business',         prompt: 'fitted blazer, chinos, loafers, clean watch, no tie — business casual' },
 ];
 
 function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverride = null, mode = 'lifestyle') {

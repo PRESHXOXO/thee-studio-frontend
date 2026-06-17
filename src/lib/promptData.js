@@ -246,17 +246,14 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     s.push('SUBJECT DIRECTION: NOT a generic AI model face. A real, specific person with distinct bone structure, lived-in skin texture, slight natural asymmetry, visible pores, and features that feel individual — not averaged or over-smoothed.');
 
     const isMale = gender === 'Man';
-    const hasSubject = gender !== 'Unspecified' || skinTone !== 'Unspecified' || eyeDetail !== 'Unspecified';
-    if (hasSubject) {
-      const who = gender !== 'Unspecified' ? gender : 'Talent';
-      const talentParts = [];
-      if (skinTone !== 'Unspecified') talentParts.push(`${skinTone} complexion, realistic skin texture with visible pores and natural tone variation`);
-      if (eyeDetail !== 'Unspecified') talentParts.push(`${eyeDetail} eyes, sharp and dimensional`);
-      const basePresence = isMale
-        ? 'Strong natural facial structure, sharp jawline, short groomed beard or clean-shaven, grounded masculine expression — confident but not forced. Not a model-perfect face — a real person with character.'
-        : 'Natural facial structure with real bone structure and expressive eyes. Grounded confident expression. Not a model-perfect face — individual features, real character, not AI-averaged beauty.';
-      s.push(`TALENT: ${who}. ${talentParts.join('. ')}${talentParts.length ? '. ' : ''}${basePresence}.`);
-    }
+    const who = gender !== 'Unspecified' ? gender : 'Talent';
+    const talentParts = [];
+    if (skinTone !== 'Unspecified') talentParts.push(`${skinTone} complexion, realistic skin texture with visible pores and natural tone variation`);
+    if (eyeDetail !== 'Unspecified') talentParts.push(`${eyeDetail} eyes, sharp and dimensional`);
+    const basePresence = isMale
+      ? 'Strong natural facial structure, sharp jawline, defined cheekbones, short groomed beard or clean-shaven, grounded masculine expression — confident but not forced. Not a model-perfect face — a real man with character, distinct features, and lived-in skin.'
+      : 'Natural facial structure with real bone structure and expressive eyes. Grounded confident expression. Not a model-perfect face — individual features, real character, not AI-averaged beauty.';
+    s.push(`TALENT: ${who}. ${talentParts.join('. ')}${talentParts.length ? '. ' : ''}${basePresence}.`);
 
     const presenceParts = [];
     if (physique !== 'Unspecified') presenceParts.push(physique);

@@ -116,18 +116,23 @@ function PromptBuilder({ engine, onApply, onCharChange }) {
   const isFlux = engine?.toLowerCase().includes('flux');
 
   // Filtered options based on selected gender
-  const physiqueOptions = getPhysiqueOptions(gender);
+  const physiqueOptions  = getPhysiqueOptions(gender);
   const hairStyleOptions = getHairStyleOptions(gender);
   const clothingOptions  = getClothingOptions(gender);
   const jewelryOptions   = getJewelryOptions(gender);
 
-  // When gender changes, reset fields whose current value belongs to the wrong gender set
-  React.useEffect(() => {
-    if (!physiqueOptions.find(o => o.value === physique))  setPhysique('Unspecified');
-    if (!hairStyleOptions.find(o => o.value === hairStyle)) setHairStyle('Unspecified');
-    if (!clothingOptions.find(o => o.value === clothing))   setClothing('Unspecified');
-    if (!jewelryOptions.find(o => o.value === jewelry))     setJewelry('None');
-  }, [gender]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Handle gender change: update gender and immediately reset any incompatible field values
+  const handleGenderChange = (newGender) => {
+    const newPhysique  = getPhysiqueOptions(newGender).find(o => o.value === physique)  ? physique  : 'Unspecified';
+    const newHairStyle = getHairStyleOptions(newGender).find(o => o.value === hairStyle) ? hairStyle : 'Unspecified';
+    const newClothing  = getClothingOptions(newGender).find(o => o.value === clothing)   ? clothing  : 'Unspecified';
+    const newJewelry   = getJewelryOptions(newGender).find(o => o.value === jewelry)     ? jewelry   : 'None';
+    setGender(newGender);
+    setPhysique(newPhysique);
+    setHairStyle(newHairStyle);
+    setClothing(newClothing);
+    setJewelry(newJewelry);
+  };
 
   React.useEffect(() => {
     onCharChange?.(selectedChar);
@@ -189,7 +194,7 @@ function PromptBuilder({ engine, onApply, onCharChange }) {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
                 <div>
                   <div style={LABEL}>Gender</div>
-                  <Select value={gender} onChange={setGender} options={GENDERS} />
+                  <Select value={gender} onChange={handleGenderChange} options={GENDERS} />
                 </div>
                 <div>
                   <div style={LABEL}>Skin Tone</div>

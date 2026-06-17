@@ -242,7 +242,9 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     if (jewelryUsed) hairAccessParts.push(`Accessories: ${jewelryUsed}`);
     if (hairAccessParts.length) s.push(`HAIR & ACCESSORIES: ${hairAccessParts.join('. ')}.`);
   } else {
-    // Standalone talent block
+    // Standalone talent block — no reference photo, so anchor the model hard
+    s.push('SUBJECT DIRECTION: NOT a generic AI model face. A real, specific person with distinct bone structure, lived-in skin texture, slight natural asymmetry, visible pores, and features that feel individual — not averaged or over-smoothed.');
+
     const isMale = gender === 'Man';
     const hasSubject = gender !== 'Unspecified' || skinTone !== 'Unspecified' || eyeDetail !== 'Unspecified';
     if (hasSubject) {
@@ -251,8 +253,8 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
       if (skinTone !== 'Unspecified') talentParts.push(`${skinTone} complexion, realistic skin texture with visible pores and natural tone variation`);
       if (eyeDetail !== 'Unspecified') talentParts.push(`${eyeDetail} eyes, sharp and dimensional`);
       const basePresence = isMale
-        ? 'Strong natural facial structure, sharp jawline, short groomed beard or clean-shaven, grounded masculine expression — confident but not forced'
-        : 'Natural facial structure, expressive eyes, grounded confident expression';
+        ? 'Strong natural facial structure, sharp jawline, short groomed beard or clean-shaven, grounded masculine expression — confident but not forced. Not a model-perfect face — a real person with character.'
+        : 'Natural facial structure with real bone structure and expressive eyes. Grounded confident expression. Not a model-perfect face — individual features, real character, not AI-averaged beauty.';
       s.push(`TALENT: ${who}. ${talentParts.join('. ')}${talentParts.length ? '. ' : ''}${basePresence}.`);
     }
 
@@ -275,8 +277,8 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
   if (scene && scene !== 'None') {
     const isMale = gender === 'Man' || (character?.fields?.gender === 'Man');
     const sceneExtra = isMale
-      ? 'Authentic architectural detail, dark hardwood or concrete floors, warm ambient light through large windows, premium interior elements visible in background.'
-      : 'Premium environment, authentic architectural detail, controlled depth.';
+      ? 'Real environment, not a studio backdrop. Authentic architectural detail, dark hardwood or concrete floors, warm ambient light through large windows, premium interior elements visible in background.'
+      : 'Real environment, not a studio backdrop. Premium authentic architectural detail, controlled depth, genuine environmental context.';
     s.push(`SCENE: ${scene}. ${sceneExtra}`);
   }
   if (vision) s.push(`ART DIRECTION: ${vision}`);
@@ -291,7 +293,7 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
 
   s.push('LIGHTING: Soft dimensional natural or studio lighting. Light wraps realistically around the subject. Warm refined color grading.');
   s.push('CAMERA & DETAIL: Shot on Canon EOS R5 with 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face, hair, jewelry, and styling details.');
-  s.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. Hair has individual strand detail and natural movement. Jewelry reflects light accurately.');
+  s.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. Hair has individual strand detail and natural movement. Jewelry catches light realistically. No AI over-smoothing. No plastic skin. No wax finish. No studio-generic backdrop.');
   s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a luxury campaign.');
 
   return s.join('\n\n');

@@ -169,12 +169,14 @@ export function ImageGenerator({ initialPrompts, onNav }) {
   const [aiGenClothing, setAiGenClothing] = React.useState('Unspecified');
   const [aiGenNiche,    setAiGenNiche]    = React.useState('');
   const [aiGenVision,   setAiGenVision]   = React.useState('');
-  const [aiGenStep,     setAiGenStep]     = React.useState('');
-  const [aiGenImages,   setAiGenImages]   = React.useState([]);
-  const [aiGenAnchor,   setAiGenAnchor]   = React.useState('');
-  const [aiGenLoading,  setAiGenLoading]  = React.useState(false);
-  const [aiGenError,    setAiGenError]    = React.useState('');
-  const [aiGenProgress, setAiGenProgress] = React.useState(0);
+  const [aiGenStep,      setAiGenStep]      = React.useState('');
+  const [aiGenImages,    setAiGenImages]    = React.useState([]);
+  const [aiGenAnchor,    setAiGenAnchor]    = React.useState('');
+  const [aiGenLoading,   setAiGenLoading]   = React.useState(false);
+  const [aiGenError,     setAiGenError]     = React.useState('');
+  const [aiGenProgress,  setAiGenProgress]  = React.useState(0);
+  const [aiGenSeed,      setAiGenSeed]      = React.useState(null); // { image, faceAnchor, skinToneLock }
+  const [aiGenApproval,  setAiGenApproval]  = React.useState(false); // waiting for user to approve headshot
 
   const aiGenHairOptions     = getHairStyleOptions(aiGenGender);
   const aiGenClothingOptions = getClothingOptions(aiGenGender);
@@ -199,8 +201,9 @@ export function ImageGenerator({ initialPrompts, onNav }) {
   React.useEffect(() => {
     if (!aiGenLoading && aiGenImages.length === 0) { setAiGenProgress(0); return; }
     if (!aiGenLoading) { setAiGenProgress(100); return; }
-    const ceilings = [14, 32, 52, 70, 88, 100];
-    const ceiling  = ceilings[Math.min(aiGenImages.length, 5)];
+    // Step 1 (headshot only): ceiling at 100. Step 2 (4 variations): index into remaining slots.
+    const ceilings = aiGenApproval ? [100] : [14, 32, 52, 70, 88, 100];
+    const ceiling  = aiGenApproval ? 100 : ceilings[Math.min(aiGenImages.length, 5)];
     const id = setInterval(() => {
       setAiGenProgress(prev => {
         if (prev >= ceiling) return prev;
@@ -209,7 +212,7 @@ export function ImageGenerator({ initialPrompts, onNav }) {
       });
     }, 40);
     return () => clearInterval(id);
-  }, [aiGenLoading, aiGenImages.length]);
+  }, [aiGenLoading, aiGenImages.length, aiGenApproval]);
 
   React.useEffect(() => {
     fetchEngineChoices().then(choices => {
@@ -231,45 +234,67 @@ export function ImageGenerator({ initialPrompts, onNav }) {
     if (initialPrompts?.negativePrompt) setNegative(initialPrompts.negativePrompt);
   }, [initialPrompts]);
 
+  const _buildAiGenParams = () => ({
+    name: aiGenName || 'Creator',
+    gender: aiGenGender,
+    skinTone: aiGenSkin,
+    hairStyle: aiGenHairSt,
+    hairColor: aiGenHairCo,
+    eyeDetail: aiGenEye,
+    body: aiGenBody,
+    features: aiGenFeatures,
+    jewelry: aiGenJewelry,
+    clothing: aiGenClothing,
+    niche: aiGenNiche,
+    vision: aiGenVision,
+  });
+
+  // Step 1 — generate headshot only, then wait for approval
   const handleAiGenerate = async () => {
     setAiGenLoading(true);
     setAiGenError('');
     setAiGenImages([]);
     setAiGenAnchor('');
+    setAiGenSeed(null);
+    setAiGenApproval(false);
     setAiGenProgress(0);
-    const params = {
-      name: aiGenName || 'Creator',
-      gender: aiGenGender,
-      skinTone: aiGenSkin,
-      hairStyle: aiGenHairSt,
-      hairColor: aiGenHairCo,
-      eyeDetail: aiGenEye,
-      body: aiGenBody,
-      features: aiGenFeatures,
-      jewelry: aiGenJewelry,
-      clothing: aiGenClothing,
-      niche: aiGenNiche,
-      vision: aiGenVision,
-    };
     try {
       setAiGenStep('Generating headshot…');
-      const seedResult = await generateCharacterSeed(params);
+      const seedResult = await generateCharacterSeed(_buildAiGenParams());
+      setAiGenSeed(seedResult);
       setAiGenImages([seedResult.image]);
       setAiGenAnchor(seedResult.faceAnchor || '');
+      setAiGenApproval(true);
+      setAiGenStep('');
+    } catch (e) {
+      setAiGenError(e.message || 'Generation failed');
+      setAiGenStep('');
+    } finally {
+      setAiGenLoading(false);
+    }
+  };
 
-      setAiGenStep('Generating bust up & 3/4 shots…');
+  // Step 2 — user approved the headshot, generate the 4 variations
+  const handleAiGenApprove = async () => {
+    if (!aiGenSeed) return;
+    setAiGenLoading(true);
+    setAiGenError('');
+    setAiGenApproval(false);
+    setAiGenProgress(0);
+    try {
+      setAiGenStep('Generating casting shots…');
       const varResult = await generateCharacterVariations({
-        ...params,
-        seedImage: seedResult.image,
-        faceAnchor: seedResult.faceAnchor || '',
-        skinToneLock: seedResult.skinToneLock || '',
+        ..._buildAiGenParams(),
+        seedImage: aiGenSeed.image,
+        faceAnchor: aiGenSeed.faceAnchor || '',
+        skinToneLock: aiGenSeed.skinToneLock || '',
       });
       const varImages = (varResult.images || []).map(img =>
         typeof img === 'string' && img.startsWith('ERROR:') ? null : img
       );
       const errors = (varResult.images || []).filter(img => typeof img === 'string' && img.startsWith('ERROR:'));
       if (errors.length) console.warn('Shot errors:', errors);
-      setAiGenImages([seedResult.image, ...varImages]);
+      setAiGenImages([aiGenSeed.image, ...varImages]);
       if (errors.length) setAiGenError(`${errors.length} shot(s) failed: ${errors[0].slice(6, 200)}`);
       setAiGenStep('');
     } catch (e) {
@@ -525,13 +550,15 @@ export function ImageGenerator({ initialPrompts, onNav }) {
                 <div style={{ height: 6, background: 'var(--rose-deep)', borderRadius: 99, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${aiGenProgress}%`, background: 'var(--grad-coral)', borderRadius: 99 }} />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
-                  {['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'].map((label, i) => (
-                    <div key={i} style={{ textAlign: 'center', font: '500 0.6rem/1 var(--font-ui)', letterSpacing: '0.03em', textTransform: 'uppercase', color: aiGenImages[i] ? 'var(--accent-deep)' : 'var(--text-faint)', transition: 'color 0.4s ease' }}>
-                      {label}
-                    </div>
-                  ))}
-                </div>
+                {!aiGenApproval && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+                    {['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'].map((label, i) => (
+                      <div key={i} style={{ textAlign: 'center', font: '500 0.6rem/1 var(--font-ui)', letterSpacing: '0.03em', textTransform: 'uppercase', color: aiGenImages[i] ? 'var(--accent-deep)' : 'var(--text-faint)', transition: 'color 0.4s ease' }}>
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -539,50 +566,88 @@ export function ImageGenerator({ initialPrompts, onNav }) {
             {aiGenImages.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                  Reference Photos · {aiGenImages.length}/5
-                  {aiGenAnchor && <span style={{ color: 'var(--accent-deep)', marginLeft: 10 }}>● Face Lock Ready</span>}
+                  {aiGenApproval ? 'Headshot Preview' : `Reference Photos · ${aiGenImages.length}/5`}
+                  {aiGenAnchor && !aiGenApproval && <span style={{ color: 'var(--accent-deep)', marginLeft: 10 }}>● Face Lock Ready</span>}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
-                  {['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'].map((label, i) => (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {aiGenApproval ? (
+                  // Approval view — show headshot prominently, centered
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <div style={{ width: '45%' }}>
                       <div
-                        onClick={() => aiGenImages[i] && !aiGenImages[i].startsWith('ERROR:') && setLightboxSrc(aiGenImages[i])}
-                        style={{ aspectRatio: '2/3', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--rose-glass)', border: '1px solid var(--border)', cursor: aiGenImages[i] ? 'zoom-in' : 'default' }}
+                        onClick={() => setLightboxSrc(aiGenImages[0])}
+                        style={{ aspectRatio: '2/3', borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '2px solid var(--accent-deep)', cursor: 'zoom-in' }}
                       >
-                        {aiGenImages[i] && !aiGenImages[i].startsWith('ERROR:')
-                          ? <img src={aiGenImages[i]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={label} />
-                          : aiGenLoading && <div style={{ width: '100%', height: '100%', background: 'var(--grad-portrait)', opacity: 0.4 }} />
-                        }
+                        <img src={aiGenImages[0]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Headshot" />
                       </div>
-                      <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.65rem' }}>{label}</div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+                    {['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'].map((label, i) => (
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        <div
+                          onClick={() => aiGenImages[i] && !aiGenImages[i].startsWith('ERROR:') && setLightboxSrc(aiGenImages[i])}
+                          style={{ aspectRatio: '2/3', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--rose-glass)', border: '1px solid var(--border)', cursor: aiGenImages[i] ? 'zoom-in' : 'default' }}
+                        >
+                          {aiGenImages[i] && !aiGenImages[i].startsWith('ERROR:')
+                            ? <img src={aiGenImages[i]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={label} />
+                            : aiGenLoading && <div style={{ width: '100%', height: '100%', background: 'var(--grad-portrait)', opacity: 0.4 }} />
+                          }
+                        </div>
+                        <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.65rem' }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Actions */}
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <Button variant="primary" loading={aiGenLoading} onClick={aiGenImages.length ? handleAiGenUse : handleAiGenerate} disabled={aiGenLoading}>
-                <Icon name={aiGenImages.length ? 'user-check' : 'sparkles'} size={15} style={aiGenLoading ? { animation: 'spin 1s linear infinite' } : {}} />
-                {aiGenLoading ? (aiGenStep || 'Generating…') : aiGenImages.length ? 'Lock Identity' : 'Generate 5 Reference Photos'}
-              </Button>
-              {aiGenImages.length > 0 && !aiGenLoading && (
-                <Button variant="secondary" onClick={handleSaveCreator}>
-                  <Icon name="user-plus" size={14} /> Save Creator
-                </Button>
-              )}
-              {aiGenImages.length > 0 && !aiGenLoading && (
-                <Button variant="secondary" onClick={handleAiGenerate}>
-                  <Icon name="refresh-cw" size={14} /> Regenerate
-                </Button>
-              )}
-              {selectedChar && (
-                <Button variant="secondary" onClick={() => setSelectedChar(null)}>
-                  <Icon name="x" size={13} /> Clear Subject
-                </Button>
-              )}
-            </div>
+            {aiGenApproval && !aiGenLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ font: '600 0.85rem/1.4 var(--font-ui)', color: 'var(--text-strong)' }}>
+                  Is this {aiGenName || 'your creator'}?
+                </div>
+                <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                  Approve the headshot and we'll generate the full casting sheet. Not feeling it? Try again for a new face.
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <Button variant="primary" onClick={handleAiGenApprove}>
+                    <Icon name="check" size={14} /> That's them — generate the rest
+                  </Button>
+                  <Button variant="secondary" onClick={handleAiGenerate}>
+                    <Icon name="refresh-cw" size={14} /> Try again
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {aiGenImages.length <= 1 ? (
+                  <Button variant="primary" loading={aiGenLoading} onClick={handleAiGenerate} disabled={aiGenLoading}>
+                    <Icon name="sparkles" size={15} style={aiGenLoading ? { animation: 'spin 1s linear infinite' } : {}} />
+                    {aiGenLoading ? (aiGenStep || 'Generating…') : 'Generate Headshot'}
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="primary" loading={aiGenLoading} onClick={handleAiGenUse} disabled={aiGenLoading}>
+                      <Icon name="user-check" size={15} />
+                      Lock Identity
+                    </Button>
+                    <Button variant="secondary" onClick={handleSaveCreator} disabled={aiGenLoading}>
+                      <Icon name="user-plus" size={14} /> Save Creator
+                    </Button>
+                    <Button variant="secondary" onClick={handleAiGenerate} disabled={aiGenLoading}>
+                      <Icon name="refresh-cw" size={14} /> Start Over
+                    </Button>
+                  </>
+                )}
+                {selectedChar && (
+                  <Button variant="secondary" onClick={() => setSelectedChar(null)}>
+                    <Icon name="x" size={13} /> Clear Subject
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
       </Card>
 

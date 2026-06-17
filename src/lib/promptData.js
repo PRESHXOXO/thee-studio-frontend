@@ -343,7 +343,7 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
   const s = [];
   const isMale = gender === 'Man' || character?.fields?.gender === 'Man';
 
-  s.push('Ultra-realistic 4K lifestyle and fashion photography for a premium brand campaign. The final image should feel like it was captured by a real photographer on set — polished, natural, dimensional, expensive, and believable. No illustration, no plastic AI finish, no over-stylized fantasy gloss.');
+  s.push('Photorealistic 4K lifestyle and fashion photography for a premium brand campaign. The final image should feel like it was captured by a real photographer on set — polished, natural, dimensional, expensive, and believable. Photorealistic only. No illustration, no plastic AI finish, no over-stylized fantasy gloss.');
 
   if (character) {
     const f = character.fields || {};
@@ -448,20 +448,20 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
   const shootFeelParts = [contentType !== 'Portrait' ? contentType : '', mood !== 'Clean' ? mood : ''].filter(Boolean);
   const shootFeelBase = shootFeelParts.length ? `${shootFeelParts.join(' — ')}. ` : '';
   const shootFeelClose = isMale
-    ? 'Bold beauty with premium brand energy. Aspirational but real. Stylish but not overworked. Masculine, clean, editorial, and expensive without feeling forced.'
-    : 'Premium brand energy. Aspirational but real. Stylish but not overworked. Feminine, clean, editorial, and expensive without feeling forced.';
+    ? 'Bold beauty with premium brand energy. Aspirational but real. Stylish but not overworked. Masculine, clean, polished, and expensive without feeling forced.'
+    : 'Premium brand energy. Aspirational but real. Stylish but not overworked. Feminine, clean, polished, and expensive without feeling forced.';
   s.push(`SHOOT FEEL: ${shootFeelBase}${shootFeelClose}`);
 
   // POSE & COMPOSITION
   const poseDir = isMale
-    ? 'Three-quarter to full-body editorial fashion shot so the outfit reads clearly. Natural grounded posture — leaning against the car or a surface, one hand in pocket, or standing relaxed with weight shifted naturally. Masculine composed energy, relaxed hands, real body balance, and no stiffness.'
-    : 'Three-quarter body editorial portrait so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, relaxed hands, real body balance.';
+    ? 'Three-quarter to full-body fashion photograph so the outfit reads clearly. Natural grounded posture — leaning against the car or a surface, one hand in pocket, or standing relaxed with weight shifted naturally. Masculine composed energy, relaxed hands, real body balance, and no stiffness.'
+    : 'Three-quarter body fashion photograph so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, relaxed hands, real body balance.';
   s.push(`POSE & COMPOSITION: ${poseDir}`);
 
   s.push('LIGHTING: Soft dimensional natural or studio-style lighting that wraps realistically around the subject. Warm refined color grading, natural shadows, believable highlights, and depth in the skin, clothing, jewelry, and any environmental reflections.');
-  s.push('CAMERA & DETAIL: Shot on a Canon EOS R5 with an 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on the face, eyes, hair, jewelry, tattoos, and styling details.');
+  s.push('CAMERA & DETAIL: Shot on a Canon EOS R5, 85mm portrait lens at f/1.4, Kodak Portra 400 film stock rendering. Shallow depth of field with natural bokeh. Crisp focus on the face, eyes, hair, jewelry, tattoos, and styling details. 8K resolution, ultra-detailed skin pores and texture.');
   s.push('QUALITY & TEXTURE: Commercial-level retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds, believable clothing structure, and individual hair strand detail. The image should feel premium and finished without erasing the humanity of the subject. Avoid AI over-smoothing, plastic skin, waxy texture, distorted hands, warped fingers, extra limbs, melted fabric, fake-looking jewelry, stiff clothing, generic faces, and studio-backdrop energy.');
-  s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a premium editorial campaign.');
+  s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a premium campaign.');
 
   return s.join('\n\n');
 }

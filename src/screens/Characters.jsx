@@ -5,7 +5,7 @@ import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 import { analyzeCharacterImage, characterGenerate, extractFaceAnchor, generateCharacterSeed, generateCharacterVariations } from '../api/studio.js';
-import { GENDERS, SKIN_TONES, HAIR_STYLES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, JEWELRY_OPTIONS, CLOTHING_VIBES, STANDARD_NEGATIVE } from '../lib/promptData.js';
+import { GENDERS, SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, STANDARD_NEGATIVE, getHairStyleOptions, getClothingOptions, getJewelryOptions } from '../lib/promptData.js';
 import { Select } from '../components/forms/Select.jsx';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
 
@@ -412,6 +412,21 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [aiGenLoading,  setAiGenLoading]  = React.useState(false);
   const [aiGenError,    setAiGenError]    = React.useState('');
   const [aiGenProgress, setAiGenProgress] = React.useState(0); // smooth 0-100
+
+  // Filtered options for AI Generate form
+  const aiGenHairOptions     = getHairStyleOptions(aiGenGender);
+  const aiGenClothingOptions = getClothingOptions(aiGenGender);
+  const aiGenJewelryOptions  = getJewelryOptions(aiGenGender);
+
+  const handleAiGenGenderChange = (newGender) => {
+    const newHair    = getHairStyleOptions(newGender).find(o => o.value === aiGenHairSt)   ? aiGenHairSt   : 'Unspecified';
+    const newClothing= getClothingOptions(newGender).find(o => o.value === aiGenClothing)  ? aiGenClothing : 'Unspecified';
+    const newJewelry = getJewelryOptions(newGender).find(o => o.value === aiGenJewelry)    ? aiGenJewelry  : 'None';
+    setAiGenGender(newGender);
+    setAiGenHairSt(newHair);
+    setAiGenClothing(newClothing);
+    setAiGenJewelry(newJewelry);
+  };
 
   // Smooth progress animation — ticks toward ceiling, ceiling unlocks as images arrive
   React.useEffect(() => {
@@ -873,7 +888,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
               </div>
               <div>
                 <label style={LABEL}>Gender</label>
-                <Select value={aiGenGender} onChange={setAiGenGender} options={GENDERS} />
+                <Select value={aiGenGender} onChange={handleAiGenGenderChange} options={GENDERS} />
               </div>
             </div>
             {/* Row 2: Skin + Eye */}
@@ -891,7 +906,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={LABEL}>Hair Style</label>
-                <Select value={aiGenHairSt} onChange={setAiGenHairSt} options={HAIR_STYLES} />
+                <Select value={aiGenHairSt} onChange={setAiGenHairSt} options={aiGenHairOptions} />
               </div>
               <div>
                 <label style={LABEL}>Hair Color</label>
@@ -906,7 +921,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
               </div>
               <div>
                 <label style={LABEL}>Signature Jewelry</label>
-                <Select value={aiGenJewelry} onChange={setAiGenJewelry} options={JEWELRY_OPTIONS} />
+                <Select value={aiGenJewelry} onChange={setAiGenJewelry} options={aiGenJewelryOptions} />
               </div>
             </div>
             {/* Row 5: Body + Niche */}
@@ -923,7 +938,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             {/* Row 6: Clothing (full width) */}
             <div>
               <label style={LABEL}>Signature Look / Clothing</label>
-              <Select value={aiGenClothing} onChange={setAiGenClothing} options={CLOTHING_VIBES} />
+              <Select value={aiGenClothing} onChange={setAiGenClothing} options={aiGenClothingOptions} />
             </div>
             {/* Row 7: Vision (full width) */}
             <div>

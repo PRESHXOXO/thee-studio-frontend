@@ -531,22 +531,19 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
           </div>
         </div>
 
-        {identityLocked && (
-          <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 5, marginTop: -4 }}>
-            <Icon name="info" size={11} /> Gender, skin tone, eyes, and body build are locked to {selectedChar.name}'s identity.
-          </div>
+        {!identityLocked && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Field label="Hair Style"><Select value={hairStyle} onChange={setHairStyle} options={hairStyleOptions} placeholder="Select…" /></Field>
+              <Field label="Hair Color"><Select value={hairColor} onChange={setHairColor} options={HAIR_COLORS} placeholder="Select…" /></Field>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Field label="Jewelry"><Select value={jewelry} onChange={setJewelry} options={jewelryOptions} /></Field>
+              <Field label="Special Features"><Select value={features} onChange={setFeatures} options={SPECIAL_FEATURES} /></Field>
+            </div>
+            <Field label="Clothing / Brand Vibe"><Select value={clothing} onChange={setClothing} options={clothingOptions} placeholder="Select…" /></Field>
+          </>
         )}
-
-        {/* Editable: Hair + Jewelry + Clothing */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Field label="Hair Style"><Select value={hairStyle} onChange={setHairStyle} options={hairStyleOptions} placeholder="Select…" /></Field>
-          <Field label="Hair Color"><Select value={hairColor} onChange={setHairColor} options={HAIR_COLORS} placeholder="Select…" /></Field>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Field label="Jewelry"><Select value={jewelry} onChange={setJewelry} options={jewelryOptions} /></Field>
-          <Field label="Special Features"><Select value={features} onChange={setFeatures} options={SPECIAL_FEATURES} /></Field>
-        </div>
-        <Field label="Clothing / Brand Vibe"><Select value={clothing} onChange={setClothing} options={clothingOptions} placeholder="Select…" /></Field>
 
         {/* Shoot Styling overrides — only when character selected */}
         {selectedChar && (

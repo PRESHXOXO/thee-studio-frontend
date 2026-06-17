@@ -1,4 +1,5 @@
 import React from 'react';
+import { ImageLightbox } from '../components/feedback/ImageLightbox.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Field } from '../components/forms/Field.jsx';
 import { Select } from '../components/forms/Select.jsx';
@@ -258,6 +259,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
 
   const [generating,   setGenerating]   = React.useState(false);
   const [genImages,    setGenImages]    = React.useState([]);
+  const [lightboxSrc, setLightboxSrc]  = React.useState(null);
   const [genError,     setGenError]     = React.useState('');
 
   const [history,      setHistory]      = React.useState(loadHistory);
@@ -407,6 +409,10 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
           negativePrompt: outputs.negativePrompt,
           imageSize: 'Vertical 9:16',
           quality: 'High',
+          width: 832,
+          height: 1216,
+          performanceMode: 'Balanced',
+          imageStyle: 'Lifestyle Creator',
         });
         const imgs = result.images || [];
         setGenImages(imgs);
@@ -782,22 +788,21 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
           <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 16 }}>
             Generated · {genImages.length} image{genImages.length > 1 ? 's' : ''}
           </div>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
             {genImages.map((url, i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 200 }}>
-                <div style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden', boxShadow: 'var(--shadow-lg)' }}>
-                  <img src={url} alt={`Generated ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </div>
-                <a href={url} download={`director-${Date.now()}-${i}.jpg`} target="_blank" rel="noreferrer">
-                  <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }}>
-                    <Icon name="download" size={13} /> Download
-                  </Button>
-                </a>
+              <div
+                key={i}
+                onClick={() => setLightboxSrc(url)}
+                style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden', boxShadow: 'var(--shadow-lg)', cursor: 'zoom-in' }}
+              >
+                <img src={url} alt={`Generated ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               </div>
             ))}
           </div>
         </div>
       )}
+
+      {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
 
       {/* Prompt history */}
       <HistoryPanel history={history} onLoad={handleLoadHistory} />

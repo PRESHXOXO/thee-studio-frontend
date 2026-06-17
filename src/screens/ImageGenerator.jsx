@@ -11,6 +11,7 @@ import {
   LOCATIONS, STANDARD_NEGATIVE, buildStructuredVision, buildFluxVision,
   getHairStyleOptions, getClothingOptions, getJewelryOptions,
 } from '../lib/promptData.js';
+import { ImageLightbox } from '../components/feedback/ImageLightbox.jsx';
 
 const FALLBACK_ENGINES = [
   'Fast Draft',
@@ -92,18 +93,24 @@ function Pill({ label, active, onClick }) {
   );
 }
 
-function ImageResult({ src, index }) {
+function ImageResult({ src, index, onOpen }) {
   const [hovered, setHovered] = React.useState(false);
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative' }}
+      onClick={() => onOpen && onOpen(src)}
+      style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative', cursor: 'zoom-in' }}
     >
       <img src={src} alt={`Generated ${index + 1}`} style={{ width: '100%', display: 'block' }} />
       {hovered && (
         <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, display: 'flex', gap: 6 }}>
-          <a href={src} download={`thee-studio-${Date.now()}-${index}.jpg`} style={{ flex: 1, textDecoration: 'none' }}>
+          <a
+            href={src}
+            download={`thee-studio-${Date.now()}-${index}.jpg`}
+            style={{ flex: 1, textDecoration: 'none' }}
+            onClick={e => e.stopPropagation()}
+          >
             <button style={{
               width: '100%', padding: '7px 0', borderRadius: 'var(--radius-md)',
               background: 'rgba(255,255,255,0.93)', border: 'none', cursor: 'pointer',
@@ -134,6 +141,7 @@ export function ImageGenerator({ initialPrompts, onNav }) {
   const [error, setError]                 = React.useState('');
   const [status, setStatus]               = React.useState('');
   const [images, setImages]               = React.useState([]);
+  const [lightboxSrc, setLightboxSrc]     = React.useState(null);
   const [selectedChar, setSelectedChar]   = React.useState(null);
 
   // Prompt builder state
@@ -690,11 +698,13 @@ export function ImageGenerator({ initialPrompts, onNav }) {
         </div>
       </Card>
 
+      {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
+
       {/* Output canvas */}
       {images.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
           {images.map((src, i) => (
-            <ImageResult key={i} src={src} index={i} />
+            <ImageResult key={i} src={src} index={i} onOpen={setLightboxSrc} />
           ))}
         </div>
       ) : (

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { Sidebar } from './components/navigation/Sidebar.jsx';
 import { Topbar } from './components/navigation/Topbar.jsx';
 import { StudioHome } from './screens/StudioHome.jsx';
@@ -12,6 +13,8 @@ import { Library } from './screens/Library.jsx';
 import { History } from './screens/History.jsx';
 import { Settings } from './screens/Settings.jsx';
 import { loadLibrary } from './lib/library.js';
+import { Landing } from './screens/Landing.jsx';
+import { Auth } from './screens/Auth.jsx';
 
 const BASE_NAV = [
   { section: 'Create' },
@@ -105,28 +108,36 @@ export default function App() {
   const statusLabel = backendStatus === 'online' ? 'Backend online' : backendStatus === 'offline' ? 'Backend offline' : 'Connecting…';
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>
-      <Sidebar items={navItems} active={activeNav} onNavigate={id => handleNav(id)} activeCharacter={activeCharacter} />
-      <div style={{ marginLeft: 'var(--sidebar-w, 248px)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-        <Topbar
-          context={screenLabel}
-          actions={
-            <div title={statusLabel} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)', border: '1px solid var(--border)', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>
-              <span style={{
-                width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0,
-                animation: backendStatus === 'online' ? 'none' : 'status-pulse 1.5s ease-in-out infinite',
-              }} />
-              {statusLabel}
-            </div>
-          }
-        />
-        <main
-          key={activeNav}
-          style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1, animation: 'screen-in 0.18s ease-out both' }}
-        >
-          <Screen {...screenProps} />
-        </main>
-      </div>
-    </div>
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/auth" element={<Auth />} />
+      <Route path="/studio/*" element={
+        <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>
+          <Sidebar items={navItems} active={activeNav} onNavigate={id => handleNav(id)} activeCharacter={activeCharacter} />
+          <div style={{ marginLeft: 'var(--sidebar-w, 248px)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+            <Topbar
+              context={screenLabel}
+              actions={
+                <div title={statusLabel} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)', border: '1px solid var(--border)', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>
+                  <span style={{
+                    width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0,
+                    animation: backendStatus === 'online' ? 'none' : 'status-pulse 1.5s ease-in-out infinite',
+                  }} />
+                  {statusLabel}
+                </div>
+              }
+            />
+            <main
+              key={activeNav}
+              style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1, animation: 'screen-in 0.18s ease-out both' }}
+            >
+              <Screen {...screenProps} />
+            </main>
+          </div>
+        </div>
+      } />
+      {/* Fallback — redirect old root to landing */}
+      <Route path="*" element={<Landing />} />
+    </Routes>
   );
 }

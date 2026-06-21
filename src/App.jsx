@@ -53,7 +53,7 @@ function useBackendStatus() {
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch('/gradio_api/config', { signal: controller.signal });
+        const res = await fetch('/config', { signal: controller.signal });
         clearTimeout(timer);
         if (!cancelled) setStatus(res.ok ? 'online' : 'offline');
       } catch {

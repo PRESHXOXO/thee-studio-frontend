@@ -4,7 +4,7 @@ import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
-import { analyzeCharacterImage, characterGenerate, extractFaceAnchor } from '../api/studio.js';
+import { analyzeCharacterImage, characterGenerate, extractFaceAnchor, generateReferenceSet } from '../api/studio.js';
 import { SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, STANDARD_NEGATIVE } from '../lib/promptData.js';
 import { Select } from '../components/forms/Select.jsx';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
@@ -406,6 +406,11 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [quickAngle,    setQuickAngle]    = React.useState('front-facing');
   const [anchorSaved,   setAnchorSaved]   = React.useState(false); // brief toast
 
+  // Reference set generation
+  const [refSetLoading, setRefSetLoading] = React.useState(false);
+  const [refSetError,   setRefSetError]   = React.useState('');
+  const [refSetDone,    setRefSetDone]    = React.useState(false);
+
   // Shot history — library entries for active character
   const [shotHistory, setShotHistory] = React.useState([]);
 
@@ -683,6 +688,40 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     });
   };
 
+  const handleBuildRefSet = async (count = 15) => {
+    const char = editing || active;
+    if (!char) return;
+    setRefSetLoading(true);
+    setRefSetError('');
+    setRefSetDone(false);
+    try {
+      const f = char.fields || {};
+      const characterDesc = [
+        char.faceAnchor || f.face,
+        f.tone && `Skin: ${f.tone}`,
+        f.hair && `Hair: ${f.hair}`,
+        f.personality && `Energy: ${f.personality}`,
+      ].filter(Boolean).join('. ');
+
+      const result = await generateReferenceSet({ characterDesc, count });
+      const newImages = result.images || [];
+      if (!newImages.length) throw new Error('No images generated.');
+
+      // Merge into refImages (up to 20 total)
+      setEditing(ed => {
+        const existing = ed?.refImages || [];
+        const merged = [...newImages, ...existing].slice(0, 20);
+        return { ...ed, refImages: merged };
+      });
+      setRefSetDone(true);
+      setTimeout(() => setRefSetDone(false), 4000);
+    } catch (e) {
+      setRefSetError(e.message || 'Reference set generation failed.');
+    } finally {
+      setRefSetLoading(false);
+    }
+  };
+
   const [confirm, setConfirm] = React.useState(null); // { title, message, onConfirm }
 
   const displayChar = editing
@@ -789,10 +828,32 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
               </div>
             )}
 
-            {editing && primaryDisplay && !analyzing && (
-              <Button variant="secondary" onClick={() => runAnalysis(primaryDisplay, editing)} style={{ width: '100%' }}>
-                <Icon name="sparkles" size={13} /> Re-analyze
-              </Button>
+            {editing && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {primaryDisplay && !analyzing && (
+                  <Button variant="secondary" onClick={() => runAnalysis(primaryDisplay, editing)} style={{ width: '100%' }}>
+                    <Icon name="sparkles" size={13} /> Re-analyze
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  loading={refSetLoading}
+                  onClick={() => handleBuildRefSet(15)}
+                  style={{ width: '100%', background: refSetDone ? 'var(--accent-soft)' : undefined }}
+                  disabled={refSetLoading}
+                >
+                  <Icon name="layers" size={13} />
+                  {refSetLoading ? 'Generating reference set…' : refSetDone ? '✓ Reference set added!' : 'Build Reference Set (15 shots)'}
+                </Button>
+                {refSetError && (
+                  <div style={{ font: 'var(--text-xs)', color: 'var(--error)', lineHeight: 1.4 }}>{refSetError}</div>
+                )}
+                {refSetLoading && (
+                  <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                    Generating 15 reference headshots via Wavespeed — this takes ~3–5 min. Don't close this panel.
+                  </div>
+                )}
+              </div>
             )}
             {editing
               ? <input value={editing.name} onChange={e => setEditing(ed => ({ ...ed, name: e.target.value }))} style={{ ...INPUT_STYLE, textAlign: 'center', fontWeight: 600 }} />

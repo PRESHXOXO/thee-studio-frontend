@@ -247,6 +247,13 @@ export async function generateCharacterVariations(params) {
   return parsed; // { images: [...] }
 }
 
+export async function generateReferenceSet(params) {
+  const raw = await callNamedEndpoint('generate_reference_set', [JSON.stringify(params)]);
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed; // { images: [...], errors: [...] }
+}
+
 export async function generateCharacterVariationShot(params) {
   const raw = await callNamedEndpoint('character_variation_shot', [JSON.stringify(params)]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];

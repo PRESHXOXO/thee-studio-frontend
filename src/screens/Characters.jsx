@@ -23,8 +23,8 @@ const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', tex
 const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--input-bg, #fff)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
 
 const QUICK_ENGINES = [
+  { id: 'wavespeed_nano_banana',  label: 'Nano Banana',       icon: 'banana' },
   { id: 'openai_image',           label: 'OpenAI',            icon: 'zap' },
-  { id: 'gemini_nano_banana',     label: 'Nano Banana',       icon: 'banana' },
   { id: 'replicate_photomaker',   label: 'PhotoMaker 🔒',    icon: 'scan-face' },
   { id: 'replicate_instantid',    label: 'InstantID 🔒',     icon: 'fingerprint' },
   { id: 'replicate_flux_schnell', label: 'FLUX Schnell',      icon: 'flame' },
@@ -396,7 +396,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [quickScene,    setQuickScene]    = React.useState('none');
   const [quickMood,     setQuickMood]     = React.useState('Clean');
   const [quickOutfit,   setQuickOutfit]   = React.useState('default');
-  const [quickEngine,   setQuickEngine]   = React.useState('gemini_nano_banana');
+  const [quickEngine,   setQuickEngine]   = React.useState('wavespeed_nano_banana');
   const [quickBatch,    setQuickBatch]    = React.useState(1);
   const [activeRef,     setActiveRef]     = React.useState(0); // index into getAllImages
   const [generating,    setGenerating]    = React.useState(false);

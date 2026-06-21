@@ -220,13 +220,10 @@ export function ImageGenerator({ initialPrompts, onNav }) {
       const list = (choices?.length ? choices : FALLBACK_ENGINES);
       const opts = list.map(c => ({ value: c, label: c }));
       setEngineOptions(opts);
-      const openai = list.find(c => c.toLowerCase().includes('openai'));
-      if (openai) {
-        setEngine(openai);
-      } else {
-        const isReady = c => !c.includes('Setup Needed') && !c.includes('Disabled');
-        setEngine(list.find(isReady) || list[0]);
-      }
+      const isReady = c => !c.includes('Setup Needed') && !c.includes('Disabled');
+      const wavespeed = list.find(c => c.toLowerCase().includes('nano banana') || c.toLowerCase().includes('wavespeed'));
+      const firstReady = list.find(isReady);
+      setEngine(wavespeed || firstReady || list[0]);
     });
   }, []);
 

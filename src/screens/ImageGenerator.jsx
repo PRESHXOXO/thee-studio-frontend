@@ -304,9 +304,11 @@ export function ImageGenerator({ initialPrompts, onNav }) {
         });
       }
       setAiGenStep('');
+      setAiGenLocked(false); // switch to full grid view once all shots are in
     } catch (e) {
       setAiGenError(e.message || 'Generation failed');
       setAiGenStep('');
+      setAiGenLocked(false);
     } finally {
       setAiGenLoading(false);
     }

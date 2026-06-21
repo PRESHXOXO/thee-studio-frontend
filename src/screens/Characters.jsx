@@ -396,7 +396,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [quickScene,    setQuickScene]    = React.useState('none');
   const [quickMood,     setQuickMood]     = React.useState('Clean');
   const [quickOutfit,   setQuickOutfit]   = React.useState('default');
-  const [quickEngine,   setQuickEngine]   = React.useState('openai_image');
+  const [quickEngine,   setQuickEngine]   = React.useState('gemini_nano_banana');
   const [quickBatch,    setQuickBatch]    = React.useState(1);
   const [activeRef,     setActiveRef]     = React.useState(0); // index into getAllImages
   const [generating,    setGenerating]    = React.useState(false);

@@ -1,4 +1,5 @@
 const BASE = '/gradio_api';
+const GRADIO_CONFIG_URL = '/config'; // Gradio 6.x serves config at /config, not /gradio_api/config
 const SESSION_HASH = Math.random().toString(36).slice(2);
 
 // Replaces words that trigger OpenAI's output safety filter while preserving prompt quality.
@@ -154,7 +155,7 @@ export async function fetchEngineChoices() {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(`${BASE}/config`, { signal: controller.signal });
+    const res = await fetch(GRADIO_CONFIG_URL, { signal: controller.signal });
     clearTimeout(timer);
     if (!res.ok) return null;
     const config = await res.json();

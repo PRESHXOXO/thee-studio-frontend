@@ -10,6 +10,17 @@ export function deleteFromLibrary(id) {
   try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {}
 }
 
+// Review workflow: patch an entry (status, notes, etc.) in place.
+// status: 'unreviewed' | 'approved' | 'needs_fix' | 'rejected'
+export function updateLibraryEntry(id, patch) {
+  const list = loadLibrary();
+  const idx = list.findIndex(e => e.id === id);
+  if (idx === -1) return null;
+  list[idx] = { ...list[idx], ...patch, reviewedAt: new Date().toISOString() };
+  try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {}
+  return list[idx];
+}
+
 function _compressDataUrl(dataUrl, maxPx, quality) {
   return new Promise((resolve, reject) => {
     const img = new Image();

@@ -15,6 +15,7 @@ import { Settings } from './screens/Settings.jsx';
 import { loadLibrary } from './lib/library.js';
 import { Landing } from './screens/Landing.jsx';
 import { Auth } from './screens/Auth.jsx';
+import { SceneFlow } from './screens/SceneFlow.jsx';
 
 const BASE_NAV = [
   { section: 'Create' },
@@ -23,6 +24,7 @@ const BASE_NAV = [
   { id: 'director',   label: 'Thee Director',   icon: 'clapperboard' },
   { id: 'characters', label: 'Characters',      icon: 'sparkles' },
   { id: 'scenes',     label: 'Scenes',          icon: 'mountain-snow' },
+  { id: 'sceneflow',  label: 'Scene Flow',      icon: 'message-circle' },
   { id: 'references', label: 'References',      icon: 'images' },
   { section: 'Workspace' },
   { id: 'campaigns',  label: 'Campaigns',       icon: 'megaphone' },
@@ -37,6 +39,7 @@ const SCREENS = {
   images:     { label: 'Image Generator',  component: ImageGenerator },
   characters: { label: 'Characters',       component: Characters },
   scenes:     { label: 'Scenes',           component: Scenes },
+  sceneflow:  { label: 'Scene Flow',       component: SceneFlow },
   references: { label: 'References',       component: References },
   campaigns:  { label: 'Campaigns',        component: Campaigns },
   library:    { label: 'Library',          component: Library },

@@ -47,7 +47,7 @@ export function Sidebar({ items = [], active, onNavigate, footer, activeCharacte
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '20px 8px 20px', flexShrink: 0 }}>
         <span style={{
           width: 34, height: 34, borderRadius: 10, background: 'var(--grad-coral)', flex: 'none',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-on-accent)',
           font: '600 1.05rem/1 var(--font-display)', boxShadow: 'var(--shadow-coral)',
         }}>T</span>
         <div style={{ lineHeight: 1 }}>

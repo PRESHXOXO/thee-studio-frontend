@@ -54,11 +54,53 @@ function StatPill({ icon, value, label }) {
   );
 }
 
+// Production pipeline summary — derived from library review states.
+function PipelineCard({ icon, count, label, tone, onClick }) {
+  const [hovered, setHovered] = React.useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+        padding: '16px 18px', borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+        background: hovered ? 'var(--rose-glass)' : 'var(--surface-card)',
+        border: `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        transition: 'all var(--t-base)',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+        boxShadow: hovered ? 'var(--shadow-md)' : 'var(--shadow-xs)',
+      }}
+    >
+      <span style={{
+        width: 38, height: 38, borderRadius: 'var(--radius-md)', flexShrink: 0,
+        background: tone.bg, color: tone.color,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Icon name={icon} size={17} strokeWidth={1.9} />
+      </span>
+      <div>
+        <div style={{ font: '700 1.25rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>{count}</div>
+        <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 3 }}>{label}</div>
+      </div>
+    </button>
+  );
+}
+
+// Suggest the user's next move based on current studio state.
+function nextStep({ charCount, libCount, unreviewed }) {
+  if (charCount === 0) return { icon: 'sparkles', text: 'Start by importing a character — your cast drives everything else.', nav: 'characters', cta: 'Import Character' };
+  if (libCount === 0)  return { icon: 'clapperboard', text: 'Your cast is ready. Build a scene and generate your first draft.', nav: 'sceneflow', cta: 'Open Scene Flow' };
+  if (unreviewed > 0)  return { icon: 'eye', text: `${unreviewed} draft${unreviewed !== 1 ? 's' : ''} waiting for review. Approve keepers, flag fixes.`, nav: 'library', cta: 'Review Drafts' };
+  return { icon: 'megaphone', text: 'Pipeline is clear. Plan your next shoot or launch a campaign.', nav: 'campaigns', cta: 'Open Campaigns' };
+}
+
 export function StudioHome({ onNav }) {
   const fileInputRef = React.useRef(null);
   const [recent, setRecent]   = React.useState([]);
   const [charCount, setChars] = React.useState(0);
   const [libCount, setLib]    = React.useState(0);
+  const [pipeline, setPipeline] = React.useState({ unreviewed: 0, approved: 0, needs_fix: 0 });
 
   React.useEffect(() => {
     const lib  = loadLibrary();
@@ -66,6 +108,12 @@ export function StudioHome({ onNav }) {
     setRecent(lib.slice(0, 5));
     setLib(lib.length);
     setChars(chars.length);
+    const p = { unreviewed: 0, approved: 0, needs_fix: 0 };
+    for (const e of lib) {
+      const s = e.status || 'unreviewed';
+      if (s in p) p[s] += 1;
+    }
+    setPipeline(p);
   }, []);
 
   const handleImport = () => fileInputRef.current?.click();
@@ -104,10 +152,50 @@ export function StudioHome({ onNav }) {
         )}
       </div>
 
+      {/* Next recommended step */}
+      {(() => {
+        const step = nextStep({ charCount, libCount, unreviewed: pipeline.unreviewed });
+        return (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+            padding: '18px 22px', borderRadius: 'var(--radius-xl)',
+            background: 'var(--grad-rose)', border: '1px solid rgba(212,175,90,0.28)',
+          }}>
+            <span style={{
+              width: 40, height: 40, borderRadius: 'var(--radius-md)', flexShrink: 0,
+              background: 'var(--grad-coral)', color: 'var(--text-on-accent)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: 'var(--shadow-coral)',
+            }}>
+              <Icon name={step.icon} size={18} strokeWidth={2} />
+            </span>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 5 }}>Next Step</div>
+              <div style={{ font: 'var(--text-base)', color: 'var(--text-body)' }}>{step.text}</div>
+            </div>
+            <Button variant="primary" onClick={() => onNav && onNav(step.nav)}>
+              {step.cta} <Icon name="arrow-right" size={15} />
+            </Button>
+          </div>
+        );
+      })()}
+
+      {/* Production pipeline */}
+      {libCount > 0 && (
+        <div>
+          <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Production Pipeline</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+            <PipelineCard icon="eye" count={pipeline.unreviewed} label="Needs review" tone={{ color: 'var(--cobalt)', bg: 'var(--cobalt-soft)' }} onClick={() => onNav && onNav('library')} />
+            <PipelineCard icon="wrench" count={pipeline.needs_fix} label="Needs fix" tone={{ color: 'var(--status-warn)', bg: 'var(--status-warn-bg)' }} onClick={() => onNav && onNav('library')} />
+            <PipelineCard icon="check-circle" count={pipeline.approved} label="Approved — publish-ready" tone={{ color: 'var(--status-ready)', bg: 'var(--status-ready-bg)' }} onClick={() => onNav && onNav('library')} />
+          </div>
+        </div>
+      )}
+
       {/* Studio Shortcuts */}
       <div>
         <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Quick Actions</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
           {SHORTCUTS.map(s => <ShortcutCard key={s.nav} item={s} onNav={onNav} />)}
         </div>
       </div>
@@ -122,7 +210,7 @@ export function StudioHome({ onNav }) {
         </div>
 
         {recent.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
             {recent.map(entry => (
               <div
                 key={entry.id}

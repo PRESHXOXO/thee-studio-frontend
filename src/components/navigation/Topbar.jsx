@@ -7,7 +7,7 @@ export function Topbar({ context = 'Studio', search = true, actions, user = 'The
     <header style={{
       height: 'var(--topbar-h)', flex: 'none', boxSizing: 'border-box',
       display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px',
-      borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.88)',
+      borderBottom: '1px solid var(--border)', background: 'rgba(14,14,18,0.82)',
       backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
       position: 'fixed', top: 0, left: 'var(--sidebar-w)', right: 0, zIndex: 99, ...style,
     }}>

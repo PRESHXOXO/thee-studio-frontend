@@ -968,7 +968,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
               </div>
             )}
             {identityMode === 'lifestyle' && getAllImages(active).length === 1 && (
-              <div style={{ font: 'var(--text-xs)', color: '#c47a00', background: '#fff8e1', border: '1px solid #f0c040', borderRadius: 'var(--radius-md)', padding: '7px 10px', marginTop: 8, lineHeight: 1.5 }}>
+              <div style={{ font: 'var(--text-xs)', color: 'var(--status-warn)', background: 'var(--status-warn-bg)', border: '1px solid rgba(227,179,65,0.35)', borderRadius: 'var(--radius-md)', padding: '7px 10px', marginTop: 8, lineHeight: 1.5 }}>
                 For stronger identity consistency, add 2–4 more reference photos to this creator.
               </div>
             )}

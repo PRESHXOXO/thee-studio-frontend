@@ -368,11 +368,10 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     }
     if (talentParts.length) s.push(`TALENT — ${character.name}: ${talentParts.join('. ')}.`);
 
-    // BUILD & PRESENCE
-    const presenceParts = [];
-    if (f.body)        presenceParts.push(f.body);
-    if (f.personality) presenceParts.push(f.personality);
-    if (presenceParts.length) s.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
+    // PRESENCE — personality/energy only. Body descriptors dropped: they
+    // trigger OpenAI output moderation when combined with fashion framing,
+    // and build is already locked via the reference image anyway.
+    if (f.personality) s.push(`PRESENCE: ${f.personality}.`);
 
     // OUTFIT
     const outfitUsed = outfitPhotoDesc
@@ -418,8 +417,10 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     if (features !== 'None') presenceParts.push(features);
     s.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
 
-    // OUTFIT
-    if (clothing !== 'Unspecified') {
+    // OUTFIT — an uploaded outfit photo always wins over the dropdown/default
+    if (outfitPhotoDesc) {
+      s.push(`OUTFIT: ${outfitPhotoDesc}. Clothing feels premium and believable — real fabric weight, accurate drape, natural folds.`);
+    } else if (clothing !== 'Unspecified') {
       s.push(`OUTFIT: ${clothing}. The clothing should feel real and expensive — accurate fabric weight, natural folds, believable drape, and structure that moves naturally with the body. Nothing stiff, shiny, cheap, or plastic-looking.`);
     } else if (isMale) {
       s.push('OUTFIT: Choose a specific, complete outfit that fits the scene — varsity jacket with dark jeans and clean sneakers, a tailored suit, a premium hoodie and sweats, a linen shirt and chinos, or a bomber jacket with dark jeans. The clothing should feel real and expensive — accurate fabric weight, natural folds, believable drape, and structure that moves naturally with the body. Nothing stiff, shiny, cheap, or plastic-looking.');

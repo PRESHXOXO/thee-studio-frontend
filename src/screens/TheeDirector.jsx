@@ -282,7 +282,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
     shootHairStyle: selectedChar ? shootHairStyle : 'Unspecified',
     shootHairColor: selectedChar ? shootHairColor : 'Unspecified',
     shootJewelry:   selectedChar ? shootJewelry   : 'None',
-    outfitPhotoDesc: selectedChar ? outfitPhotoDesc : '',
+    outfitPhotoDesc,
   });
 
   const handleOutfitPhotoUpload = async (e) => {
@@ -329,6 +329,18 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
   const handleBuild = async () => {
     setError('');
     setGenImages([]);
+
+    // Don't build with a half-analyzed or failed outfit photo — the prompt
+    // would silently fall back to the generic wardrobe text instead.
+    if (outfitPhotoUrl && outfitPhotoAnalyzing) {
+      setError('Still analyzing the outfit photo — wait a moment and try again.');
+      return;
+    }
+    if (outfitPhotoUrl && outfitPhotoDesc.startsWith('⚠')) {
+      setError('Outfit photo could not be analyzed. Remove it or upload a clearer photo before building.');
+      return;
+    }
+
     const params = formParams();
 
     if (buildMode === 'openai') {

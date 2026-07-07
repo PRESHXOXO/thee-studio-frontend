@@ -172,12 +172,18 @@ export const JEWELRY_MEN = [
   { value: 'gold chain and watch combo — stacked',                                  label: 'Chain + Watch Combo' },
 ];
 
-// Combined for unspecified gender
-export const JEWELRY_OPTIONS = [
-  { value: 'None', label: 'None / Minimal' },
-  ...JEWELRY_WOMEN.filter(j => j.value !== 'None'),
-  ...JEWELRY_MEN.filter(j => j.value !== 'None'),
-];
+// Combined for unspecified gender — deduped by value (both lists share some
+// options, e.g. "Luxury Watch", which produced duplicate React keys)
+export const JEWELRY_OPTIONS = (() => {
+  const seen = new Set(['None']);
+  const combined = [{ value: 'None', label: 'None / Minimal' }];
+  for (const j of [...JEWELRY_WOMEN, ...JEWELRY_MEN]) {
+    if (j.value === 'None' || seen.has(j.value)) continue;
+    seen.add(j.value);
+    combined.push(j);
+  }
+  return combined;
+})();
 
 export const CLOTHING_WOMEN = [
   { value: 'Unspecified', label: 'Unspecified' },

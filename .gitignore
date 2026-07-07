@@ -6,3 +6,6 @@ dist/
 *.log
 .DS_Store
 package-lock.json
+e2e-audit/results/
+test-results/
+playwright-report/

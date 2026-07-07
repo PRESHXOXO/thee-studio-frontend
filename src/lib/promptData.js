@@ -353,7 +353,7 @@ export const STYLE_DIRECTIONS = [
   'High Fashion', 'Vintage & Retro',
 ];
 
-export const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, missing fingers, broken anatomy, unnatural body proportions, stiff pose, flat lighting, harsh flash, oversaturated colors, cluttered background, cartoon styling, floating tattoos, fake jewelry, bad fabric physics, cropped limbs, generic photo, artificial smile, lifeless expression, overprocessed HDR, grainy, noisy, unrealistic skin color, washed-out skin, plastic hair, duplicate body parts, distorted face, text on clothing, visible brand names, graphic prints on garments, fake logos, illegible text, random letters on fabric, misspelled words, hallucinated typography';
+export const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, missing fingers, missing arm, hidden arm, merged arm, arm absorbed into body or clothing, broken anatomy, unnatural body proportions, stiff pose, cheesy pose, influencer-basic pose, overly sexualized pose, flat lighting, harsh flash, oversaturated colors, cluttered background, obviously AI-generated background, studio cutout look, cartoon styling, illustration styling, HDR overprocessing, floating tattoos, fake jewelry, bad fabric physics, cropped limbs, cropped outfit, generic photo, generic face, changed identity, different person, recast face, artificial smile, lifeless expression, overprocessed HDR, grainy, noisy, unrealistic skin color, washed-out skin, plastic hair, duplicate body parts, distorted face, text on clothing, visible brand names, graphic prints on garments, fake logos, illegible text, random letters on fabric, misspelled words, hallucinated typography';
 
 export function buildStructuredVision({ vision = '', gender = 'Unspecified', physique = 'Unspecified', skinTone = 'Unspecified', hairStyle = 'Unspecified', hairColor = 'Unspecified', eyeDetail = 'Unspecified', jewelry = 'None', clothing = 'Unspecified', features = 'None', mood = 'Clean', contentType = 'Portrait', scene = 'None', character = null, shootHairStyle = 'Unspecified', shootHairColor = 'Unspecified', shootJewelry = 'None', outfitPhotoDesc = '' } = {}) {
   const s = [];
@@ -487,19 +487,6 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
   s.push('CAMERA & IMAGE FEEL: Shot like a real premium campaign on a Canon EOS R5, 85mm portrait lens at f/1.4, Kodak Portra 400 film rendering. Shallow depth of field with natural bokeh. Crisp focus on the face, eyes, hair, jewelry, and styling details. The image should feel like a real professional fashion/lifestyle shoot, not an AI prototype.');
   s.push('QUALITY & RETOUCHING: Commercial-level retouching only. Preserve natural skin texture, visible pores, realistic highlights, natural body proportions, accurate anatomy, believable hands, and individual hair strands. No text, logos, brand names, or graphic prints on clothing. The final image should feel polished and premium without erasing humanity.');
   s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a premium campaign.');
-
-  s.push('NEGATIVE INSTRUCTIONS:\n' + [
-    character ? `Do not change ${isMale ? 'his' : 'her'} identity. Do not make ${isMale ? 'him' : 'her'} look like a different person. Do not create a generic face.` : 'Do not create a generic, averaged, or AI-default face.',
-    'Do not over-smooth the skin. Do not create plastic skin, waxy texture, or fake glossy hair.',
-    'Do not distort the hands, fingers, limbs, or body proportions. Do not create extra fingers, extra limbs, duplicate body parts, or warped anatomy. Do not omit, hide, or merge an arm or hand into the body or clothing — both arms must be fully visible and anatomically correct unless the pose intentionally places one out of frame.',
-    'Do not crop the outfit awkwardly.',
-    'Do not create fake logos, readable brand names, random text, or misspelled typography on clothing or accessories.',
-    'Do not make the pose stiff, cheesy, overly sexualized, or influencer-basic.',
-    'Do not make the background cluttered or obviously AI-generated.',
-    'Do not make the lighting harsh, flat, or overly flashy.',
-    'Do not make the image look like a studio cutout or generic backdrop.',
-    'Do not use cartoon styling, illustration styling, HDR overprocessing, or unrealistic saturation.',
-  ].join(' '));
 
   s.push(`FINAL GOAL:\nA photorealistic${scene && scene !== 'None' ? ` ${scene.toLowerCase()}` : ''} fashion campaign image${character ? ` of ${character.name}` : ''} that feels polished, stylish, and expensive — like it was captured by a real photographer for a premium lifestyle brand. The image must feel believable, natural, and editorial, while clearly showcasing the outfit and styling.`);
 

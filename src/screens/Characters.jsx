@@ -198,21 +198,6 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
   );
 
   parts.push(
-    'NEGATIVE INSTRUCTIONS:\n' + [
-      identityLocked ? `Do not change ${possessive} identity. Do not make ${possessive} look like a different person. Do not create a generic face.` : 'Do not create a generic, averaged, or AI-default face.',
-      'Do not over-smooth the skin. Do not create plastic skin, waxy texture, or fake glossy hair.',
-      'Do not distort the hands, fingers, limbs, or body proportions. Do not create extra fingers, extra limbs, duplicate body parts, or warped anatomy. Do not omit, hide, or merge an arm or hand into the body or clothing — both arms must be fully visible and anatomically correct unless the pose intentionally places one out of frame.',
-      'Do not crop the outfit awkwardly.',
-      'Do not create fake logos, readable brand names, random text, or misspelled typography on clothing or accessories.',
-      'Do not make the pose stiff, cheesy, overly sexualized, or influencer-basic.',
-      'Do not make the background cluttered or obviously AI-generated.',
-      'Do not make the lighting harsh, flat, or overly flashy.',
-      'Do not make the image look like a studio cutout or generic backdrop.',
-      'Do not use cartoon styling, illustration styling, HDR overprocessing, or unrealistic saturation.',
-    ].join(' ')
-  );
-
-  parts.push(
     `FINAL GOAL:\nA photorealistic${sceneName ? ` ${sceneName.toLowerCase()}` : ''} fashion campaign image of ${char.name} that feels polished, stylish, and expensive — like it was captured by a real photographer for a premium lifestyle brand. The image must feel believable, natural, and editorial, while clearly showcasing the outfit and styling.`
   );
 

@@ -4,8 +4,9 @@ import { Select } from '../components/forms/Select.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
-import { generateImage, characterGenerate, fetchEngineChoices, sanitizeForOpenAI, generateCharacterSeed, generateCharacterVariations, generateCharacterVariationShot } from '../api/studio.js';
+import { generateImage, characterGenerate, fetchEngineChoices, sanitizeForOpenAI, generateCharacterSeed, generateCharacterVariationShot } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
+import { compressImage } from '../lib/imageUtils.js';
 import {
   GENDERS, SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES,
   LOCATIONS, STANDARD_NEGATIVE, buildStructuredVision, buildFluxVision,
@@ -59,22 +60,6 @@ const TEXTAREA = {
   borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)',
   lineHeight: 1.5, outline: 'none', fontFamily: 'inherit',
 };
-
-function compressImage(dataUrl, maxPx = 768, quality = 0.92) {
-  return new Promise(resolve => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-      const canvas = document.createElement('canvas');
-      canvas.width  = Math.round(img.width  * scale);
-      canvas.height = Math.round(img.height * scale);
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
-  });
-}
 
 function Pill({ label, active, onClick }) {
   return (

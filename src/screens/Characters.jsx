@@ -8,6 +8,7 @@ import { analyzeCharacterImage, characterGenerate, extractFaceAnchor, generateRe
 import { SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, STANDARD_NEGATIVE } from '../lib/promptData.js';
 import { Select } from '../components/forms/Select.jsx';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
+import { compressImage } from '../lib/imageUtils.js';
 
 const FIELD_DEFS = [
   { id: 'face',        icon: 'scan-face',    label: 'Face',          placeholder: 'e.g. High cheekbones, almond eyes, soft heart shape' },
@@ -143,9 +144,10 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
     parts.push(`TALENT — ${char.name}: ${[f.face, f.tone && `${f.tone} complexion`].filter(Boolean).join('. ')}.`);
   }
 
-  // BUILD & PRESENCE — separate block for full model weight
-  const presenceParts = [f.body, f.personality].filter(Boolean);
-  if (presenceParts.length) parts.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
+  // PRESENCE — personality/energy only. Body descriptors dropped: they trigger
+  // OpenAI output moderation when combined with fashion framing, and identity
+  // (including build) already comes from the locked reference image.
+  if (f.personality) parts.push(`PRESENCE: ${f.personality}.`);
 
   // OUTFIT
   const wardrobe = outfitOverride || f.wardrobe;
@@ -172,22 +174,6 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
   parts.push('AVOID: Face drift, altered bone structure, changed ethnicity, generic model face, over-smoothed skin, doll-like beauty, warped hands, stiff posing, fake-looking fabric, overprocessed AI shine.');
 
   return parts.join('\n\n');
-}
-
-function compressImage(dataUrl, maxPx = 768, quality = 0.92) {
-  return new Promise(resolve => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-      const canvas = document.createElement('canvas');
-      canvas.width  = Math.round(img.width  * scale);
-      canvas.height = Math.round(img.height * scale);
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
-  });
 }
 
 function loadCharacters() {

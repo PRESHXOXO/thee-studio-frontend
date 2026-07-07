@@ -240,13 +240,6 @@ export async function generateCharacterSeed(params) {
   return parsed; // { image, faceAnchor }
 }
 
-export async function generateCharacterVariations(params) {
-  const raw = await callNamedEndpoint('character_variations_generate', [JSON.stringify(params)]);
-  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
-  if (parsed.error) throw new Error(parsed.error);
-  return parsed; // { images: [...] }
-}
-
 export async function generateReferenceSet(params) {
   const raw = await callNamedEndpoint('generate_reference_set', [JSON.stringify(params)]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];

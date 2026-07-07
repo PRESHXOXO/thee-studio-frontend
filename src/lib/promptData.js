@@ -1,7 +1,5 @@
 // Shared creative prompt data and builder logic for Image Generator and Thee Director.
 
-export const CONTENT_TYPES = ['Portrait', 'Beauty', 'Fashion', 'Lifestyle', 'Product', 'UGC', 'Campaign', 'Social Post', 'Cinematic Still', 'Travel / Hospitality'].map(v => ({ value: v, label: v }));
-export const MOODS         = ['Clean', 'Soft', 'Luxury', 'Bold', 'Romantic', 'Playful', 'Editorial', 'Candid', 'Cinematic', 'Elevated Casual'].map(v => ({ value: v, label: v }));
 export const LOCATIONS     = [
   'None', 'Yacht', 'Penthouse', 'Private Jet', 'Rooftop', 'Poolside',
   'Studio', 'Boutique Hotel', 'Art Gallery', 'Night Club', 'Garden',

@@ -330,14 +330,18 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
     setError('');
     setGenImages([]);
 
-    // Don't build with a half-analyzed or failed outfit photo — the prompt
-    // would silently fall back to the generic wardrobe text instead.
+    // Don't build with a half-analyzed, failed, or silently-empty outfit
+    // photo result — any of these would fall back to generic wardrobe text.
     if (outfitPhotoUrl && outfitPhotoAnalyzing) {
       setError('Still analyzing the outfit photo — wait a moment and try again.');
       return;
     }
     if (outfitPhotoUrl && outfitPhotoDesc.startsWith('⚠')) {
       setError('Outfit photo could not be analyzed. Remove it or upload a clearer photo before building.');
+      return;
+    }
+    if (outfitPhotoUrl && !outfitPhotoDesc) {
+      setError('Outfit photo has no description yet — remove and re-upload it before building.');
       return;
     }
 

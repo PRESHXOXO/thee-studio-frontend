@@ -185,7 +185,7 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
   parts.push(`ART DIRECTION:\n${artDirectionParts.join(' — ')} lighting with a premium campaign feel. Warm refined color grading. The environment should feel cinematic, elevated, and believable.`);
 
   parts.push(
-    'POSE & COMPOSITION:\nThree-quarter body fashion photograph, framed clearly enough to showcase the full outfit and accessories. Natural confident posture, candid-feeling but composed — no awkward or exaggerated poses, no stiff stance. Hands should look relaxed and realistic. Composition should feel intentional, premium, and well-balanced with tasteful negative space.'
+    'POSE & COMPOSITION:\nThree-quarter body fashion photograph, framed clearly enough to showcase the full outfit and accessories. Both arms fully visible and anatomically correct — neither arm cropped, hidden, or merged into the torso. Natural confident posture, candid-feeling but composed — no awkward or exaggerated poses, no stiff stance. Hands should look relaxed and realistic. Composition should feel intentional, premium, and well-balanced with tasteful negative space.'
   );
   parts.push(
     'LIGHTING:\nSoft, dimensional, photographer-quality lighting that wraps naturally around the subject. Realistic shadows, believable highlights, and depth across skin, hair, jewelry, clothing, and any environmental reflections.'
@@ -201,7 +201,7 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
     'NEGATIVE INSTRUCTIONS:\n' + [
       identityLocked ? `Do not change ${possessive} identity. Do not make ${possessive} look like a different person. Do not create a generic face.` : 'Do not create a generic, averaged, or AI-default face.',
       'Do not over-smooth the skin. Do not create plastic skin, waxy texture, or fake glossy hair.',
-      'Do not distort the hands, fingers, limbs, or body proportions. Do not create extra fingers, extra limbs, duplicate body parts, or warped anatomy.',
+      'Do not distort the hands, fingers, limbs, or body proportions. Do not create extra fingers, extra limbs, duplicate body parts, or warped anatomy. Do not omit, hide, or merge an arm or hand into the body or clothing — both arms must be fully visible and anatomically correct unless the pose intentionally places one out of frame.',
       'Do not crop the outfit awkwardly.',
       'Do not create fake logos, readable brand names, random text, or misspelled typography on clothing or accessories.',
       'Do not make the pose stiff, cheesy, overly sexualized, or influencer-basic.',

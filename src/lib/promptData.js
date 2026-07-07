@@ -479,8 +479,8 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
 
   // POSE & COMPOSITION
   const poseDir = isMale
-    ? 'Three-quarter to full-body fashion photograph so the outfit reads clearly. Natural grounded posture — leaning against the car or a surface, one hand in pocket, or standing relaxed with weight shifted naturally. Masculine composed energy, relaxed hands, real body balance, and no stiffness.'
-    : 'Three-quarter body fashion photograph so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, relaxed hands, real body balance.';
+    ? 'Three-quarter to full-body fashion photograph so the outfit reads clearly. Both arms fully visible and anatomically correct. Natural grounded posture — leaning against the car or a surface, one hand in pocket, or standing relaxed with weight shifted naturally. Masculine composed energy, relaxed hands, real body balance, and no stiffness.'
+    : 'Three-quarter body fashion photograph so the outfit is clearly visible. Both arms fully visible and anatomically correct — neither arm cropped, hidden, or merged into the torso. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, relaxed hands, real body balance.';
   s.push(`POSE & COMPOSITION: ${poseDir}`);
 
   s.push('LIGHTING: Soft dimensional natural or studio-style lighting that wraps realistically around the subject. Warm refined color grading, natural shadows, believable highlights, and depth in the skin, clothing, jewelry, and any environmental reflections.');
@@ -491,7 +491,7 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
   s.push('NEGATIVE INSTRUCTIONS:\n' + [
     character ? `Do not change ${isMale ? 'his' : 'her'} identity. Do not make ${isMale ? 'him' : 'her'} look like a different person. Do not create a generic face.` : 'Do not create a generic, averaged, or AI-default face.',
     'Do not over-smooth the skin. Do not create plastic skin, waxy texture, or fake glossy hair.',
-    'Do not distort the hands, fingers, limbs, or body proportions. Do not create extra fingers, extra limbs, duplicate body parts, or warped anatomy.',
+    'Do not distort the hands, fingers, limbs, or body proportions. Do not create extra fingers, extra limbs, duplicate body parts, or warped anatomy. Do not omit, hide, or merge an arm or hand into the body or clothing — both arms must be fully visible and anatomically correct unless the pose intentionally places one out of frame.',
     'Do not crop the outfit awkwardly.',
     'Do not create fake logos, readable brand names, random text, or misspelled typography on clothing or accessories.',
     'Do not make the pose stiff, cheesy, overly sexualized, or influencer-basic.',

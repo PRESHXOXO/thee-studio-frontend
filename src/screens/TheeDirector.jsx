@@ -227,6 +227,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
   const [outfitPhotoUrl,     setOutfitPhotoUrl]     = React.useState('');
   const [outfitPhotoDesc,    setOutfitPhotoDesc]    = React.useState('');
   const [outfitPhotoAnalyzing, setOutfitPhotoAnalyzing] = React.useState(false);
+  const [outfitPhotoEditing, setOutfitPhotoEditing] = React.useState(false);
   const outfitFileRef = React.useRef(null);
 
   // Filtered options based on selected gender
@@ -293,6 +294,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
       const dataUrl = ev.target.result;
       setOutfitPhotoUrl(dataUrl);
       setOutfitPhotoDesc('');
+      setOutfitPhotoEditing(false);
       setOutfitOverride('Unspecified'); // clear dropdown when photo used
       setOutfitPhotoAnalyzing(true);
       try {
@@ -311,6 +313,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
   const clearOutfitPhoto = () => {
     setOutfitPhotoUrl('');
     setOutfitPhotoDesc('');
+    setOutfitPhotoEditing(false);
   };
 
   const finishBuild = (result, mode) => {
@@ -597,12 +600,50 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {outfitPhotoAnalyzing ? (
                     <p style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>Analyzing outfit…</p>
-                  ) : outfitPhotoDesc ? (
+                  ) : outfitPhotoDesc && !outfitPhotoDesc.startsWith('⚠') ? (
                     <div style={{ padding: '8px 10px', background: 'var(--rose-glass)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                      <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 4 }}>Outfit Detected</div>
-                      <p style={{ font: 'var(--text-xs)', color: 'var(--text-body)', margin: 0, lineHeight: 1.5 }}>{outfitPhotoDesc}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)' }}>Outfit Detected</div>
+                        <button onClick={() => setOutfitPhotoEditing(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: 0, display: 'flex' }} title="Edit description">
+                          <Icon name="pencil" size={11} />
+                        </button>
+                      </div>
+                      {outfitPhotoEditing ? (
+                        <>
+                          <textarea
+                            value={outfitPhotoDesc}
+                            onChange={e => setOutfitPhotoDesc(e.target.value)}
+                            rows={3}
+                            autoFocus
+                            style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', font: 'var(--text-xs)', fontFamily: 'inherit', lineHeight: 1.5, padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface-inset)', color: 'var(--text-body)' }}
+                          />
+                          <button onClick={() => setOutfitPhotoEditing(false)} style={{ marginTop: 6, font: 'var(--text-xs)', color: 'var(--accent-deep)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Done</button>
+                        </>
+                      ) : (
+                        <p style={{ font: 'var(--text-xs)', color: 'var(--text-body)', margin: 0, lineHeight: 1.5 }}>{outfitPhotoDesc}</p>
+                      )}
                     </div>
-                  ) : null}
+                  ) : (
+                    // Auto-analysis failed or came back empty (common for branded/
+                    // logo'd images the vision model declines to describe in detail) —
+                    // let the user type the outfit description themselves instead of
+                    // being stuck.
+                    <div style={{ padding: '8px 10px', background: 'var(--status-warn-bg)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(227,179,65,0.35)' }}>
+                      <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--status-warn)', marginBottom: 4 }}>
+                        {outfitPhotoDesc ? 'Could not auto-describe outfit' : 'No description yet'}
+                      </div>
+                      <p style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', margin: '0 0 6px' }}>
+                        Common with logos, brand names, or product collages. Type it manually:
+                      </p>
+                      <textarea
+                        value={outfitPhotoDesc.startsWith('⚠') ? '' : outfitPhotoDesc}
+                        onChange={e => setOutfitPhotoDesc(e.target.value)}
+                        placeholder="e.g. pink graphic tank top, distressed denim mini skirt, pink heeled boots, pink accessories…"
+                        rows={3}
+                        style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', font: 'var(--text-xs)', fontFamily: 'inherit', lineHeight: 1.5, padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface-inset)', color: 'var(--text-body)' }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

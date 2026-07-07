@@ -134,44 +134,87 @@ function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverr
     return parts.join('\n\n');
   }
 
-  // LIFESTYLE MODE — full prompt
-  parts.push('Ultra-realistic 4K commercial lifestyle fashion photography. Shot for a premium fashion and lifestyle brand campaign. The final image must look like a high-end professional photograph captured on a real camera — realistic, polished, editorial, and not illustrated or overly stylized.');
+  // LIFESTYLE MODE — full prompt. Standard template: opening line, IMPORTANT
+  // identity-anchor instruction, SUBJECT, OUTFIT, HAIR, SCENE, ART DIRECTION,
+  // POSE & COMPOSITION, LIGHTING, CAMERA & IMAGE FEEL, QUALITY & RETOUCHING,
+  // NEGATIVE INSTRUCTIONS, FINAL GOAL.
+  const possessive = f.gender === 'Man' ? 'his' : 'her';
+  const personNoun = f.gender === 'Man' ? 'man' : 'woman';
 
-  // TALENT — face and skin only
-  if (char.faceAnchor) {
-    parts.push(`TALENT — ${char.name}: ${char.faceAnchor}.`);
-  } else if (f.face || f.tone) {
-    parts.push(`TALENT — ${char.name}: ${[f.face, f.tone && `${f.tone} complexion`].filter(Boolean).join('. ')}.`);
+  parts.push('Create a photorealistic 4K lifestyle and fashion image for a premium brand campaign.');
+
+  if (identityLocked) {
+    parts.push(
+      `IMPORTANT:\nUse the uploaded reference image as the identity anchor for ${char.name}. Preserve ${possessive} recognizable face, beauty, skin tone, and overall look. ${char.name} must read as the same ${personNoun} from the reference image, not a generic model. Photorealistic only. No illustration, no cartoon styling, no plastic AI finish, no fantasy gloss.`
+    );
   }
 
-  // PRESENCE — personality/energy only. Body descriptors dropped: they trigger
-  // OpenAI output moderation when combined with fashion framing, and identity
-  // (including build) already comes from the locked reference image.
-  if (f.personality) parts.push(`PRESENCE: ${f.personality}.`);
+  // SUBJECT — merged face/skin description + presence/personality in one
+  // flowing paragraph. Body descriptors intentionally excluded: they trigger
+  // OpenAI output moderation when combined with fashion framing, and build
+  // is already locked via the reference image.
+  const subjectFace = char.faceAnchor || [f.face, f.tone && `${f.tone} complexion`].filter(Boolean).join('. ');
+  const subjectParts = [subjectFace, f.personality].filter(Boolean);
+  if (subjectParts.length) {
+    parts.push(`SUBJECT — ${char.name.toUpperCase()}:\n${subjectParts.join(' ')}`);
+  }
 
   // OUTFIT
   const wardrobe = outfitOverride || f.wardrobe;
-  if (wardrobe) parts.push(`OUTFIT: ${wardrobe}.`);
+  if (wardrobe) {
+    parts.push(
+      `OUTFIT:\nStyle ${char.name} in ${wardrobe}. All wardrobe and accessories should feel premium and believable, with real fabric weight, accurate drape, natural folds, and realistic material texture.`
+    );
+  }
 
   // HAIR
-  if (f.hair) parts.push(`HAIR & ACCESSORIES: Hair: ${f.hair}.`);
+  if (f.hair) {
+    parts.push(`HAIR:\n${f.hair}, with full strand detail, realistic density, and believable natural movement.`);
+  }
 
   // SCENE
-  if (sceneName) parts.push(`SCENE: ${sceneName}. Premium environment, authentic architectural detail, controlled depth.`);
+  if (sceneName) {
+    parts.push(
+      `SCENE:\n${sceneName}. The setting should feel authentic and lived-in, not like a generic studio backdrop — premium materials, natural or ambient light, and a believable atmosphere.`
+    );
+  }
 
-  // CAMPAIGN FEEL
-  const campaignParts = [mood || 'Clean'].filter(Boolean);
-  if (f.niche) campaignParts.push(f.niche);
-  parts.push(`CAMPAIGN FEEL: ${campaignParts.join(' — ')}. Premium editorial spread energy.`);
+  // ART DIRECTION
+  const artDirectionParts = [mood || 'Clean'].filter(Boolean);
+  if (f.niche) artDirectionParts.push(f.niche);
+  parts.push(`ART DIRECTION:\n${artDirectionParts.join(' — ')} lighting with a premium campaign feel. Warm refined color grading. The environment should feel cinematic, elevated, and believable.`);
 
-  parts.push('POSE & COMPOSITION: Three-quarter body editorial portrait so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, realistic anatomy, relaxed hands.');
-  parts.push('LIGHTING: Soft dimensional natural or studio lighting. Light wraps realistically around the subject. Warm refined color grading.');
-  parts.push('CAMERA & DETAIL: Shot on Canon EOS R5 with 85mm portrait lens. Shallow depth of field with natural bokeh. Crisp focus on face, hair, jewelry, and styling details.');
-  parts.push('QUALITY & TEXTURE: Commercial retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds and drape, and believable clothing structure. No text, logos, brand names, or graphic prints on clothing.');
-  parts.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a luxury campaign.');
+  parts.push(
+    'POSE & COMPOSITION:\nThree-quarter body fashion photograph, framed clearly enough to showcase the full outfit and accessories. Natural confident posture, candid-feeling but composed — no awkward or exaggerated poses, no stiff stance. Hands should look relaxed and realistic. Composition should feel intentional, premium, and well-balanced with tasteful negative space.'
+  );
+  parts.push(
+    'LIGHTING:\nSoft, dimensional, photographer-quality lighting that wraps naturally around the subject. Realistic shadows, believable highlights, and depth across skin, hair, jewelry, clothing, and any environmental reflections.'
+  );
+  parts.push(
+    'CAMERA & IMAGE FEEL:\nShot like a real premium campaign on a Canon EOS R5 with an 85mm portrait lens at f/1.4, Kodak Portra 400 film rendering. Shallow depth of field with natural bokeh. Crisp focus on the face, eyes, hair, jewelry, and outfit details. The image should feel like a real professional fashion/lifestyle shoot, not an AI prototype.'
+  );
+  parts.push(
+    'QUALITY & RETOUCHING:\nCommercial-level retouching only. Preserve natural skin texture, visible pores, realistic highlights, natural body proportions, accurate anatomy, believable hands, and individual hair strands. No text, logos, brand names, or graphic prints on clothing. The final image should feel polished and premium without erasing humanity.'
+  );
 
-  parts.push('REALISM & QUALITY: Ultra-realistic professional photography. Natural skin texture. Believable facial asymmetry. Realistic body proportions. Realistic fabric texture. Natural lighting. Candid lived-in pose. Not plastic. Not overly edited.');
-  parts.push('AVOID: Face drift, altered bone structure, changed ethnicity, generic model face, over-smoothed skin, doll-like beauty, warped hands, stiff posing, fake-looking fabric, overprocessed AI shine.');
+  parts.push(
+    'NEGATIVE INSTRUCTIONS:\n' + [
+      identityLocked ? `Do not change ${possessive} identity. Do not make ${possessive} look like a different person. Do not create a generic face.` : 'Do not create a generic, averaged, or AI-default face.',
+      'Do not over-smooth the skin. Do not create plastic skin, waxy texture, or fake glossy hair.',
+      'Do not distort the hands, fingers, limbs, or body proportions. Do not create extra fingers, extra limbs, duplicate body parts, or warped anatomy.',
+      'Do not crop the outfit awkwardly.',
+      'Do not create fake logos, readable brand names, random text, or misspelled typography on clothing or accessories.',
+      'Do not make the pose stiff, cheesy, overly sexualized, or influencer-basic.',
+      'Do not make the background cluttered or obviously AI-generated.',
+      'Do not make the lighting harsh, flat, or overly flashy.',
+      'Do not make the image look like a studio cutout or generic backdrop.',
+      'Do not use cartoon styling, illustration styling, HDR overprocessing, or unrealistic saturation.',
+    ].join(' ')
+  );
+
+  parts.push(
+    `FINAL GOAL:\nA photorealistic${sceneName ? ` ${sceneName.toLowerCase()}` : ''} fashion campaign image of ${char.name} that feels polished, stylish, and expensive — like it was captured by a real photographer for a premium lifestyle brand. The image must feel believable, natural, and editorial, while clearly showcasing the outfit and styling.`
+  );
 
   return parts.join('\n\n');
 }

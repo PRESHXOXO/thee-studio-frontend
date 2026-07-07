@@ -363,6 +363,14 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
 
   if (character) {
     const f = character.fields || {};
+    const possessive = isMale ? 'his' : 'her';
+    const personNoun = isMale ? 'man' : 'woman';
+
+    if (character.faceAnchor) {
+      s.push(
+        `IMPORTANT:\nUse the uploaded reference image as the identity anchor for ${character.name}. Preserve ${possessive} recognizable face, beauty, skin tone, and overall look. ${character.name} must read as the same ${personNoun} from the reference image, not a generic model. Photorealistic only. No illustration, no cartoon styling, no plastic AI finish, no fantasy gloss.`
+      );
+    }
 
     // TALENT — face and skin
     const talentParts = [];
@@ -476,9 +484,24 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
   s.push(`POSE & COMPOSITION: ${poseDir}`);
 
   s.push('LIGHTING: Soft dimensional natural or studio-style lighting that wraps realistically around the subject. Warm refined color grading, natural shadows, believable highlights, and depth in the skin, clothing, jewelry, and any environmental reflections.');
-  s.push('CAMERA & DETAIL: Shot on a Canon EOS R5, 85mm portrait lens at f/1.4, Kodak Portra 400 film stock rendering. Shallow depth of field with natural bokeh. Crisp focus on the face, eyes, hair, jewelry, tattoos, and styling details. 8K resolution, ultra-detailed skin pores and texture.');
-  s.push('QUALITY & TEXTURE: Commercial-level retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds, believable clothing structure, and individual hair strand detail. The image should feel premium and finished without erasing the humanity of the subject. Avoid AI over-smoothing, plastic skin, waxy texture, distorted hands, warped fingers, extra limbs, melted fabric, fake-looking jewelry, stiff clothing, generic faces, and studio-backdrop energy.');
+  s.push('CAMERA & IMAGE FEEL: Shot like a real premium campaign on a Canon EOS R5, 85mm portrait lens at f/1.4, Kodak Portra 400 film rendering. Shallow depth of field with natural bokeh. Crisp focus on the face, eyes, hair, jewelry, and styling details. The image should feel like a real professional fashion/lifestyle shoot, not an AI prototype.');
+  s.push('QUALITY & RETOUCHING: Commercial-level retouching only. Preserve natural skin texture, visible pores, realistic highlights, natural body proportions, accurate anatomy, believable hands, and individual hair strands. No text, logos, brand names, or graphic prints on clothing. The final image should feel polished and premium without erasing humanity.');
   s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a premium campaign.');
+
+  s.push('NEGATIVE INSTRUCTIONS:\n' + [
+    character ? `Do not change ${isMale ? 'his' : 'her'} identity. Do not make ${isMale ? 'him' : 'her'} look like a different person. Do not create a generic face.` : 'Do not create a generic, averaged, or AI-default face.',
+    'Do not over-smooth the skin. Do not create plastic skin, waxy texture, or fake glossy hair.',
+    'Do not distort the hands, fingers, limbs, or body proportions. Do not create extra fingers, extra limbs, duplicate body parts, or warped anatomy.',
+    'Do not crop the outfit awkwardly.',
+    'Do not create fake logos, readable brand names, random text, or misspelled typography on clothing or accessories.',
+    'Do not make the pose stiff, cheesy, overly sexualized, or influencer-basic.',
+    'Do not make the background cluttered or obviously AI-generated.',
+    'Do not make the lighting harsh, flat, or overly flashy.',
+    'Do not make the image look like a studio cutout or generic backdrop.',
+    'Do not use cartoon styling, illustration styling, HDR overprocessing, or unrealistic saturation.',
+  ].join(' '));
+
+  s.push(`FINAL GOAL:\nA photorealistic${scene && scene !== 'None' ? ` ${scene.toLowerCase()}` : ''} fashion campaign image${character ? ` of ${character.name}` : ''} that feels polished, stylish, and expensive — like it was captured by a real photographer for a premium lifestyle brand. The image must feel believable, natural, and editorial, while clearly showcasing the outfit and styling.`);
 
   return s.join('\n\n');
 }

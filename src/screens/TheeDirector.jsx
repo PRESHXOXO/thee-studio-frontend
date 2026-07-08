@@ -866,7 +866,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
                   style={{
                     width: '100%', boxSizing: 'border-box',
                     padding: '9px 12px', borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border)', background: 'var(--input-bg, #fff)',
+                    border: '1px solid var(--border)', background: 'var(--surface-inset)',
                     font: 'var(--text-sm)', color: 'var(--text-body)',
                     outline: 'none', fontFamily: 'inherit',
                   }}

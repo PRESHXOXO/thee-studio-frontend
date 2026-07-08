@@ -51,12 +51,12 @@ const LIGHTINGS = ['Natural', 'Golden Hour', 'Blue Hour', 'Studio', 'Night', 'Ov
 const SHOT_TYPES = ['Portrait', 'Fashion', 'Lifestyle', 'Campaign', 'Street', 'Beauty'];
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 };
-const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--input-bg, #fff)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
+const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--surface-inset)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
 
 const TEXTAREA = {
   width: '100%', boxSizing: 'border-box', resize: 'vertical',
   minHeight: 80, padding: '10px 12px',
-  background: 'var(--input-bg, #fff)', border: '1px solid var(--border)',
+  background: 'var(--surface-inset)', border: '1px solid var(--border)',
   borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)',
   lineHeight: 1.5, outline: 'none', fontFamily: 'inherit',
 };

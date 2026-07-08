@@ -24,7 +24,6 @@ const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', tex
 const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--input-bg, #fff)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
 
 const QUICK_ENGINES = [
-  { id: 'wavespeed_nano_banana',  label: 'Nano Banana',       icon: 'banana' },
   { id: 'openai_image',           label: 'OpenAI',            icon: 'zap' },
   { id: 'replicate_photomaker',   label: 'PhotoMaker 🔒',    icon: 'scan-face' },
   { id: 'replicate_instantid',    label: 'InstantID 🔒',     icon: 'fingerprint' },
@@ -410,7 +409,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [quickScene,    setQuickScene]    = React.useState('none');
   const [quickMood,     setQuickMood]     = React.useState('Clean');
   const [quickOutfit,   setQuickOutfit]   = React.useState('default');
-  const [quickEngine,   setQuickEngine]   = React.useState('wavespeed_nano_banana');
+  const [quickEngine,   setQuickEngine]   = React.useState('openai_image');
   const [quickBatch,    setQuickBatch]    = React.useState(1);
   const [activeRef,     setActiveRef]     = React.useState(0); // index into getAllImages
   const [generating,    setGenerating]    = React.useState(false);
@@ -864,7 +863,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
                 )}
                 {refSetLoading && (
                   <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                    Generating 15 reference headshots via Wavespeed — this takes ~3–5 min. Don't close this panel.
+                    Generating 15 reference headshots — this takes ~3–5 min. Don't close this panel.
                   </div>
                 )}
               </div>

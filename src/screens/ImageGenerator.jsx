@@ -206,9 +206,9 @@ export function ImageGenerator({ initialPrompts, onNav }) {
       const opts = list.map(c => ({ value: c, label: c }));
       setEngineOptions(opts);
       const isReady = c => !c.includes('Setup Needed') && !c.includes('Disabled');
-      const wavespeed = list.find(c => c.toLowerCase().includes('nano banana') || c.toLowerCase().includes('wavespeed'));
+      const openaiEngine = list.find(c => c.toLowerCase().includes('openai') && isReady(c));
       const firstReady = list.find(isReady);
-      setEngine(wavespeed || firstReady || list[0]);
+      setEngine(openaiEngine || firstReady || list[0]);
     });
   }, []);
 

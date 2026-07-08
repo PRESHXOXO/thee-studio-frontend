@@ -1,11 +1,11 @@
-/* Thee Studio™ — Shadows, transitions, focus (dark luxury) */
+/* Thee Studio™ — Shadows, transitions, focus (Miami Sunset) */
 :root {
   /* ---- Shadows — deep, soft, cinematic ---- */
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.40);
   --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.50);
   --shadow-lg: 0 22px 56px rgba(0, 0, 0, 0.60);
-  --shadow-coral: 0 8px 26px rgba(212, 175, 90, 0.28); /* gold glow */
+  --shadow-coral: 0 8px 26px rgba(255, 46, 126, 0.32); /* hot pink glow */
   --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.35);
 
   /* ---- Transitions ---- */
@@ -15,6 +15,6 @@
   --t-base: 200ms var(--ease);
   --t-slow: 360ms var(--ease-out);
 
-  /* ---- Focus ring — gold ---- */
-  --focus-ring: 0 0 0 3px rgba(212, 175, 90, 0.40);
+  /* ---- Focus ring — hot pink ---- */
+  --focus-ring: 0 0 0 3px rgba(255, 46, 126, 0.40);
 }

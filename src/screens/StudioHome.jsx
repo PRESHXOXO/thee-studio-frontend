@@ -159,7 +159,7 @@ export function StudioHome({ onNav }) {
           <div style={{
             display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
             padding: '18px 22px', borderRadius: 'var(--radius-xl)',
-            background: 'var(--grad-rose)', border: '1px solid rgba(212,175,90,0.28)',
+            background: 'var(--grad-rose)', border: '1px solid rgba(255,178,56,0.28)',
           }}>
             <span style={{
               width: 40, height: 40, borderRadius: 'var(--radius-md)', flexShrink: 0,

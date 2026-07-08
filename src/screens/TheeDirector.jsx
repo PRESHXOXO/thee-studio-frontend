@@ -229,6 +229,23 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
   const [outfitPhotoAnalyzing, setOutfitPhotoAnalyzing] = React.useState(false);
   const [outfitPhotoEditing, setOutfitPhotoEditing] = React.useState(false);
   const outfitFileRef = React.useRef(null);
+  const lastOutfitVisionSentence = React.useRef('');
+
+  // Auto-fills the analyzed outfit description into the Vision box so the
+  // user doesn't have to copy it over manually. Replaces any previously
+  // auto-inserted outfit sentence instead of stacking on re-upload.
+  const applyOutfitDescToVision = (desc) => {
+    const sentence = `Wearing: ${desc}`;
+    setVision(prevVision => {
+      let next = prevVision;
+      if (lastOutfitVisionSentence.current && next.includes(lastOutfitVisionSentence.current)) {
+        next = next.replace(lastOutfitVisionSentence.current, '').trim();
+      }
+      next = next ? `${next}\n\n${sentence}` : sentence;
+      lastOutfitVisionSentence.current = sentence;
+      return next;
+    });
+  };
 
   // Filtered options based on selected gender
   const physiqueOptions  = getPhysiqueOptions(gender);
@@ -300,6 +317,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
       try {
         const desc = await describeOutfitImage(dataUrl);
         setOutfitPhotoDesc(desc);
+        if (desc) applyOutfitDescToVision(desc);
       } catch (err) {
         setOutfitPhotoDesc('⚠ Could not analyze outfit — check your OpenAI key or try a clearer photo.');
       } finally {
@@ -314,6 +332,10 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
     setOutfitPhotoUrl('');
     setOutfitPhotoDesc('');
     setOutfitPhotoEditing(false);
+    if (lastOutfitVisionSentence.current) {
+      setVision(prevVision => prevVision.replace(lastOutfitVisionSentence.current, '').trim());
+      lastOutfitVisionSentence.current = '';
+    }
   };
 
   const finishBuild = (result, mode) => {
@@ -617,7 +639,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
                             autoFocus
                             style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', font: 'var(--text-xs)', fontFamily: 'inherit', lineHeight: 1.5, padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface-inset)', color: 'var(--text-body)' }}
                           />
-                          <button onClick={() => setOutfitPhotoEditing(false)} style={{ marginTop: 6, font: 'var(--text-xs)', color: 'var(--accent-deep)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Done</button>
+                          <button onClick={() => { setOutfitPhotoEditing(false); if (outfitPhotoDesc && !outfitPhotoDesc.startsWith('⚠')) applyOutfitDescToVision(outfitPhotoDesc); }} style={{ marginTop: 6, font: 'var(--text-xs)', color: 'var(--accent-deep)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Done</button>
                         </>
                       ) : (
                         <p style={{ font: 'var(--text-xs)', color: 'var(--text-body)', margin: 0, lineHeight: 1.5 }}>{outfitPhotoDesc}</p>
@@ -628,7 +650,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
                     // logo'd images the vision model declines to describe in detail) —
                     // let the user type the outfit description themselves instead of
                     // being stuck.
-                    <div style={{ padding: '8px 10px', background: 'var(--status-warn-bg)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(227,179,65,0.35)' }}>
+                    <div style={{ padding: '8px 10px', background: 'var(--status-warn-bg)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,178,56,0.35)' }}>
                       <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--status-warn)', marginBottom: 4 }}>
                         {outfitPhotoDesc ? 'Could not auto-describe outfit' : 'No description yet'}
                       </div>
@@ -638,6 +660,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
                       <textarea
                         value={outfitPhotoDesc.startsWith('⚠') ? '' : outfitPhotoDesc}
                         onChange={e => setOutfitPhotoDesc(e.target.value)}
+                        onBlur={e => { if (e.target.value.trim()) applyOutfitDescToVision(e.target.value.trim()); }}
                         placeholder="e.g. pink graphic tank top, distressed denim mini skirt, pink heeled boots, pink accessories…"
                         rows={3}
                         style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', font: 'var(--text-xs)', fontFamily: 'inherit', lineHeight: 1.5, padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface-inset)', color: 'var(--text-body)' }}

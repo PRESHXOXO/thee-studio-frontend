@@ -3,7 +3,7 @@ import React from 'react';
 const tones = {
   soft:  { background: 'var(--blush)',    color: 'var(--accent-deep)' },
   plain: { background: 'var(--cream-deep)', color: 'var(--text-muted)' },
-  gold:  { background: '#2A2312',         color: '#E8C36A' },
+  gold:  { background: '#332411',         color: '#FFB238' },
   coral: { background: 'var(--rose-deep)', color: 'var(--cherry)' },
 };
 

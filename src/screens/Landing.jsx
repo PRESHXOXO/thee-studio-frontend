@@ -118,7 +118,7 @@ function HeroSection({ onCTA }) {
             </div>
             <span style={{ font: '600 0.8125rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Thee Studio</span>
           </div>
-          {['Studio', 'Image Generator', 'Thee Director', 'Characters', 'Scenes'].map((item, i) => (
+          {['Studio', 'Creator Builder', 'Thee Director', 'Characters', 'Scenes'].map((item, i) => (
             <div key={item} style={{
               padding: '7px 10px', borderRadius: 8, marginBottom: 2,
               background: i === 0 ? 'var(--rose-glass)' : 'transparent',
@@ -162,7 +162,7 @@ function FeaturesSection() {
   const features = [
     { icon: '✦', title: 'Identity Lock', desc: 'Generate a character once. Every image after stays locked to that exact face, skin tone, and presence.' },
     { icon: '◈', title: 'Casting Sheets', desc: 'Professional casting-style reference photos in seconds. Black tee, white background, multiple angles.' },
-    { icon: '◇', title: 'Image Generator', desc: 'Create on-brand lifestyle content, campaign shots, and editorial imagery — all identity-consistent.' },
+    { icon: '◇', title: 'Creator Builder', desc: 'Build a new creator\'s look — on-brand lifestyle content, campaign shots, and editorial imagery, all identity-consistent.' },
     { icon: '◉', title: 'Thee Director', desc: 'AI-powered creative direction. Describe a vision, get a full shot list and prompt pack back.' },
     { icon: '⬡', title: 'Campaigns', desc: 'Plan and generate full content campaigns. 30 days of content, one cohesive visual identity.' },
     { icon: '◎', title: 'Character Library', desc: 'Save, organize, and reuse characters across every project. Your roster, always ready.' },

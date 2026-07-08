@@ -1,4 +1,4 @@
-// Shared creative prompt data and builder logic for Image Generator and Thee Director.
+// Shared creative prompt data and builder logic for Creator Builder and Thee Director.
 
 export const LOCATIONS     = [
   'None', 'Yacht', 'Penthouse', 'Private Jet', 'Rooftop', 'Poolside',

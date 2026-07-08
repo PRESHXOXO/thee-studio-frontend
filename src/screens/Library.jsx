@@ -6,7 +6,7 @@ import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
 import { loadLibrary, deleteFromLibrary, updateLibraryEntry } from '../lib/library.js';
 
 const SOURCE_LABELS = {
-  generator:   { label: 'Image Generator', icon: 'image' },
+  generator:   { label: 'Creator Builder', icon: 'image' },
   quick_shoot: { label: 'Quick Shoot',     icon: 'zap' },
   scene_flow:  { label: 'Scene Flow',      icon: 'message-circle' },
 };
@@ -344,7 +344,7 @@ export function Library() {
         <EmptyState
           icon="images"
           title="Library is empty"
-          body="Generated images are saved here automatically. Head to the Image Generator or Quick Shoot to create your first image."
+          body="Generated images are saved here automatically. Head to the Creator Builder or Quick Shoot to create your first image."
         />
       ) : visible.length === 0 ? (
         <EmptyState

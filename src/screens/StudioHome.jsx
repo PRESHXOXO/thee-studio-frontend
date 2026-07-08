@@ -9,7 +9,7 @@ function loadCharacters() {
 
 const SHORTCUTS = [
   { icon: 'upload',       label: 'Import Creator', sub: 'Add to your cast', nav: 'characters' },
-  { icon: 'image',        label: 'Image Generator', sub: 'Create imagery',   nav: 'images' },
+  { icon: 'image',        label: 'Creator Builder', sub: 'Build a new creator', nav: 'images' },
   { icon: 'clapperboard', label: 'Thee Director',   sub: 'Build a prompt',   nav: 'director' },
   { icon: 'megaphone',    label: 'Campaigns',       sub: 'Launch a shoot',   nav: 'campaigns' },
 ];
@@ -96,7 +96,6 @@ function nextStep({ charCount, libCount, unreviewed }) {
 }
 
 export function StudioHome({ onNav }) {
-  const fileInputRef = React.useRef(null);
   const [recent, setRecent]   = React.useState([]);
   const [charCount, setChars] = React.useState(0);
   const [libCount, setLib]    = React.useState(0);
@@ -116,18 +115,6 @@ export function StudioHome({ onNav }) {
     setPipeline(p);
   }, []);
 
-  const handleImport = () => fileInputRef.current?.click();
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      onNav && onNav('characters', { image: ev.target.result, name: file.name.replace(/\.[^.]+$/, '') });
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  };
-
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 40, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
 
@@ -145,8 +132,7 @@ export function StudioHome({ onNav }) {
           The creative OS for AI creators.
         </h1>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
-          <Button variant="secondary" onClick={handleImport}><Icon name="upload" size={15} /> New Creator</Button>
+          <Button variant="secondary" onClick={() => onNav && onNav('images')}><Icon name="wand-2" size={15} /> New Creator</Button>
           <Button variant="primary" onClick={() => onNav && onNav('characters')}><Icon name="upload" size={15} /> Import Creator</Button>
         </div>
 

@@ -20,7 +20,7 @@ import { SceneFlow } from './screens/SceneFlow.jsx';
 const BASE_NAV = [
   { section: 'Create' },
   { id: 'home',       label: 'Studio',          icon: 'layout-dashboard' },
-  { id: 'images',     label: 'Image Generator', icon: 'image' },
+  { id: 'images',     label: 'Creator Builder', icon: 'image' },
   { id: 'director',   label: 'Thee Director',   icon: 'clapperboard' },
   { id: 'characters', label: 'Characters',      icon: 'sparkles' },
   { id: 'scenes',     label: 'Scenes',          icon: 'mountain-snow' },
@@ -36,7 +36,7 @@ const BASE_NAV = [
 const SCREENS = {
   home:       { label: 'Studio',           component: StudioHome },
   director:   { label: 'Thee Director',    component: TheeDirector },
-  images:     { label: 'Image Generator',  component: ImageGenerator },
+  images:     { label: 'Creator Builder',  component: ImageGenerator },
   characters: { label: 'Characters',       component: Characters },
   scenes:     { label: 'Scenes',           component: Scenes },
   sceneflow:  { label: 'Scene Flow',       component: SceneFlow },

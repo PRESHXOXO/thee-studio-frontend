@@ -467,7 +467,13 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     s.push(defaultScene);
   }
 
-  if (vision) s.push(`ART DIRECTION: ${vision}`);
+  // Strip any auto-inserted "Wearing: ..." sentence from vision before using
+  // it as ART DIRECTION — the outfit is already covered by the OUTFIT
+  // section above (outfitPhotoDesc), so keeping it here just duplicates it.
+  const cleanedVision = outfitPhotoDesc
+    ? vision.replace(`Wearing: ${outfitPhotoDesc}`, '').replace(/\n{3,}/g, '\n\n').trim()
+    : vision;
+  if (cleanedVision) s.push(`ART DIRECTION: ${cleanedVision}`);
 
   // SHOOT FEEL
   const shootFeelParts = [contentType !== 'Portrait' ? contentType : '', mood !== 'Clean' ? mood : ''].filter(Boolean);

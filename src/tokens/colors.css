@@ -6,9 +6,9 @@
 :root {
   /* ---- Base palette (legacy names, sunset values) ---- */
   --cream:        #150F2E;  /* app background — deep navy-purple night sky */
-  --white:        #1F1740;  /* primary card surface */
-  --rose-glass:   #251B48;  /* glass panel surface */
-  --blush:        #32234F;  /* soft hover fill */
+  --white:        #271D4D;  /* primary card surface — lifted for depth vs background */
+  --rose-glass:   #2F2358;  /* glass panel surface */
+  --blush:        #3B2C63;  /* soft hover fill */
   --peach:        #402A56;  /* soft accent fill / secondary border */
   --coral:        #FF6B35;  /* orange — primary action */
   --hot-coral:    #FF2E7E;  /* hot pink — bright accent */

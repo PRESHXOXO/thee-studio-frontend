@@ -228,6 +228,11 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
   const [outfitPhotoDesc,    setOutfitPhotoDesc]    = React.useState('');
   const [outfitPhotoAnalyzing, setOutfitPhotoAnalyzing] = React.useState(false);
   const [outfitPhotoEditing, setOutfitPhotoEditing] = React.useState(false);
+  // Draft text for the manual-entry fallback box. Kept separate from
+  // outfitPhotoDesc so typing doesn't flip the view away from the textarea
+  // mid-keystroke (outfitPhotoDesc becoming truthy switches to the read-only
+  // "Outfit Detected" view).
+  const [manualOutfitDraft, setManualOutfitDraft] = React.useState('');
   const outfitFileRef = React.useRef(null);
   const lastOutfitVisionSentence = React.useRef('');
 
@@ -312,6 +317,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
       setOutfitPhotoUrl(dataUrl);
       setOutfitPhotoDesc('');
       setOutfitPhotoEditing(false);
+      setManualOutfitDraft('');
       setOutfitOverride('Unspecified'); // clear dropdown when photo used
       setOutfitPhotoAnalyzing(true);
       try {
@@ -332,6 +338,7 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
     setOutfitPhotoUrl('');
     setOutfitPhotoDesc('');
     setOutfitPhotoEditing(false);
+    setManualOutfitDraft('');
     if (lastOutfitVisionSentence.current) {
       setVision(prevVision => prevVision.replace(lastOutfitVisionSentence.current, '').trim());
       lastOutfitVisionSentence.current = '';
@@ -658,13 +665,31 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
                         Common with logos, brand names, or product collages. Type it manually:
                       </p>
                       <textarea
-                        value={outfitPhotoDesc.startsWith('⚠') ? '' : outfitPhotoDesc}
-                        onChange={e => setOutfitPhotoDesc(e.target.value)}
-                        onBlur={e => { if (e.target.value.trim()) applyOutfitDescToVision(e.target.value.trim()); }}
+                        value={manualOutfitDraft}
+                        onChange={e => setManualOutfitDraft(e.target.value)}
+                        onBlur={e => {
+                          const val = e.target.value.trim();
+                          if (val) {
+                            setOutfitPhotoDesc(val);
+                            applyOutfitDescToVision(val);
+                          }
+                        }}
                         placeholder="e.g. pink graphic tank top, distressed denim mini skirt, pink heeled boots, pink accessories…"
                         rows={3}
                         style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', font: 'var(--text-xs)', fontFamily: 'inherit', lineHeight: 1.5, padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface-inset)', color: 'var(--text-body)' }}
                       />
+                      {manualOutfitDraft.trim() && (
+                        <button
+                          onClick={() => {
+                            const val = manualOutfitDraft.trim();
+                            setOutfitPhotoDesc(val);
+                            applyOutfitDescToVision(val);
+                          }}
+                          style={{ marginTop: 6, font: '600 0.75rem/1 var(--font-ui)', color: 'var(--status-warn)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          Use this description
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

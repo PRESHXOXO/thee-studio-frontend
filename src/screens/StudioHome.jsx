@@ -8,7 +8,7 @@ function loadCharacters() {
 }
 
 const SHORTCUTS = [
-  { icon: 'upload',       label: 'Import Character', sub: 'Add to your cast', nav: 'characters' },
+  { icon: 'upload',       label: 'Import Creator', sub: 'Add to your cast', nav: 'characters' },
   { icon: 'image',        label: 'Image Generator', sub: 'Create imagery',   nav: 'images' },
   { icon: 'clapperboard', label: 'Thee Director',   sub: 'Build a prompt',   nav: 'director' },
   { icon: 'megaphone',    label: 'Campaigns',       sub: 'Launch a shoot',   nav: 'campaigns' },
@@ -89,7 +89,7 @@ function PipelineCard({ icon, count, label, tone, onClick }) {
 
 // Suggest the user's next move based on current studio state.
 function nextStep({ charCount, libCount, unreviewed }) {
-  if (charCount === 0) return { icon: 'sparkles', text: 'Start by importing a character — your cast drives everything else.', nav: 'characters', cta: 'Import Character' };
+  if (charCount === 0) return { icon: 'sparkles', text: 'Start by importing a creator — your cast drives everything else.', nav: 'characters', cta: 'Import Creator' };
   if (libCount === 0)  return { icon: 'clapperboard', text: 'Your cast is ready. Build a scene and generate your first draft.', nav: 'sceneflow', cta: 'Open Scene Flow' };
   if (unreviewed > 0)  return { icon: 'eye', text: `${unreviewed} draft${unreviewed !== 1 ? 's' : ''} waiting for review. Approve keepers, flag fixes.`, nav: 'library', cta: 'Review Drafts' };
   return { icon: 'megaphone', text: 'Pipeline is clear. Plan your next shoot or launch a campaign.', nav: 'campaigns', cta: 'Open Campaigns' };
@@ -146,8 +146,8 @@ export function StudioHome({ onNav }) {
         </h1>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
-          <Button variant="secondary" onClick={handleImport}><Icon name="upload" size={15} /> Import Creator</Button>
-          <Button variant="primary" onClick={() => onNav && onNav('characters')}><Icon name="upload" size={15} /> Import Character</Button>
+          <Button variant="secondary" onClick={handleImport}><Icon name="upload" size={15} /> New Creator</Button>
+          <Button variant="primary" onClick={() => onNav && onNav('characters')}><Icon name="upload" size={15} /> Import Creator</Button>
         </div>
 
         {/* Live stats */}

@@ -16,6 +16,7 @@ import { loadLibrary } from './lib/library.js';
 import { Landing } from './screens/Landing.jsx';
 import { Auth } from './screens/Auth.jsx';
 import { SceneFlow } from './screens/SceneFlow.jsx';
+import { StudioErrorBoundary } from './components/system/StudioErrorBoundary.jsx';
 
 const BASE_NAV = [
   { section: 'Create' },
@@ -134,7 +135,9 @@ export default function App() {
               key={activeNav}
               style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1, animation: 'screen-in 0.18s ease-out both' }}
             >
-              <Screen {...screenProps} />
+              <StudioErrorBoundary resetKey={activeNav} onReset={() => handleNav('home')}>
+                <Screen {...screenProps} />
+              </StudioErrorBoundary>
             </main>
           </div>
         </div>

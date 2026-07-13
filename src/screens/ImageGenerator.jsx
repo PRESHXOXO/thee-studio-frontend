@@ -322,13 +322,14 @@ export function ImageGenerator({ initialPrompts, onNav }) {
     const validImgs = aiGenImages.filter(img => img && !img.startsWith('ERROR:'));
     if (!validImgs.length) return;
     const compressed = await Promise.all(validImgs.slice(0, 5).map(img => compressImage(img)));
+    // Locking sets the built subject as the active generation reference;
+    // the "{name} · Ready" chip in the card header confirms the lock.
     setSelectedChar({
       name: aiGenName || 'Creator',
       faceAnchor: aiGenAnchor,
       refImages: compressed,
       locked: true,
     });
-    setStudioOpen(false);
   };
 
   const handleGenerate = async () => {

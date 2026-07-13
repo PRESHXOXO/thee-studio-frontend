@@ -617,17 +617,20 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     const updated = activeId != null
       ? characters.map(c => c.id === activeId ? { ...c, ...charData } : c)
       : [...characters, { id: Date.now(), ...charData }];
+    // Snapshot the stored collection so a failed write can never leave it
+    // mutated. Existing creators must never be stripped to make space.
+    const prevSerialized = localStorage.getItem('ts_characters');
     try {
       saveCharacters(updated);
     } catch {
-      try {
-        const slim = updated.map((c, i) => i < updated.length - 1 ? { ...c, image: null, refImages: [] } : c);
-        saveCharacters(slim);
-        setCharacters(slim);
-      } catch {
-        setSaveError('Storage full — delete some characters and try again.');
-        return;
+      if (localStorage.getItem('ts_characters') !== prevSerialized) {
+        try {
+          if (prevSerialized === null) localStorage.removeItem('ts_characters');
+          else localStorage.setItem('ts_characters', prevSerialized);
+        } catch {}
       }
+      setSaveError('Browser storage is full, so this creator could not be saved. Your existing creators were left untouched. Free up space by deleting an unused creator or clearing old Library images, then save again.');
+      return;
     }
     setCharacters(updated);
     const savedId = activeId ?? updated[updated.length - 1].id;

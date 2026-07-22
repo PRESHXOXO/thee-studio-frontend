@@ -317,18 +317,11 @@ export async function sceneFlowGenerate({ sceneJson = '{}', refImageB64 = '' } =
 // Prompt Lab API
 // ---------------------------------------------------------------------------
 
-// Runs the Claude-powered prompt engine on the backend.
+// Runs the OpenAI-powered prompt engine on the backend.
 // Resolves to { prompt, slots, why_this_works, variants, moods, target, model }
 // or { refusal }; throws on backend { error }.
 export async function promptLabBuild(request) {
   const raw = await callNamedEndpoint('prompt_lab_build', [JSON.stringify(request)]);
-  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
-  if (parsed.error) throw new Error(parsed.error);
-  return parsed;
-}
-
-export async function saveAnthropicKey(key) {
-  const raw = await callNamedEndpoint('save_anthropic_key', [key]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
   return parsed;

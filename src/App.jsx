@@ -16,6 +16,7 @@ import { loadLibrary } from './lib/library.js';
 import { Landing } from './screens/Landing.jsx';
 import { Auth } from './screens/Auth.jsx';
 import { SceneFlow } from './screens/SceneFlow.jsx';
+import { PromptLab } from './screens/PromptLab.jsx';
 import { StudioErrorBoundary } from './components/system/StudioErrorBoundary.jsx';
 
 const BASE_NAV = [
@@ -23,6 +24,7 @@ const BASE_NAV = [
   { id: 'home',       label: 'Studio',          icon: 'layout-dashboard' },
   { id: 'images',     label: 'Creator Builder', icon: 'image' },
   { id: 'director',   label: 'Thee Director',   icon: 'clapperboard' },
+  { id: 'promptlab',  label: 'Prompt Lab',      icon: 'flask-conical' },
   { id: 'characters', label: 'Characters',      icon: 'sparkles' },
   { id: 'scenes',     label: 'Scenes',          icon: 'mountain-snow' },
   { id: 'sceneflow',  label: 'Scene Flow',      icon: 'message-circle' },
@@ -38,6 +40,7 @@ const SCREENS = {
   home:       { label: 'Studio',           component: StudioHome },
   director:   { label: 'Thee Director',    component: TheeDirector },
   images:     { label: 'Creator Builder',  component: ImageGenerator },
+  promptlab:  { label: 'Prompt Lab',       component: PromptLab },
   characters: { label: 'Characters',       component: Characters },
   scenes:     { label: 'Scenes',           component: Scenes },
   sceneflow:  { label: 'Scene Flow',       component: SceneFlow },

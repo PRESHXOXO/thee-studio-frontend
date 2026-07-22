@@ -8,6 +8,7 @@ const SCREENS = [
   { id: 'home', label: 'Studio' },
   { id: 'images', label: 'Creator Builder' },
   { id: 'director', label: 'Thee Director' },
+  { id: 'promptlab', label: 'Prompt Lab' },
   { id: 'characters', label: 'Characters' },
   { id: 'scenes', label: 'Scenes' },
   { id: 'sceneflow', label: 'Scene Flow' },

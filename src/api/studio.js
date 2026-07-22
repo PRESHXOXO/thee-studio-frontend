@@ -41,31 +41,6 @@ export function sanitizeForOpenAI(prompt) {
   return safe;
 }
 
-async function predict(fnIndex, data) {
-  const res = await fetch(`${BASE}/run/predict`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fn_index: fnIndex, data, session_hash: SESSION_HASH }),
-  });
-
-  if (!res.ok) {
-    let detail = '';
-    try { detail = await res.text(); } catch {}
-    throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
-  }
-
-  const contentType = res.headers.get('content-type') || '';
-
-  // Gradio 6.x returns SSE stream
-  if (contentType.includes('text/event-stream')) {
-    return await readSSE(res);
-  }
-
-  // Older fallback: plain JSON
-  const json = await res.json();
-  return json.data;
-}
-
 async function readSSE(response) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -136,17 +111,6 @@ async function callNamedEndpoint(apiName, data) {
   throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
 }
 
-// fn_index map (order of .click/.change registrations in app.py)
-// creative_engine_input.change = 0
-// update_image_generator_status × 9 (for loop over 9 controls) = indices 1–9
-// build_director_button.click = 10
-// ... 38 more handlers ...
-// generate_image_button.click = 49
-const FN = {
-  build_director_outputs: 10,
-  generate_image: 49,
-};
-
 // Engine names that identify this dropdown by content when label matching fails.
 const ENGINE_KEYWORDS = ['Draft', 'DreamShaper', 'Portrait', 'Beauty', 'Campaign', 'Shot', 'Still', 'FLUX', 'OpenAI', 'Replicate', 'Cloud'];
 
@@ -193,7 +157,7 @@ export async function buildDirectorOutputs({
   scene = 'None',
   useIdentityLock = false,
 } = {}) {
-  const data = await predict(FN.build_director_outputs, [
+  const data = await callNamedEndpoint('build_director_outputs', [
     vision, contentType, mood, outputGoal,
     character || 'None',
     scene || 'None',
@@ -314,7 +278,7 @@ export async function generateImage({
   width = 832,
   height = 1216,
 } = {}) {
-  const data = await predict(FN.generate_image, [
+  const data = await callNamedEndpoint('generate_image', [
     engine, performanceMode, comfyServerUrl, comfyWorkflowPath,
     imageStyle, positivePrompt, negativePrompt, imageSize,
     quality, batchSize, seed, cfg, steps, width, height,
@@ -347,4 +311,25 @@ export async function sceneFlowGenerate({ sceneJson = '{}', refImageB64 = '' } =
   const raw = await callNamedEndpoint('scene_flow_generate', [sceneJson, refImageB64]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   return parsed; // { result_b64, result_url, content_type, status } or { error }
+}
+
+// ---------------------------------------------------------------------------
+// Prompt Lab API
+// ---------------------------------------------------------------------------
+
+// Runs the Claude-powered prompt engine on the backend.
+// Resolves to { prompt, slots, why_this_works, variants, moods, target, model }
+// or { refusal }; throws on backend { error }.
+export async function promptLabBuild(request) {
+  const raw = await callNamedEndpoint('prompt_lab_build', [JSON.stringify(request)]);
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed;
+}
+
+export async function saveAnthropicKey(key) {
+  const raw = await callNamedEndpoint('save_anthropic_key', [key]);
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed;
 }

@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { saveApiKey, saveGeminiKey, saveReplicateKey, saveFalKey } from '../api/studio.js';
+import { saveApiKey, saveGeminiKey, saveReplicateKey, saveFalKey, saveAnthropicKey } from '../api/studio.js';
 
 const ENGINES = [
   { id: 'openai',              name: 'OpenAI — gpt-image-2',           desc: 'Cloud · photorealistic studio quality',              status: 'dynamic',     statusKey: 'ts_openai_configured',    icon: 'cloud' },
@@ -131,6 +131,17 @@ export function Settings() {
           placeholder="sk-..."
           localStorageKey="ts_openai_configured"
           onSave={saveApiKey}
+          onSaved={onKeySaved}
+        />
+
+        <div style={{ borderTop: '1px solid var(--border)', margin: '0 -4px' }} />
+
+        <KeyField
+          label="Anthropic API Key"
+          description="Required for Prompt Lab — the Claude prompt engine that builds and formats your prompts."
+          placeholder="sk-ant-..."
+          localStorageKey="ts_anthropic_configured"
+          onSave={saveAnthropicKey}
           onSaved={onKeySaved}
         />
 

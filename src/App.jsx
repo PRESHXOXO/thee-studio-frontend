@@ -144,6 +144,7 @@ export default function App() {
           <div style={{ marginLeft: 'var(--sidebar-w, 248px)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
             <Topbar
               context={screenLabel}
+              onNav={handleNav}
               actions={
                 <div title={statusLabel} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)', border: '1px solid var(--border)', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>
                   <span style={{

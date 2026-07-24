@@ -1,13 +1,25 @@
 import React from 'react';
 import { Icon } from '../core/Icon.jsx';
-import { Avatar } from '../core/Avatar.jsx';
+import { SearchPalette } from './SearchPalette.jsx';
+import { NotificationsMenu } from './NotificationsMenu.jsx';
+import { ProfileMenu } from './ProfileMenu.jsx';
 
-// search/notifications/profile-menu affordances were removed — none of them
-// did anything (no results dropdown, no click handler, no menu). Real
-// wiring is a Phase 5 item; showing a dead ⌘K hint and a dead bell icon
-// until then is worse than showing nothing.
-export function Topbar({ context = 'Studio', actions, user = 'Thee Studio', userSrc, style }) {
+export function Topbar({ context = 'Studio', actions, user = 'Thee Studio', userSrc, onNav, style }) {
+  const [searchOpen, setSearchOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    function handleKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
+    <>
     <header style={{
       height: 'var(--topbar-h)', flex: 'none', boxSizing: 'border-box',
       display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px',
@@ -19,10 +31,27 @@ export function Topbar({ context = 'Studio', actions, user = 'Thee Studio', user
         <Icon name="command" size={14} /> {context}
       </span>
 
+      <button
+        onClick={() => setSearchOpen(true)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 'var(--radius-pill)',
+          border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)', cursor: 'pointer',
+          color: 'var(--text-faint)', font: '500 0.8rem/1 var(--font-ui)', fontFamily: 'inherit',
+          maxWidth: 280, width: '100%', marginLeft: 12,
+        }}
+      >
+        <Icon name="search" size={14} strokeWidth={1.75} />
+        <span style={{ flex: 1, textAlign: 'left' }}>Search…</span>
+        <span style={{ font: '500 0.68rem/1 var(--font-ui)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 5px' }}>⌘K</span>
+      </button>
+
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
         {actions}
-        <Avatar name={user} src={userSrc} size={38} ring />
+        <NotificationsMenu onNav={onNav} />
+        <ProfileMenu user={user} userSrc={userSrc} onNav={onNav} />
       </div>
     </header>
+    <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onNav={onNav} />
+    </>
   );
 }

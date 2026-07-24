@@ -6,9 +6,9 @@ import fs from 'fs';
 const BASE = 'http://localhost:3000/studio';
 const SCREENS = [
   { id: 'home', label: 'Studio' },
-  { id: 'images', label: 'Creator Builder' },
+  { id: 'characters', label: 'Cast' },
+  { id: 'images', label: 'New Creator' },
   { id: 'director', label: 'Thee Director' },
-  { id: 'characters', label: 'Creators' },
   { id: 'scenes', label: 'Scenes' },
   { id: 'references', label: 'References' },
   { id: 'campaigns', label: 'Campaigns' },

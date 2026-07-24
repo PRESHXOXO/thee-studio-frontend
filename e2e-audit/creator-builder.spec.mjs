@@ -55,7 +55,7 @@ test('single approval click generates and Save Creator persists everywhere', asy
   }, PIXEL);
 
   await page.goto('http://localhost:3000/studio/');
-  await page.getByRole('button', { name: /Creator Builder Build a new creator/ }).click();
+  await page.getByRole('button', { name: /New Creator Build a new creator/ }).click();
   await page.getByPlaceholder(/Angel, Maya, Jade/).fill('Regression Creator');
   await page.getByRole('button', { name: 'Generate Headshot' }).click();
 
@@ -96,7 +96,7 @@ test('storage failure stays in Builder and shows a recoverable error', async ({ 
   }, PIXEL);
 
   await page.goto('http://localhost:3000/studio/');
-  await page.getByRole('button', { name: /Creator Builder Build a new creator/ }).click();
+  await page.getByRole('button', { name: /New Creator Build a new creator/ }).click();
   await page.getByPlaceholder(/Angel, Maya, Jade/).fill('Unsaved Creator');
   await page.getByRole('button', { name: 'Generate Headshot' }).click();
   await page.getByRole('button', { name: /That's them/ }).click();
@@ -114,6 +114,6 @@ test('storage failure stays in Builder and shows a recoverable error', async ({ 
   await page.getByRole('button', { name: 'Save Creator' }).click();
 
   await expect(page.getByText(/Save failed: browser storage is full/)).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Creator Builder' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'New Creator' })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ts_characters') || '[]'))).toHaveLength(1);
 });

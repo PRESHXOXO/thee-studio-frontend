@@ -2,9 +2,9 @@
 // screen already reads (no new data model), plus static nav destinations.
 const SCREENS = [
   { id: 'home',       label: 'Studio' },
-  { id: 'images',     label: 'Creator Builder' },
+  { id: 'images',     label: 'New Creator' },
   { id: 'director',   label: 'Thee Director' },
-  { id: 'characters', label: 'Creators' },
+  { id: 'characters', label: 'Cast' },
   { id: 'scenes',      label: 'Scenes' },
   { id: 'references', label: 'References' },
   { id: 'campaigns',  label: 'Campaigns' },

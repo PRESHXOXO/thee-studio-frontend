@@ -23,12 +23,16 @@ import { StudioErrorBoundary } from './components/system/StudioErrorBoundary.jsx
 // Thee Director screen, alongside "Guided". Their screen components are
 // unchanged and still exist at src/screens/{PromptLab,SceneFlow}.jsx,
 // rendered directly by TheeDirector.jsx.
+// Nav order follows the workflow: check your Cast first, add a New Creator
+// if you need one, then shoot with Thee Director. "Creator" no longer
+// appears in two different destination names — Cast is roster/management,
+// New Creator is the identity-creation wizard, Thee Director is generation.
 const BASE_NAV = [
   { section: 'Create' },
   { id: 'home',       label: 'Studio',          icon: 'layout-dashboard' },
-  { id: 'images',     label: 'Creator Builder', icon: 'image' },
+  { id: 'characters', label: 'Cast',            icon: 'sparkles' },
+  { id: 'images',     label: 'New Creator',     icon: 'image' },
   { id: 'director',   label: 'Thee Director',   icon: 'clapperboard' },
-  { id: 'characters', label: 'Creators',        icon: 'sparkles' },
   { id: 'scenes',     label: 'Scenes',          icon: 'mountain-snow' },
   { id: 'references', label: 'References',      icon: 'images' },
   { section: 'Workspace' },
@@ -41,8 +45,8 @@ const BASE_NAV = [
 const SCREENS = {
   home:       { label: 'Studio',           component: StudioHome },
   director:   { label: 'Thee Director',    component: TheeDirector },
-  images:     { label: 'Creator Builder',  component: ImageGenerator },
-  characters: { label: 'Creators',         component: Characters },
+  images:     { label: 'New Creator',      component: ImageGenerator },
+  characters: { label: 'Cast',             component: Characters },
   scenes:     { label: 'Scenes',           component: Scenes },
   references: { label: 'References',       component: References },
   campaigns:  { label: 'Campaigns',        component: Campaigns },

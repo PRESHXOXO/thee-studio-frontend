@@ -11,7 +11,7 @@ import { loadLibrary } from '../lib/library.js';
 // here (delete/status live on Library) to avoid two screens fighting over
 // the same records.
 const SOURCE_LABELS = {
-  generator:    'Creator Builder',
+  generator:    'New Creator',
   quick_shoot:  'Quick Shoot',
   scene_flow:   'Scene Flow',
   prompt_lab:   'Describe It',
@@ -133,7 +133,7 @@ export function History({ onNav }) {
         <EmptyState
           icon="clock"
           title="No generations yet"
-          body="Every image you generate — from Creator Builder, Quick Shoot, or Thee Director — shows up here automatically."
+          body="Every image you generate — from New Creator, Quick Shoot, or Thee Director — shows up here automatically."
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

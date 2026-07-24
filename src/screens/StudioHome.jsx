@@ -9,7 +9,7 @@ function loadCharacters() {
 
 const SHORTCUTS = [
   { icon: 'upload',       label: 'Import Creator', sub: 'Add to your cast', nav: 'characters', data: 'import' },
-  { icon: 'image',        label: 'Creator Builder', sub: 'Build a new creator', nav: 'images' },
+  { icon: 'image',        label: 'New Creator',     sub: 'Build a new creator', nav: 'images' },
   { icon: 'clapperboard', label: 'Thee Director',   sub: 'Build a prompt',   nav: 'director' },
   { icon: 'megaphone',    label: 'Campaigns',       sub: 'Launch a shoot',   nav: 'campaigns' },
 ];

@@ -81,9 +81,6 @@ function HistoryCard({ entry, onNav }) {
             <Button variant="secondary" onClick={handleCopy} style={{ fontSize: '0.75rem' }}>
               <Icon name={copied ? 'check' : 'copy'} size={13} /> {copied ? 'Copied!' : 'Copy Prompt'}
             </Button>
-            <Button variant="secondary" onClick={() => onNav && onNav('images', { positivePrompt: entry.positivePrompt, negativePrompt: entry.negativePrompt })} style={{ fontSize: '0.75rem' }}>
-              <Icon name="image" size={13} /> Use in Generator
-            </Button>
           </div>
         </div>
       )}

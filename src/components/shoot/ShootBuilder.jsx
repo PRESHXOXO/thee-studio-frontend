@@ -46,10 +46,11 @@ function getAllImages(char) {
 }
 
 // Shared shoot form + generate pipeline — used embedded on the Characters
-// page (Quick Shoot, always has a creator) and standalone inside the
-// unified Director screen's Guided tab (may run without a creator via
-// the raw-attribute escape hatch, when allowNoCreator is true).
-export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onSaveAsCreator, initialScene = 'None', initialNotes = '', campaignId = null }) {
+// page (Quick Shoot, always has a creator, layout="stacked") and standalone
+// inside the unified Director screen's Guided tab (may run without a
+// creator via the raw-attribute escape hatch, when allowNoCreator is true;
+// layout="split" for a docked-controls + persistent-canvas arrangement).
+export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onSaveAsCreator, initialScene = 'None', initialNotes = '', campaignId = null, layout = 'stacked' }) {
   const [identityMode, setIdentityMode] = React.useState('lifestyle'); // 'portrait' | 'lifestyle'
   const [quickAngle, setQuickAngle]     = React.useState('front-facing');
   const [scene, setScene]               = React.useState(initialScene);
@@ -236,9 +237,9 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
     }
   };
 
-  return (
-    <Card style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
+  // --- Controls: everything the user dials in before generating ---
+  const controlsJSX = (
+    <>
       {creator && allImages.length > 1 && (
         <div>
           <div style={{ ...LABEL, marginBottom: 10 }}>Reference Photo</div>
@@ -391,9 +392,30 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
           ))}
         </div>
       </div>
+    </>
+  );
+
+  // --- Canvas: active reference before generating, progress + output after ---
+  const showLivePreview = !generating && genImages.length === 0;
+  const livePreviewImg = creator ? allImages[activeRef] || allImages[0] : null;
+
+  const canvasJSX = (
+    <>
+      {showLivePreview && (
+        <div style={{
+          aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden',
+          background: 'var(--grad-portrait)', border: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {livePreviewImg
+            ? <img src={livePreviewImg} alt={creator?.name || 'Reference'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <Icon name={creator ? 'user-round' : 'user-round-search'} size={40} strokeWidth={1} style={{ color: 'var(--text-faint)' }} />
+          }
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Button variant="primary" onClick={handleGenerate} loading={generating} disabled={generating} style={{ alignSelf: 'flex-start' }}>
+        <Button variant="primary" onClick={handleGenerate} loading={generating} disabled={generating} full={layout === 'split'} style={layout === 'split' ? {} : { alignSelf: 'flex-start' }}>
           <Icon name="zap" size={15} /> {generating ? 'Generating…' : 'Build + Generate'}
         </Button>
         <GenerationProgress active={generating} identityLocked={!!creator?.locked} engine={engine} batchSize={batchSize} />
@@ -411,7 +433,7 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
           <div style={{ ...LABEL, marginBottom: 12 }}>Result · {genImages.length} image{genImages.length > 1 ? 's' : ''}</div>
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             {genImages.map((url, i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 160 }}>
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: layout === 'split' ? '100%' : 160 }}>
                 <div onClick={() => setLightboxSrc(url)} style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden', boxShadow: 'var(--shadow-md)', cursor: 'zoom-in' }}>
                   <img src={url} alt={`Generated ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
@@ -430,6 +452,29 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
       )}
 
       {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
+    </>
+  );
+
+  if (layout === 'split') {
+    return (
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <Card style={{ flex: '1 1 460px', minWidth: 320, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {controlsJSX}
+        </Card>
+        <div style={{ flex: '0 0 340px', minWidth: 300, position: 'sticky', top: 84 }}>
+          <Card style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}>
+            <div style={LABEL}>{genImages.length > 0 ? 'Output' : 'Canvas'}</div>
+            {canvasJSX}
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Card style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {controlsJSX}
+      {canvasJSX}
     </Card>
   );
 }

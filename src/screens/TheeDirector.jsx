@@ -232,6 +232,7 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
               </Card>
             )}
             <ShootBuilder
+              layout="split"
               creator={selectedChar}
               allowNoCreator
               initialScene={initialScene}

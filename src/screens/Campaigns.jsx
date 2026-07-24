@@ -178,7 +178,7 @@ function CampaignModal({ campaign, characters, onSave, onCancel }) {
 }
 
 /* ── Campaign Card ───────────────────────────────────────────── */
-function CampaignCard({ campaign, characters, recentImage, onEdit, onDelete, onNav }) {
+function CampaignCard({ campaign, characters, recentImage, onEdit, onDelete, onNav, onOpenDetail }) {
   const [hovered, setHovered] = React.useState(false);
   const status = STATUS_META[campaign.status] || STATUS_META.draft;
   const char = characters.find(c => String(c.id) === String(campaign.character));
@@ -188,7 +188,8 @@ function CampaignCard({ campaign, characters, recentImage, onEdit, onDelete, onN
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ display: 'flex', flexDirection: 'column', gap: 0, borderRadius: 'var(--radius-xl)', overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--white)', boxShadow: hovered ? 'var(--shadow-md)' : 'var(--shadow-xs)', transition: 'all var(--t-base)', transform: hovered ? 'translateY(-2px)' : 'none' }}
+      onClick={() => onOpenDetail(campaign)}
+      style={{ display: 'flex', flexDirection: 'column', gap: 0, borderRadius: 'var(--radius-xl)', overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--white)', boxShadow: hovered ? 'var(--shadow-md)' : 'var(--shadow-xs)', transition: 'all var(--t-base)', transform: hovered ? 'translateY(-2px)' : 'none', cursor: 'pointer' }}
     >
       {/* Cover */}
       <div style={{ height: 120, background: 'var(--grad-portrait)', position: 'relative', overflow: 'hidden' }}>
@@ -256,7 +257,16 @@ function CampaignCard({ campaign, characters, recentImage, onEdit, onDelete, onN
             variant="secondary"
             size="sm"
             style={{ flex: 1, justifyContent: 'center', fontSize: '0.75rem' }}
-            onClick={() => onNav && onNav('director', { vision: campaign.description || campaign.name })}
+            onClick={(e) => {
+              e.stopPropagation();
+              onNav && onNav('director', {
+                vision: campaign.description || campaign.name,
+                campaignId: campaign.id,
+                campaignName: campaign.name,
+                campaignBrief: campaign.description,
+                creatorId: campaign.character || null,
+              });
+            }}
           >
             <Icon name="clapperboard" size={12} /> Open in Director
           </Button>
@@ -265,12 +275,119 @@ function CampaignCard({ campaign, characters, recentImage, onEdit, onDelete, onN
               variant="secondary"
               size="sm"
               style={{ flex: 1, justifyContent: 'center', fontSize: '0.75rem' }}
-              onClick={() => onNav && onNav('characters')}
+              onClick={(e) => { e.stopPropagation(); onNav && onNav('characters'); }}
             >
               <Icon name="sparkles" size={12} /> View Creator
             </Button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Campaign Detail ─────────────────────────────────────────── */
+function CampaignDetail({ campaign, characters, library, onBack, onEdit, onNav }) {
+  const status = STATUS_META[campaign.status] || STATUS_META.draft;
+  const char = characters.find(c => String(c.id) === String(campaign.character));
+  // Authoritative link is entry.campaign (set by every generation run under
+  // this campaign since Phase 4). Older shots made before that existed have
+  // no campaign tag and won't appear here — nothing to backfill them with.
+  const shots = library.filter(e => e.campaign === campaign.id);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <button
+        onClick={onBack}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', font: 'var(--text-sm)', padding: 0, fontFamily: 'inherit', alignSelf: 'flex-start' }}
+      >
+        <Icon name="arrow-left" size={14} /> All Campaigns
+      </button>
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              font: '600 0.68rem/1 var(--font-ui)', letterSpacing: '0.05em', textTransform: 'uppercase',
+              color: status.color, background: status.bg, padding: '4px 10px', borderRadius: 'var(--radius-pill)',
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: status.color, flexShrink: 0 }} />
+              {status.label}
+            </span>
+            <span style={{ font: '500 0.7rem/1 var(--font-ui)', color: 'var(--text-faint)', background: 'var(--cream-deep)', padding: '3px 8px', borderRadius: 'var(--radius-pill)' }}>
+              {campaign.category}
+            </span>
+          </div>
+          <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 6px' }}>{campaign.name}</h1>
+          <div style={{ font: 'var(--text-sm)', color: 'var(--text-faint)' }}>Created {new Date(campaign.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button variant="secondary" onClick={() => onEdit(campaign)}><Icon name="pencil" size={14} /> Edit</Button>
+          <Button
+            variant="primary"
+            onClick={() => onNav && onNav('director', {
+              vision: campaign.description || campaign.name,
+              campaignId: campaign.id,
+              campaignName: campaign.name,
+              campaignBrief: campaign.description,
+              creatorId: campaign.character || null,
+            })}
+          >
+            <Icon name="clapperboard" size={15} /> Open in Director
+          </Button>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20, alignItems: 'start' }}>
+        <Card style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Creative Brief</div>
+          {campaign.description ? (
+            <p style={{ font: 'var(--text-base)', color: 'var(--text-body)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{campaign.description}</p>
+          ) : (
+            <p style={{ font: 'var(--text-sm)', color: 'var(--text-faint)', margin: 0 }}>No brief written yet — add one from Edit.</p>
+          )}
+        </Card>
+
+        <Card style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Assigned Creator</div>
+          {char ? (
+            <button
+              onClick={() => onNav && onNav('characters')}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', fontFamily: 'inherit' }}
+            >
+              <div style={{ width: 40, height: 52, borderRadius: 8, overflow: 'hidden', background: 'var(--grad-portrait)', flexShrink: 0 }}>
+                {(char.refImages?.[0] || char.image) && (
+                  <img src={char.refImages?.[0] || char.image} alt={char.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                )}
+              </div>
+              <span style={{ font: '600 0.875rem/1 var(--font-ui)', color: 'var(--accent-deep)' }}>{char.name}</span>
+            </button>
+          ) : (
+            <div style={{ font: 'var(--text-sm)', color: 'var(--text-faint)' }}>No creator assigned</div>
+          )}
+        </Card>
+      </div>
+
+      <div>
+        <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>
+          Shot History {shots.length > 0 && `· ${shots.length}`}
+        </div>
+        {shots.length === 0 ? (
+          <EmptyState
+            icon="image"
+            title="Nothing shot under this campaign yet"
+            body="Generate from Open in Director above — every image made in that session gets tagged back here automatically."
+          />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 14 }}>
+            {shots.map(entry => (
+              <div key={entry.id} style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', aspectRatio: '3/4', background: 'var(--grad-portrait)' }}>
+                <img src={entry.url} alt="Shot" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -284,6 +401,7 @@ export function Campaigns({ onNav }) {
   const [modal, setModal]         = React.useState(null); // null | { mode: 'create'|'edit', campaign? }
   const [confirm, setConfirm]     = React.useState(null);
   const [filter, setFilter]       = React.useState('all');
+  const [detailId, setDetailId]   = React.useState(null);
 
   const save = (updated) => {
     setCampaigns(updated);
@@ -318,6 +436,31 @@ export function Campaigns({ onNav }) {
     { id: 'draft',    label: 'Draft' },
     { id: 'complete', label: 'Complete' },
   ];
+
+  const detailCampaign = detailId != null ? campaigns.find(c => c.id === detailId) : null;
+
+  if (detailCampaign) {
+    return (
+      <div style={{ maxWidth: 'var(--content-max)', margin: '0 auto' }}>
+        <CampaignDetail
+          campaign={detailCampaign}
+          characters={characters}
+          library={library}
+          onBack={() => setDetailId(null)}
+          onEdit={(c) => setModal({ mode: 'edit', campaign: c })}
+          onNav={onNav}
+        />
+        {modal && (
+          <CampaignModal
+            campaign={modal.campaign}
+            characters={characters}
+            onSave={handleSave}
+            onCancel={() => setModal(null)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
@@ -386,10 +529,14 @@ export function Campaigns({ onNav }) {
               key={camp.id}
               campaign={camp}
               characters={characters}
-              recentImage={library.find(e => e.character === characters.find(c => String(c.id) === String(camp.character))?.name)?.url}
+              recentImage={
+                (library.find(e => e.campaign === camp.id)
+                  || library.find(e => String(e.character) === String(camp.character)))?.url
+              }
               onEdit={(c) => setModal({ mode: 'edit', campaign: c })}
               onDelete={handleDelete}
               onNav={onNav}
+              onOpenDetail={(c) => setDetailId(c.id)}
             />
           ))}
 

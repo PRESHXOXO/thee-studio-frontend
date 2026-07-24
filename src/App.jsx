@@ -121,6 +121,14 @@ export default function App() {
   if (activeNav === 'director'   && pendingDirector) {
     screenProps.initialScene  = pendingDirector.scene  || 'None';
     screenProps.initialVision = pendingDirector.vision || '';
+    if (pendingDirector.campaignId) {
+      screenProps.initialCampaign = {
+        id: pendingDirector.campaignId,
+        name: pendingDirector.campaignName || '',
+        brief: pendingDirector.campaignBrief || '',
+        creatorId: pendingDirector.creatorId ?? null,
+      };
+    }
   }
 
   const statusColor = backendStatus === 'online' ? '#22c55e' : backendStatus === 'offline' ? '#ef4444' : '#f59e0b';

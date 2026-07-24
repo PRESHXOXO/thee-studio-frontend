@@ -49,7 +49,7 @@ function getAllImages(char) {
 // page (Quick Shoot, always has a creator) and standalone inside the
 // unified Director screen's Guided tab (may run without a creator via
 // the raw-attribute escape hatch, when allowNoCreator is true).
-export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onSaveAsCreator, initialScene = 'None', initialNotes = '' }) {
+export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onSaveAsCreator, initialScene = 'None', initialNotes = '', campaignId = null }) {
   const [identityMode, setIdentityMode] = React.useState('lifestyle'); // 'portrait' | 'lifestyle'
   const [quickAngle, setQuickAngle]     = React.useState('front-facing');
   const [scene, setScene]               = React.useState(initialScene);
@@ -181,6 +181,7 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
         }
         images.forEach(url => saveToLibrary(url, {
           source: 'quick_shoot', character: creator.id, engine, scene: sceneName || undefined, mood: composedMood, mode: identityMode,
+          campaign: campaignId || undefined,
         }).catch(() => {}));
       } else {
         if (!allowNoCreator) throw new Error('No creator selected.');
@@ -202,7 +203,10 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
           imageStyle: 'Lifestyle Creator',
         });
         images = result.images || [];
-        images.forEach(url => saveToLibrary(url, { source: 'director', engine: 'OpenAI Image', scene: scene !== 'None' ? scene : undefined }).catch(() => {}));
+        images.forEach(url => saveToLibrary(url, {
+          source: 'director', engine: 'OpenAI Image', scene: scene !== 'None' ? scene : undefined,
+          campaign: campaignId || undefined,
+        }).catch(() => {}));
       }
 
       setGenImages(images);

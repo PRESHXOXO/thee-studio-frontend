@@ -95,13 +95,33 @@ const MODES = [
   { id: 'talk',     label: 'Talk It Through',    icon: 'message-circle' },
 ];
 
-export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'None', initialVision = '' }) {
+export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'None', initialVision = '', initialCampaign = null }) {
   const [mode, setMode] = React.useState('guided');
   const [characters, setCharacters] = React.useState(loadCharacters);
-  const [selectedCharId, setSelectedCharId] = React.useState(() => resolveActiveCreator(loadCharacters())?.id ?? null);
+  // A campaign's assigned creator takes priority over "whatever was last
+  // active" — arriving via "Open in Director" is a deliberate choice of who
+  // this session is about.
+  const [selectedCharId, setSelectedCharId] = React.useState(() => {
+    const chars = loadCharacters();
+    if (initialCampaign?.creatorId != null && chars.some(c => c.id === initialCampaign.creatorId)) {
+      return initialCampaign.creatorId;
+    }
+    return resolveActiveCreator(chars)?.id ?? null;
+  });
   // Escape hatch out of the "pick a creator" gate — build a subject with raw
   // attributes instead. Skips the gate entirely once a creator is chosen.
   const [buildWithoutCreator, setBuildWithoutCreator] = React.useState(false);
+
+  // Persist the campaign's creator as the studio-wide active one too, once,
+  // on arrival — mirrors selectCreator's side effects without re-firing on
+  // every render or clobbering a later manual change.
+  React.useEffect(() => {
+    if (selectedCharId != null) {
+      saveActiveCreatorId(selectedCharId);
+      onActiveCreatorChange?.(characters.find(c => c.id === selectedCharId) || null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCampaign?.id]);
 
   const selectCreator = (id) => {
     setSelectedCharId(id);
@@ -141,6 +161,26 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 520 }}>Shape content that connects. Dial in every detail. Let Thee Studio handle the rest.</p>
         </div>
       </div>
+
+      {/* Pinned campaign context — visible across all three tabs since it's
+          about the session, not just the Guided form. */}
+      {initialCampaign && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 18px',
+          borderRadius: 'var(--radius-lg)', background: 'var(--rose-glass)', border: '1px solid var(--border-strong)',
+        }}>
+          <Icon name="megaphone" size={16} strokeWidth={1.75} style={{ color: 'var(--accent-deep)', flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <div style={{ font: '600 0.8125rem/1 var(--font-ui)', color: 'var(--accent-deep)', marginBottom: 4 }}>
+              Shooting for {initialCampaign.name}
+            </div>
+            {initialCampaign.brief && (
+              <div style={{ font: 'var(--text-sm)', color: 'var(--text-body)', lineHeight: 1.5 }}>{initialCampaign.brief}</div>
+            )}
+            <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', marginTop: 4 }}>Every image generated here is tagged back to this campaign.</div>
+          </div>
+        </div>
+      )}
 
       {/* Input mode toggle */}
       <div style={{ display: 'flex', gap: 8 }}>
@@ -194,6 +234,7 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
               initialScene={initialScene}
               initialNotes={initialVision}
               onSaveAsCreator={selectedChar ? handleSaveAsAnchorForActive : undefined}
+              campaignId={initialCampaign?.id ?? null}
             />
           </>
         )

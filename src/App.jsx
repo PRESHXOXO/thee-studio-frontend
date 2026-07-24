@@ -16,19 +16,20 @@ import { loadLibrary } from './lib/library.js';
 import { resolveActiveCreator } from './lib/activeCreator.js';
 import { Landing } from './screens/Landing.jsx';
 import { Auth } from './screens/Auth.jsx';
-import { SceneFlow } from './screens/SceneFlow.jsx';
-import { PromptLab } from './screens/PromptLab.jsx';
 import { StudioErrorBoundary } from './components/system/StudioErrorBoundary.jsx';
 
+// Prompt Lab and Scene Flow are no longer top-level nav destinations — both
+// are now input modes ("Describe It" / "Talk It Through") on the unified
+// Thee Director screen, alongside "Guided". Their screen components are
+// unchanged and still exist at src/screens/{PromptLab,SceneFlow}.jsx,
+// rendered directly by TheeDirector.jsx.
 const BASE_NAV = [
   { section: 'Create' },
   { id: 'home',       label: 'Studio',          icon: 'layout-dashboard' },
   { id: 'images',     label: 'Creator Builder', icon: 'image' },
   { id: 'director',   label: 'Thee Director',   icon: 'clapperboard' },
-  { id: 'promptlab',  label: 'Prompt Lab',      icon: 'flask-conical' },
   { id: 'characters', label: 'Characters',      icon: 'sparkles' },
   { id: 'scenes',     label: 'Scenes',          icon: 'mountain-snow' },
-  { id: 'sceneflow',  label: 'Scene Flow',      icon: 'message-circle' },
   { id: 'references', label: 'References',      icon: 'images' },
   { section: 'Workspace' },
   { id: 'campaigns',  label: 'Campaigns',       icon: 'megaphone' },
@@ -41,10 +42,8 @@ const SCREENS = {
   home:       { label: 'Studio',           component: StudioHome },
   director:   { label: 'Thee Director',    component: TheeDirector },
   images:     { label: 'Creator Builder',  component: ImageGenerator },
-  promptlab:  { label: 'Prompt Lab',       component: PromptLab },
   characters: { label: 'Characters',       component: Characters },
   scenes:     { label: 'Scenes',           component: Scenes },
-  sceneflow:  { label: 'Scene Flow',       component: SceneFlow },
   references: { label: 'References',       component: References },
   campaigns:  { label: 'Campaigns',        component: Campaigns },
   library:    { label: 'Library',          component: Library },
@@ -77,7 +76,6 @@ function useBackendStatus() {
 
 export default function App() {
   const [activeNav, setActiveNav]             = React.useState('home');
-  const [pendingPrompts,   setPendingPrompts]   = React.useState(null);
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
   const [pendingDirector,  setPendingDirector]  = React.useState(null);
   const [activeCharacter,  setActiveCharacter]  = React.useState(() => {
@@ -93,14 +91,12 @@ export default function App() {
   // Refresh library count whenever user navigates (catches new saves)
   const handleNav = React.useCallback((id, data) => {
     setLibCount(loadLibrary().length);
-    if (id === 'images'     && data) setPendingPrompts(data);
     // data === 'import' is a sentinel from "Import Creator" entry points
     // (Studio Home) — distinct from the AI-builder handoff object, which
     // carries {name, image, ...} and goes through pendingCharacter instead.
     if (id === 'characters' && data === 'import') setPendingImportRequest(true);
     else if (id === 'characters' && data) setPendingCharacter(data);
     if (id === 'director'   && data) setPendingDirector(data);
-    if (id !== 'images')     setPendingPrompts(null);
     if (id !== 'characters' || data !== 'import') setPendingImportRequest(false);
     if (id !== 'characters' || !data || data === 'import') setPendingCharacter(null);
     if (id !== 'director'  || !data) setPendingDirector(null);
@@ -115,7 +111,6 @@ export default function App() {
   const screenLabel = SCREENS[activeNav]?.label || 'Studio Home';
 
   const screenProps = { onNav: handleNav };
-  if (activeNav === 'images'     && pendingPrompts)   screenProps.initialPrompts   = pendingPrompts;
   if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
   if (activeNav === 'characters' && pendingImportRequest) screenProps.initialImportRequest = true;
   if (activeNav === 'characters') screenProps.onCharacterChange = setActiveCharacter;

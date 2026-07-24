@@ -90,7 +90,7 @@ function PipelineCard({ icon, count, label, tone, onClick }) {
 // Suggest the user's next move based on current studio state.
 function nextStep({ charCount, libCount, unreviewed }) {
   if (charCount === 0) return { icon: 'sparkles', text: 'Start by importing a creator — your cast drives everything else.', nav: 'characters', data: 'import', cta: 'Import Creator' };
-  if (libCount === 0)  return { icon: 'clapperboard', text: 'Your cast is ready. Build a scene and generate your first draft.', nav: 'sceneflow', cta: 'Open Scene Flow' };
+  if (libCount === 0)  return { icon: 'clapperboard', text: 'Your cast is ready. Build a scene and generate your first draft.', nav: 'director', cta: 'Open Thee Director' };
   if (unreviewed > 0)  return { icon: 'eye', text: `${unreviewed} draft${unreviewed !== 1 ? 's' : ''} waiting for review. Approve keepers, flag fixes.`, nav: 'library', cta: 'Review Drafts' };
   return { icon: 'megaphone', text: 'Pipeline is clear. Plan your next shoot or launch a campaign.', nav: 'campaigns', cta: 'Open Campaigns' };
 }

@@ -1,70 +1,28 @@
 import React from 'react';
-import { ImageLightbox } from '../components/feedback/ImageLightbox.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
-import { Field } from '../components/forms/Field.jsx';
-import { Select } from '../components/forms/Select.jsx';
-import { Input } from '../components/forms/Input.jsx';
-import { Button } from '../components/core/Button.jsx';
-import { PromptOutput } from '../components/feedback/PromptOutput.jsx';
-import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { buildDirectorOutputs, generateImage, characterGenerate, sanitizeForOpenAI, describeOutfitImage } from '../api/studio.js';
-import { saveToLibrary } from '../lib/library.js';
+import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
+import { PromptLab } from './PromptLab.jsx';
+import { SceneFlow } from './SceneFlow.jsx';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
-import {
-  LOCATIONS, GENDERS, SKIN_TONES, HAIR_COLORS,
-  EYE_DETAILS, SPECIAL_FEATURES, STANDARD_NEGATIVE,
-  buildStructuredVision, buildFluxVision,
-  getPhysiqueOptions, getHairStyleOptions, getClothingOptions, getJewelryOptions,
-} from '../lib/promptData.js';
-
-const SHOT_TYPES = ['Portrait', 'Fashion', 'Lifestyle', 'Campaign', 'Cinematic', 'UGC'];
-const ENERGIES   = ['Clean', 'Bold', 'Luxury', 'Candid', 'Cinematic', 'Raw', 'Soft', 'Romantic'];
-const LIGHTINGS  = ['Natural', 'Golden Hour', 'Studio', 'Blue Hour', 'Night', 'Overcast'];
-
-const BUILD_MODES = [
-  { id: 'openai', label: 'OpenAI', icon: 'zap' },
-  { id: 'flux',   label: 'FLUX',   icon: 'flame' },
-  { id: 'ai',     label: 'AI Refine', icon: 'wand-2' },
-];
-
-// Engine name → engineId map for characterGenerate
-const ENGINE_ID_MAP = {
-  'OpenAI Image':        'openai_image',
-  'Replicate FLUX Pro':  'replicate_flux_pro',
-  'Replicate FLUX Schnell': 'replicate_flux_schnell',
-};
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', margin: 0 };
-
-// ---------------------------------------------------------------------------
-// Storage
-// ---------------------------------------------------------------------------
 
 function loadCharacters() {
   try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
 }
-
+function saveCharacters(list) {
+  try { localStorage.setItem('ts_characters', JSON.stringify(list)); } catch {}
+}
 function getCharacterImage(char) {
   return char?.refImages?.[0] || char?.image || null;
 }
-
-const HISTORY_KEY = 'ts_director_history';
-
-function loadHistory() {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+function getAllImages(char) {
+  if (!char) return [];
+  if (char.refImages?.length) return char.refImages;
+  if (char.image) return [char.image];
+  return [];
 }
-
-function pushHistory(entry) {
-  const h = loadHistory();
-  h.unshift({ id: Date.now(), savedAt: new Date().toISOString(), ...entry });
-  if (h.length > 20) h.splice(20);
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch {}
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
 
 function CharacterSelector({ characters, selectedId, onSelect }) {
   if (!characters.length) return null;
@@ -124,83 +82,22 @@ function CharacterSelector({ characters, selectedId, onSelect }) {
   );
 }
 
-function PillToggle({ options, value, onChange }) {
-  return (
-    <div style={{ display: 'flex', gap: 6 }}>
-      {options.map(opt => {
-        const active = value === opt.id;
-        return (
-          <button key={opt.id} onClick={() => onChange(opt.id)} style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            padding: '6px 12px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
-            border: `1.5px solid ${active ? 'var(--accent-deep)' : 'var(--border)'}`,
-            background: active ? 'var(--rose-deep)' : 'transparent',
-            color: active ? 'var(--accent-deep)' : 'var(--text-muted)',
-            font: '500 0.8rem/1 var(--font-ui)', fontFamily: 'inherit',
-            transition: 'all var(--t-fast)',
-          }}>
-            <Icon name={opt.icon} size={12} strokeWidth={1.75} /> {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function HistoryPanel({ history, onLoad }) {
-  const [open, setOpen] = React.useState(false);
-  if (!history.length) return null;
-  return (
-    <div>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          background: 'none', border: 'none', cursor: 'pointer',
-          font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase',
-          color: 'var(--text-muted)', padding: 0, fontFamily: 'inherit',
-        }}
-      >
-        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={13} />
-        Recent Builds · {history.length}
-      </button>
-      {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-          {history.map(entry => (
-            <div key={entry.id} style={{
-              display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12,
-              padding: '12px 16px', borderRadius: 'var(--radius-md)',
-              background: 'var(--surface-raised)', border: '1px solid var(--border)',
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', marginBottom: 4 }}>
-                  {new Date(entry.savedAt).toLocaleString()} · {entry.mode?.toUpperCase()}
-                  {entry.character && ` · ${entry.character}`}
-                </div>
-                <div style={{
-                  font: 'var(--text-sm)', color: 'var(--text-body)', lineHeight: 1.4,
-                  overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                }}>
-                  {entry.positivePrompt}
-                </div>
-              </div>
-              <Button variant="secondary" onClick={() => onLoad(entry)} style={{ flexShrink: 0, fontSize: '0.75rem' }}>
-                Load
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
+// Three ways into the same generate pipeline. Guided (ShootBuilder) and
+// Describe It (Prompt Lab) both already call generateImage/characterGenerate
+// under the hood, so folding them in here is a real pipeline merge — no
+// behavior change to either. Talk It Through (Scene Flow) is nested as-is,
+// deliberately cosmetic: it still runs its own conversational backend pair
+// (sceneFlowChat/sceneFlowGenerate), a genuinely different pipeline that
+// wasn't rewired per an explicit product call — see the Phase 3 summary.
+const MODES = [
+  { id: 'guided',   label: 'Guided',            icon: 'sliders-horizontal' },
+  { id: 'describe', label: 'Describe It',        icon: 'flask-conical' },
+  { id: 'talk',     label: 'Talk It Through',    icon: 'message-circle' },
+];
 
 export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'None', initialVision = '' }) {
-  const [characters]    = React.useState(loadCharacters);
+  const [mode, setMode] = React.useState('guided');
+  const [characters, setCharacters] = React.useState(loadCharacters);
   const [selectedCharId, setSelectedCharId] = React.useState(() => resolveActiveCreator(loadCharacters())?.id ?? null);
   // Escape hatch out of the "pick a creator" gate — build a subject with raw
   // attributes instead. Skips the gate entirely once a creator is chosen.
@@ -216,338 +113,22 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
     onActiveCreatorChange?.(characters.find(c => c.id === id) || null);
   };
 
-  const [vision,       setVision]       = React.useState(initialVision);
-  const [contentType,  setContentType]  = React.useState('Portrait');
-  const [mood,         setMood]         = React.useState('Clean');
-  const [lighting,     setLighting]     = React.useState('Natural');
-  const [scene,        setScene]        = React.useState(initialScene);
-  const [gender,       setGender]       = React.useState('Unspecified');
-  const [physique,     setPhysique]     = React.useState('Unspecified');
-  const [skinTone,     setSkinTone]     = React.useState('Unspecified');
-  const [hairStyle,    setHairStyle]    = React.useState('Unspecified');
-  const [hairColor,    setHairColor]    = React.useState('Unspecified');
-  const [eyeDetail,    setEyeDetail]    = React.useState('Unspecified');
-  const [jewelry,      setJewelry]      = React.useState('None');
-  const [clothing,     setClothing]     = React.useState('Unspecified');
-  const [features,     setFeatures]     = React.useState('None');
-
-  const [buildMode,    setBuildMode]    = React.useState('openai');
-  const [outfitOverride, setOutfitOverride] = React.useState('Unspecified');
-
-  // Shoot-specific styling (active when character is selected)
-  const [shootHairStyle,     setShootHairStyle]     = React.useState('Unspecified');
-  const [shootHairColor,     setShootHairColor]     = React.useState('Unspecified');
-  const [shootJewelry,       setShootJewelry]       = React.useState('None');
-  const [outfitPhotoUrl,     setOutfitPhotoUrl]     = React.useState('');
-  const [outfitPhotoDesc,    setOutfitPhotoDesc]    = React.useState('');
-  const [outfitPhotoAnalyzing, setOutfitPhotoAnalyzing] = React.useState(false);
-  const [outfitPhotoEditing, setOutfitPhotoEditing] = React.useState(false);
-  // Draft text for the manual-entry fallback box. Kept separate from
-  // outfitPhotoDesc so typing doesn't flip the view away from the textarea
-  // mid-keystroke (outfitPhotoDesc becoming truthy switches to the read-only
-  // "Outfit Detected" view).
-  const [manualOutfitDraft, setManualOutfitDraft] = React.useState('');
-  const outfitFileRef = React.useRef(null);
-  const lastOutfitVisionSentence = React.useRef('');
-
-  // Auto-fills the analyzed outfit description into the Vision box so the
-  // user doesn't have to copy it over manually. Replaces any previously
-  // auto-inserted outfit sentence instead of stacking on re-upload.
-  const applyOutfitDescToVision = (desc) => {
-    const sentence = `Wearing: ${desc}`;
-    setVision(prevVision => {
-      let next = prevVision;
-      if (lastOutfitVisionSentence.current && next.includes(lastOutfitVisionSentence.current)) {
-        next = next.replace(lastOutfitVisionSentence.current, '').trim();
-      }
-      next = next ? `${next}\n\n${sentence}` : sentence;
-      lastOutfitVisionSentence.current = sentence;
-      return next;
-    });
-  };
-
-  // Filtered options based on selected gender
-  const physiqueOptions  = getPhysiqueOptions(gender);
-  const hairStyleOptions = getHairStyleOptions(gender);
-  const clothingOptions  = getClothingOptions(gender);
-  const jewelryOptions   = getJewelryOptions(gender);
-
-  const handleGenderChange = (newGender) => {
-    const newPhysique   = getPhysiqueOptions(newGender).find(o => o.value === physique)    ? physique    : 'Unspecified';
-    const newHairStyle  = getHairStyleOptions(newGender).find(o => o.value === hairStyle)  ? hairStyle   : 'Unspecified';
-    const newClothing   = getClothingOptions(newGender).find(o => o.value === clothing)    ? clothing    : 'Unspecified';
-    const newJewelry    = getJewelryOptions(newGender).find(o => o.value === jewelry)      ? jewelry     : 'None';
-    const newShootHair  = getHairStyleOptions(newGender).find(o => o.value === shootHairStyle) ? shootHairStyle : 'Unspecified';
-    const newShootJew   = getJewelryOptions(newGender).find(o => o.value === shootJewelry) ? shootJewelry : 'None';
-    const newOutfit     = getClothingOptions(newGender).find(o => o.value === outfitOverride) ? outfitOverride : 'Unspecified';
-    setGender(newGender);
-    setPhysique(newPhysique);
-    setHairStyle(newHairStyle);
-    setClothing(newClothing);
-    setJewelry(newJewelry);
-    setShootHairStyle(newShootHair);
-    setShootJewelry(newShootJew);
-    setOutfitOverride(newOutfit);
-  };
-
-  const [loading,      setLoading]      = React.useState(false);
-  const [error,        setError]        = React.useState('');
-  const [outputs,      setOutputs]      = React.useState(null);
-
-  const [generating,   setGenerating]   = React.useState(false);
-  const [genImages,    setGenImages]    = React.useState([]);
-  const [lightboxSrc, setLightboxSrc]  = React.useState(null);
-  const [genError,     setGenError]     = React.useState('');
-
-  const [history,      setHistory]      = React.useState(loadHistory);
-
-  const [showSaveChar, setShowSaveChar] = React.useState(false);
-  const [saveCharName, setSaveCharName] = React.useState('');
-
   const selectedChar = characters.find(c => c.id === selectedCharId) || null;
 
-  // Collect current form params
-  const formParams = () => ({
-    vision: [vision, lighting !== 'Natural' ? `${lighting} lighting` : ''].filter(Boolean).join('. '),
-    gender, physique, skinTone, hairStyle, hairColor,
-    eyeDetail, jewelry,
-    clothing: selectedChar && outfitOverride !== 'Unspecified' ? outfitOverride : clothing,
-    features, mood, contentType, scene,
-    character: selectedChar,
-    niche: selectedChar?.fields?.niche || '',
-    // Shoot-specific overrides (only applied when character selected)
-    shootHairStyle: selectedChar ? shootHairStyle : 'Unspecified',
-    shootHairColor: selectedChar ? shootHairColor : 'Unspecified',
-    shootJewelry:   selectedChar ? shootJewelry   : 'None',
-    outfitPhotoDesc,
-  });
-
-  const handleOutfitPhotoUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target.result;
-      setOutfitPhotoUrl(dataUrl);
-      setOutfitPhotoDesc('');
-      setOutfitPhotoEditing(false);
-      setManualOutfitDraft('');
-      setOutfitOverride('Unspecified'); // clear dropdown when photo used
-      setOutfitPhotoAnalyzing(true);
-      try {
-        const desc = await describeOutfitImage(dataUrl);
-        setOutfitPhotoDesc(desc);
-        if (desc) applyOutfitDescToVision(desc);
-      } catch (err) {
-        setOutfitPhotoDesc('⚠ Could not analyze outfit — check your OpenAI key or try a clearer photo.');
-      } finally {
-        setOutfitPhotoAnalyzing(false);
-      }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  };
-
-  const clearOutfitPhoto = () => {
-    setOutfitPhotoUrl('');
-    setOutfitPhotoDesc('');
-    setOutfitPhotoEditing(false);
-    setManualOutfitDraft('');
-    if (lastOutfitVisionSentence.current) {
-      setVision(prevVision => prevVision.replace(lastOutfitVisionSentence.current, '').trim());
-      lastOutfitVisionSentence.current = '';
-    }
-  };
-
-  const finishBuild = (result, mode) => {
-    setOutputs(result);
-    setGenImages([]);
-    pushHistory({
-      positivePrompt: result.positivePrompt,
-      negativePrompt: result.negativePrompt,
-      recommendedEngine: result.recommendedEngine,
-      mode,
-      character: selectedChar?.name || null,
+  const handleSaveAsAnchorForActive = (compressedDataUrl) => {
+    if (!selectedCharId) return;
+    const updated = characters.map(c => {
+      if (c.id !== selectedCharId) return c;
+      const existing = getAllImages(c);
+      if (existing.includes(compressedDataUrl)) return c;
+      const newRefs = [...existing, compressedDataUrl];
+      return { ...c, refImages: newRefs, image: newRefs[0] };
     });
-    setHistory(loadHistory());
+    saveCharacters(updated);
+    setCharacters(updated);
   };
 
-  const handleBuild = async () => {
-    setError('');
-    setGenImages([]);
-
-    // Don't build with a half-analyzed, failed, or silently-empty outfit
-    // photo result — any of these would fall back to generic wardrobe text.
-    if (outfitPhotoUrl && outfitPhotoAnalyzing) {
-      setError('Still analyzing the outfit photo — wait a moment and try again.');
-      return;
-    }
-    if (outfitPhotoUrl && outfitPhotoDesc.startsWith('⚠')) {
-      setError('Outfit photo could not be analyzed. Remove it or upload a clearer photo before building.');
-      return;
-    }
-    if (outfitPhotoUrl && !outfitPhotoDesc) {
-      setError('Outfit photo has no description yet — remove and re-upload it before building.');
-      return;
-    }
-
-    const params = formParams();
-
-    if (buildMode === 'openai') {
-      const positivePrompt = buildStructuredVision(params);
-      finishBuild({
-        positivePrompt,
-        negativePrompt: STANDARD_NEGATIVE,
-        recommendedEngine: 'OpenAI Image',
-        reason: 'Structured format optimized for OpenAI gpt-image-2.',
-      }, 'openai');
-      return;
-    }
-
-    if (buildMode === 'flux') {
-      const positivePrompt = buildFluxVision(params);
-      finishBuild({
-        positivePrompt,
-        negativePrompt: STANDARD_NEGATIVE,
-        recommendedEngine: 'Replicate FLUX Pro',
-        reason: 'Natural language format optimized for FLUX Pro.',
-      }, 'flux');
-      return;
-    }
-
-    // AI Refine — backend
-    setLoading(true);
-    try {
-      const enrichedVision = buildStructuredVision(params);
-      const result = await buildDirectorOutputs({
-        vision: enrichedVision, contentType, mood,
-        outputGoal: 'Build Prompt Only',
-        character: selectedChar?.name || 'None',
-        scene: scene || 'None',
-        useIdentityLock: !!selectedChar?.locked,
-      });
-      const enhancedNegative = result.negativePrompt
-        ? `${result.negativePrompt}, ${STANDARD_NEGATIVE}`
-        : STANDARD_NEGATIVE;
-      finishBuild({ ...result, negativePrompt: enhancedNegative }, 'ai');
-    } catch (e) {
-      setError(`Error: ${e?.message || String(e)}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGenerate = async () => {
-    if (!outputs?.positivePrompt) return;
-    setGenerating(true);
-    setGenImages([]);
-    setGenError('');
-
-    try {
-      const charImg = selectedChar ? getCharacterImage(selectedChar) : null;
-      const engineId = ENGINE_ID_MAP[outputs.recommendedEngine] || 'openai_image';
-      const isOpenAI = engineId === 'openai_image' || (outputs.recommendedEngine || '').toLowerCase().includes('openai');
-      const positivePrompt = isOpenAI ? sanitizeForOpenAI(outputs.positivePrompt) : outputs.positivePrompt;
-
-      if (charImg) {
-        const result = await characterGenerate({
-          engineId,
-          positivePrompt,
-          negativePrompt: outputs.negativePrompt,
-          characterImage: charImg,
-          batchSize: 1,
-        });
-        const imgs = result.images || [];
-        setGenImages(imgs);
-        imgs.forEach(url => saveToLibrary(url, {
-          source: 'director',
-          character: selectedChar?.name,
-          engine: engineId,
-        }).catch(() => {}));
-      } else {
-        const result = await generateImage({
-          engine: outputs.recommendedEngine,
-          positivePrompt,
-          negativePrompt: outputs.negativePrompt,
-          imageSize: 'Vertical 9:16',
-          quality: 'High',
-          width: 832,
-          height: 1216,
-          performanceMode: 'Balanced',
-          imageStyle: 'Lifestyle Creator',
-        });
-        const imgs = result.images || [];
-        setGenImages(imgs);
-        imgs.forEach(url => saveToLibrary(url, {
-          source: 'director',
-          engine: outputs.recommendedEngine,
-        }).catch(() => {}));
-      }
-    } catch (e) {
-      setGenError(e?.message || 'Generation failed');
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleLoadHistory = (entry) => {
-    setOutputs({
-      positivePrompt: entry.positivePrompt,
-      negativePrompt: entry.negativePrompt,
-      recommendedEngine: entry.recommendedEngine || '',
-      reason: '',
-    });
-    setGenImages([]);
-  };
-
-  const handleSaveCharacter = () => {
-    const name = saveCharName.trim();
-    if (!name) return;
-    const hairParts = [
-      hairStyle !== 'Unspecified' ? hairStyle : '',
-      hairColor !== 'Unspecified' ? `in ${hairColor}` : '',
-    ].filter(Boolean);
-    const faceParts = [
-      eyeDetail !== 'Unspecified' ? eyeDetail : '',
-      features !== 'None' ? features : '',
-    ].filter(Boolean);
-    const newChar = {
-      id: Date.now().toString(),
-      name,
-      refImages: [],
-      fields: {
-        tone:        skinTone !== 'Unspecified' ? skinTone : '',
-        hair:        hairParts.join(', '),
-        face:        faceParts.join(', '),
-        body:        '',
-        personality: vision || '',
-        wardrobe:    clothing !== 'Unspecified' ? clothing : (outfitOverride !== 'Unspecified' ? outfitOverride : ''),
-        niche:       '',
-      },
-      // Preserve full shoot context so it can be reloaded
-      savedVision:      vision || '',
-      savedMood:        mood,
-      savedScene:       scene,
-      savedContentType: contentType,
-      savedShootHair:   shootHairStyle !== 'Unspecified' ? shootHairStyle : '',
-      savedShootHairColor: shootHairColor !== 'Unspecified' ? shootHairColor : '',
-      savedShootJewelry:   shootJewelry !== 'None' ? shootJewelry : '',
-      savedOutfitOverride: outfitOverride !== 'Unspecified' ? outfitOverride : '',
-      savedOutfitPhotoDesc: outfitPhotoDesc || '',
-    };
-    try {
-      const existing = JSON.parse(localStorage.getItem('ts_characters') || '[]');
-      existing.push(newChar);
-      localStorage.setItem('ts_characters', JSON.stringify(existing));
-    } catch {}
-    setSaveCharName('');
-    setShowSaveChar(false);
-    onNav && onNav('characters');
-  };
-
-  // Fields locked per-character: Gender, Skin Tone, Eye Detail, Body Build
-  const identityLocked = !!selectedChar;
-  const LOCKED_STYLE = { opacity: 0.45, pointerEvents: 'none' };
+  const gated = characters.length > 0 && !selectedCharId && !buildWithoutCreator;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
@@ -561,395 +142,66 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
         </div>
       </div>
 
-      {/* Pick-a-creator gate — front and center when creators exist but none
-          is active yet. "Build without a creator" is a real, supported path
-          (raw-attribute subject, saveable as a creator afterward), so it
-          stays one click away instead of being blocked outright. */}
-      {characters.length > 0 && !selectedCharId && !buildWithoutCreator ? (
-        <Card style={{ display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center', textAlign: 'center', padding: '40px 32px' }}>
-          <Icon name="user-round-search" size={30} strokeWidth={1.25} style={{ color: 'var(--text-faint)' }} />
-          <div>
-            <div style={{ font: '600 1.0625rem/1.3 var(--font-display)', color: 'var(--text-strong)', marginBottom: 6 }}>Pick a creator to start shooting</div>
-            <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>Director builds every shot around a saved creator's locked identity.</div>
-          </div>
-          <div style={{ width: '100%', maxWidth: 560 }}>
-            <CharacterSelector characters={characters} selectedId={selectedCharId} onSelect={selectCreator} />
-          </div>
+      {/* Input mode toggle */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {MODES.map(m => (
           <button
-            onClick={() => setBuildWithoutCreator(true)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'var(--text-sm)', color: 'var(--accent-deep)', textDecoration: 'underline', padding: 0, fontFamily: 'inherit' }}
-          >
-            Or build a new subject without a creator
-          </button>
-        </Card>
-      ) : (
-        <>
-          {/* Character selector */}
-          {characters.length > 0 && (
-            <Card style={{ padding: '16px 20px' }}>
-              <CharacterSelector characters={characters} selectedId={selectedCharId} onSelect={selectCreator} />
-            </Card>
-          )}
-
-          {/* Subject Details */}
-          <Card style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h3 style={LABEL}>Subject Details</h3>
-          {identityLocked && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5, font: 'var(--text-xs)', color: 'var(--accent-deep)', background: 'var(--rose-deep)', padding: '3px 8px', borderRadius: 'var(--radius-pill)' }}>
-              <Icon name="lock" size={11} /> Identity locked · {selectedChar.name}
-            </span>
-          )}
-        </div>
-
-        {/* Locked: Gender + Skin Tone */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div style={identityLocked ? LOCKED_STYLE : {}}>
-            <Field label="Gender"><Select value={gender} onChange={handleGenderChange} options={GENDERS} /></Field>
-          </div>
-          <div style={identityLocked ? LOCKED_STYLE : {}}>
-            <Field label="Skin Tone"><Select value={skinTone} onChange={setSkinTone} options={SKIN_TONES} placeholder="Select…" /></Field>
-          </div>
-        </div>
-
-        {/* Locked: Body Build + Eyes */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div style={identityLocked ? LOCKED_STYLE : {}}>
-            <Field label="Body Type / Build"><Select value={physique} onChange={setPhysique} options={physiqueOptions} placeholder="Select…" /></Field>
-          </div>
-          <div style={identityLocked ? LOCKED_STYLE : {}}>
-            <Field label="Eyes"><Select value={eyeDetail} onChange={setEyeDetail} options={EYE_DETAILS} placeholder="Select…" /></Field>
-          </div>
-        </div>
-
-        {!identityLocked && (
-          <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Field label="Hair Style"><Select value={hairStyle} onChange={setHairStyle} options={hairStyleOptions} placeholder="Select…" /></Field>
-              <Field label="Hair Color"><Select value={hairColor} onChange={setHairColor} options={HAIR_COLORS} placeholder="Select…" /></Field>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Field label="Jewelry"><Select value={jewelry} onChange={setJewelry} options={jewelryOptions} /></Field>
-              <Field label="Special Features"><Select value={features} onChange={setFeatures} options={SPECIAL_FEATURES} /></Field>
-            </div>
-            <Field label="Clothing / Brand Vibe"><Select value={clothing} onChange={setClothing} options={clothingOptions} placeholder="Select…" /></Field>
-          </>
-        )}
-
-        {/* Shoot Styling overrides — only when character selected */}
-        {selectedChar && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={LABEL}>Shoot Styling</div>
-              <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)', background: 'var(--rose-deep)', padding: '2px 7px', borderRadius: 'var(--radius-pill)' }}>
-                overrides {selectedChar.name}'s defaults
-              </span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="Hair Style">
-                <Select value={shootHairStyle} onChange={setShootHairStyle} options={hairStyleOptions} placeholder="Keep default…" />
-              </Field>
-              <Field label="Hair Color">
-                <Select value={shootHairColor} onChange={setShootHairColor} options={HAIR_COLORS} placeholder="Keep default…" />
-              </Field>
-            </div>
-            <Field label="Jewelry">
-              <Select value={shootJewelry} onChange={setShootJewelry} options={jewelryOptions} />
-            </Field>
-            <input ref={outfitFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleOutfitPhotoUpload} />
-            {outfitPhotoUrl ? (
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <img src={outfitPhotoUrl} alt="Outfit" style={{ width: 52, height: 70, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }} />
-                  <button onClick={clearOutfitPhoto} style={{ position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%', background: 'var(--cherry)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 10, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>✕</button>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {outfitPhotoAnalyzing ? (
-                    <p style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>Analyzing outfit…</p>
-                  ) : outfitPhotoDesc && !outfitPhotoDesc.startsWith('⚠') ? (
-                    <div style={{ padding: '8px 10px', background: 'var(--rose-glass)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)' }}>Outfit Detected</div>
-                        <button onClick={() => setOutfitPhotoEditing(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: 0, display: 'flex' }} title="Edit description">
-                          <Icon name="pencil" size={11} />
-                        </button>
-                      </div>
-                      {outfitPhotoEditing ? (
-                        <>
-                          <textarea
-                            value={outfitPhotoDesc}
-                            onChange={e => setOutfitPhotoDesc(e.target.value)}
-                            rows={3}
-                            autoFocus
-                            style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', font: 'var(--text-xs)', fontFamily: 'inherit', lineHeight: 1.5, padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface-inset)', color: 'var(--text-body)' }}
-                          />
-                          <button onClick={() => { setOutfitPhotoEditing(false); if (outfitPhotoDesc && !outfitPhotoDesc.startsWith('⚠')) applyOutfitDescToVision(outfitPhotoDesc); }} style={{ marginTop: 6, font: 'var(--text-xs)', color: 'var(--accent-deep)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Done</button>
-                        </>
-                      ) : (
-                        <p style={{ font: 'var(--text-xs)', color: 'var(--text-body)', margin: 0, lineHeight: 1.5 }}>{outfitPhotoDesc}</p>
-                      )}
-                    </div>
-                  ) : (
-                    // Auto-analysis failed or came back empty (common for branded/
-                    // logo'd images the vision model declines to describe in detail) —
-                    // let the user type the outfit description themselves instead of
-                    // being stuck.
-                    <div style={{ padding: '8px 10px', background: 'var(--status-warn-bg)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,178,56,0.35)' }}>
-                      <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--status-warn)', marginBottom: 4 }}>
-                        {outfitPhotoDesc ? 'Could not auto-describe outfit' : 'No description yet'}
-                      </div>
-                      <p style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', margin: '0 0 6px' }}>
-                        Common with logos, brand names, or product collages. Type it manually:
-                      </p>
-                      <textarea
-                        value={manualOutfitDraft}
-                        onChange={e => setManualOutfitDraft(e.target.value)}
-                        onBlur={e => {
-                          const val = e.target.value.trim();
-                          if (val) {
-                            setOutfitPhotoDesc(val);
-                            applyOutfitDescToVision(val);
-                          }
-                        }}
-                        placeholder="e.g. pink graphic tank top, distressed denim mini skirt, pink heeled boots, pink accessories…"
-                        rows={3}
-                        style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', font: 'var(--text-xs)', fontFamily: 'inherit', lineHeight: 1.5, padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface-inset)', color: 'var(--text-body)' }}
-                      />
-                      {manualOutfitDraft.trim() && (
-                        <button
-                          onClick={() => {
-                            const val = manualOutfitDraft.trim();
-                            setOutfitPhotoDesc(val);
-                            applyOutfitDescToVision(val);
-                          }}
-                          style={{ marginTop: 6, font: '600 0.75rem/1 var(--font-ui)', color: 'var(--status-warn)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                        >
-                          Use this description
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => outfitFileRef.current?.click()}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 7,
-                  padding: '8px 12px', borderRadius: 'var(--radius-md)',
-                  border: '1.5px dashed var(--border)', background: 'transparent',
-                  color: 'var(--text-muted)', cursor: 'pointer',
-                  font: '500 0.8rem/1 var(--font-ui)', fontFamily: 'inherit',
-                  width: '100%', justifyContent: 'center',
-                }}
-              >
-                <Icon name="upload" size={13} /> Upload Outfit Photo
-              </button>
-            )}
-          </div>
-        )}
-      </Card>
-
-      {/* Direction Controls */}
-      <Card style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <h3 style={LABEL}>Direction Controls</h3>
-
-        <Field label="Vision" hint="Set the creative direction in your own words.">
-          <textarea
-            value={vision}
-            onChange={e => setVision(e.target.value)}
-            placeholder="e.g. Rooftop golden hour, quiet confidence, aspirational street energy…"
-            rows={3}
+            key={m.id}
+            onClick={() => setMode(m.id)}
             style={{
-              width: '100%', boxSizing: 'border-box', resize: 'vertical',
-              padding: '9px 12px', borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border)', background: 'var(--surface)',
-              color: 'var(--text-strong)', font: 'var(--text-sm)',
-              fontFamily: 'inherit', lineHeight: 1.5, outline: 'none',
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '9px 16px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+              border: `1.5px solid ${mode === m.id ? 'var(--accent-deep)' : 'var(--border)'}`,
+              background: mode === m.id ? 'var(--rose-deep)' : 'transparent',
+              color: mode === m.id ? 'var(--accent-deep)' : 'var(--text-muted)',
+              font: '600 0.85rem/1 var(--font-ui)', fontFamily: 'inherit',
+              transition: 'all var(--t-fast)',
             }}
-          />
-        </Field>
-
-        <div>
-          <div style={{ ...LABEL, marginBottom: 10 }}>Shot Type</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-            {SHOT_TYPES.map(s => (
-              <button key={s} onClick={() => setContentType(s)} style={{
-                padding: '6px 13px', borderRadius: 'var(--radius-pill)',
-                border: `1.5px solid ${contentType === s ? 'var(--accent-deep)' : 'var(--border)'}`,
-                background: contentType === s ? 'var(--rose-deep)' : 'transparent',
-                color: contentType === s ? 'var(--accent-deep)' : 'var(--text-muted)',
-                font: '500 0.78rem/1 var(--font-ui)', cursor: 'pointer',
-                transition: 'all var(--t-fast)',
-              }}>{s}</button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div style={{ ...LABEL, marginBottom: 10 }}>Energy</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-            {ENERGIES.map(e => (
-              <button key={e} onClick={() => setMood(e)} style={{
-                padding: '6px 13px', borderRadius: 'var(--radius-pill)',
-                border: `1.5px solid ${mood === e ? 'var(--accent-deep)' : 'var(--border)'}`,
-                background: mood === e ? 'var(--rose-deep)' : 'transparent',
-                color: mood === e ? 'var(--accent-deep)' : 'var(--text-muted)',
-                font: '500 0.78rem/1 var(--font-ui)', cursor: 'pointer',
-                transition: 'all var(--t-fast)',
-              }}>{e}</button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div style={{ ...LABEL, marginBottom: 10 }}>Lighting</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-            {LIGHTINGS.map(l => (
-              <button key={l} onClick={() => setLighting(l)} style={{
-                padding: '6px 13px', borderRadius: 'var(--radius-pill)',
-                border: `1.5px solid ${lighting === l ? 'var(--accent-deep)' : 'var(--border)'}`,
-                background: lighting === l ? 'var(--rose-deep)' : 'transparent',
-                color: lighting === l ? 'var(--accent-deep)' : 'var(--text-muted)',
-                font: '500 0.78rem/1 var(--font-ui)', cursor: 'pointer',
-                transition: 'all var(--t-fast)',
-              }}>{l}</button>
-            ))}
-          </div>
-        </div>
-
-        <Field label="Scene">
-          <Select value={scene} onChange={setScene} options={LOCATIONS} />
-        </Field>
-
-        <div>
-          <div style={{ ...LABEL, marginBottom: 10 }}>Build Mode</div>
-          <PillToggle options={BUILD_MODES} value={buildMode} onChange={setBuildMode} />
-        </div>
-
-        {error && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
-
-        <Button variant="primary" loading={loading} onClick={handleBuild} style={{ width: '100%' }}>
-          <Icon name={BUILD_MODES.find(m => m.id === buildMode)?.icon || 'zap'} size={15} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
-          {loading ? 'Building…' : 'Build Direction'}
-        </Button>
-
-        {outputs?.positivePrompt && (
-          <Button
-            variant="secondary"
-            onClick={() => onNav && onNav('images', { positivePrompt: outputs.positivePrompt, negativePrompt: outputs.negativePrompt })}
-            style={{ width: '100%' }}
           >
-            <Icon name="external-link" size={14} /> Open in Generator
-          </Button>
-        )}
-      </Card>
+            <Icon name={m.icon} size={15} strokeWidth={1.75} /> {m.label}
+          </button>
+        ))}
+      </div>
 
-      {/* Build Prompt + Generate */}
-      <Card style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <h3 style={LABEL}>Build Prompt</h3>
-
-        <PromptOutput
-          label="Positive Prompt"
-          value={outputs?.positivePrompt}
-          placeholder="Your positive prompt will appear here after building."
-          maxHeight={200}
-        />
-        <PromptOutput
-          label="Negative Prompt"
-          value={outputs?.negativePrompt}
-          placeholder="Your negative prompt will appear here after building."
-          maxHeight={100}
-        />
-
-        {outputs?.recommendedEngine && (
-          <div style={{ padding: '10px 14px', background: 'var(--rose-glass)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-            <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Recommended Engine</div>
-            <div style={{ font: '600 0.9375rem/1.4 var(--font-ui)', color: 'var(--text-strong)' }}>{outputs.recommendedEngine}</div>
-            {outputs.reason && <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 4 }}>{outputs.reason}</div>}
-          </div>
-        )}
-
-        {outputs?.positivePrompt && (
+      {mode === 'guided' && (
+        gated ? (
+          <Card style={{ display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center', textAlign: 'center', padding: '40px 32px' }}>
+            <Icon name="user-round-search" size={30} strokeWidth={1.25} style={{ color: 'var(--text-faint)' }} />
+            <div>
+              <div style={{ font: '600 1.0625rem/1.3 var(--font-display)', color: 'var(--text-strong)', marginBottom: 6 }}>Pick a creator to start shooting</div>
+              <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>Guided mode builds every shot around a saved creator's locked identity.</div>
+            </div>
+            <div style={{ width: '100%', maxWidth: 560 }}>
+              <CharacterSelector characters={characters} selectedId={selectedCharId} onSelect={selectCreator} />
+            </div>
+            <button
+              onClick={() => setBuildWithoutCreator(true)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'var(--text-sm)', color: 'var(--accent-deep)', textDecoration: 'underline', padding: 0, fontFamily: 'inherit' }}
+            >
+              Or build a new subject without a creator
+            </button>
+          </Card>
+        ) : (
           <>
-            <Button variant="primary" loading={generating} onClick={handleGenerate} style={{ width: '100%' }}>
-              <Icon name="sparkles" size={15} style={generating ? { animation: 'spin 1s linear infinite' } : {}} />
-              {generating ? 'Generating…' : selectedChar && getCharacterImage(selectedChar) ? `Generate as ${selectedChar.name}` : 'Generate Here'}
-            </Button>
-            <GenerationProgress
-              active={generating}
-              identityLocked={!!(selectedChar?.locked && getCharacterImage(selectedChar))}
-              engine={outputs?.recommendedEngine || ''}
-              batchSize={1}
+            {characters.length > 0 && (
+              <Card style={{ padding: '16px 20px' }}>
+                <CharacterSelector characters={characters} selectedId={selectedCharId} onSelect={selectCreator} />
+              </Card>
+            )}
+            <ShootBuilder
+              creator={selectedChar}
+              allowNoCreator
+              initialScene={initialScene}
+              initialNotes={initialVision}
+              onSaveAsCreator={selectedChar ? handleSaveAsAnchorForActive : undefined}
             />
           </>
-        )}
-
-        {outputs?.positivePrompt && !selectedChar && (
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-            {!showSaveChar ? (
-              <Button variant="secondary" onClick={() => setShowSaveChar(true)} style={{ width: '100%' }}>
-                <Icon name="user-plus" size={14} /> Save as Creator
-              </Button>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Name this Creator</div>
-                <input
-                  autoFocus
-                  value={saveCharName}
-                  onChange={e => setSaveCharName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleSaveCharacter(); if (e.key === 'Escape') setShowSaveChar(false); }}
-                  placeholder="e.g. Angel, Maya, Jade…"
-                  style={{
-                    width: '100%', boxSizing: 'border-box',
-                    padding: '9px 12px', borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border)', background: 'var(--surface-inset)',
-                    font: 'var(--text-sm)', color: 'var(--text-body)',
-                    outline: 'none', fontFamily: 'inherit',
-                  }}
-                />
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <Button variant="primary" onClick={handleSaveCharacter} disabled={!saveCharName.trim()} style={{ flex: 1 }}>
-                    <Icon name="user-check" size={13} /> Save & Go to Characters
-                  </Button>
-                  <Button variant="secondary" onClick={() => { setShowSaveChar(false); setSaveCharName(''); }}>
-                    <Icon name="x" size={13} />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {genError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>}
-      </Card>
-        </>
+        )
       )}
 
-      {/* Inline generation results */}
-      {genImages.length > 0 && (
-        <div>
-          <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 16 }}>
-            Generated · {genImages.length} image{genImages.length > 1 ? 's' : ''}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-            {genImages.map((url, i) => (
-              <div
-                key={i}
-                onClick={() => setLightboxSrc(url)}
-                style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden', boxShadow: 'var(--shadow-lg)', cursor: 'zoom-in' }}
-              >
-                <img src={url} alt={`Generated ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {mode === 'describe' && <PromptLab onNav={onNav} />}
 
-      {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
-
-      {/* Prompt history */}
-      <HistoryPanel history={history} onLoad={handleLoadHistory} />
+      {mode === 'talk' && <SceneFlow />}
 
     </div>
   );

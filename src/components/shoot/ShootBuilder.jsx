@@ -49,14 +49,14 @@ function getAllImages(char) {
 // page (Quick Shoot, always has a creator) and standalone inside the
 // unified Director screen's Guided tab (may run without a creator via
 // the raw-attribute escape hatch, when allowNoCreator is true).
-export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onSaveAsCreator }) {
+export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onSaveAsCreator, initialScene = 'None', initialNotes = '' }) {
   const [identityMode, setIdentityMode] = React.useState('lifestyle'); // 'portrait' | 'lifestyle'
   const [quickAngle, setQuickAngle]     = React.useState('front-facing');
-  const [scene, setScene]               = React.useState('None');
+  const [scene, setScene]               = React.useState(initialScene);
   const [outfit, setOutfit]             = React.useState('default');
   const [mood, setMood]                 = React.useState('Clean');
   const [lighting, setLighting]         = React.useState('Natural');
-  const [notes, setNotes]               = React.useState('');
+  const [notes, setNotes]               = React.useState(initialNotes);
   const [engine, setEngine]             = React.useState('openai_image');
   const [batchSize, setBatchSize]       = React.useState(1);
   const [activeRef, setActiveRef]       = React.useState(0);

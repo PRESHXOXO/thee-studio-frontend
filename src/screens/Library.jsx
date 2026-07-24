@@ -3,6 +3,7 @@ import { EmptyState } from '../components/feedback/EmptyState.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
+import { LibraryFocusMode } from '../components/feedback/LibraryFocusMode.jsx';
 import { loadLibrary, deleteFromLibrary, updateLibraryEntry } from '../lib/library.js';
 
 const SOURCE_LABELS = {
@@ -33,6 +34,12 @@ function formatDate(iso) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+}
+
 function StatusBadge({ status }) {
   const meta = STATUS_META[status] || STATUS_META.unreviewed;
   return (
@@ -49,9 +56,9 @@ function StatusBadge({ status }) {
 
 function ReviewActions({ entry, onSetStatus }) {
   const actions = [
-    { status: 'approved',  icon: 'check', title: 'Approve' },
-    { status: 'needs_fix', icon: 'wrench', title: 'Needs fix' },
-    { status: 'rejected',  icon: 'x', title: 'Reject' },
+    { status: 'approved',  icon: 'check', title: 'Approve (A)' },
+    { status: 'needs_fix', icon: 'wrench', title: 'Needs fix (F)' },
+    { status: 'rejected',  icon: 'x', title: 'Reject (R)' },
   ];
   return (
     <div style={{ display: 'flex', gap: 5 }}>
@@ -81,7 +88,7 @@ function ReviewActions({ entry, onSetStatus }) {
   );
 }
 
-function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote }) {
+function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote, selected, onToggleSelect, focused, onFocusCard, onOpenFocusMode }) {
   const [hovered, setHovered] = React.useState(false);
   const [noteOpen, setNoteOpen] = React.useState(false);
   const [note, setNote] = React.useState(entry.note || '');
@@ -97,12 +104,13 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote }) {
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={() => onFocusCard(entry.id)}
       style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}
     >
       <div style={{
         borderRadius: 'var(--radius-xl)', overflow: 'hidden',
-        border: `1px solid ${status === 'approved' ? 'rgba(59,201,138,0.45)' : 'var(--border)'}`,
-        boxShadow: hovered ? 'var(--shadow-md)' : 'var(--shadow-xs)',
+        border: focused ? '2px solid var(--accent-deep)' : `1px solid ${status === 'approved' ? 'rgba(59,201,138,0.45)' : 'var(--border)'}`,
+        boxShadow: focused ? 'var(--shadow-md)' : hovered ? 'var(--shadow-md)' : 'var(--shadow-xs)',
         transition: 'box-shadow var(--t-base), border-color var(--t-base)',
         background: 'var(--grad-portrait)',
         position: 'relative',
@@ -117,10 +125,40 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote }) {
           }}
         />
 
-        {/* Status badge — always visible */}
-        <div style={{ position: 'absolute', top: 10, left: 10 }}>
+        {/* Select checkbox — top left */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleSelect(entry.id); }}
+          title={selected ? 'Deselect' : 'Select'}
+          style={{
+            position: 'absolute', top: 10, left: 10, width: 24, height: 24, borderRadius: 7,
+            display: (hovered || selected) ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center',
+            background: selected ? 'var(--accent-deep)' : 'rgba(10,10,13,0.72)',
+            border: `1.5px solid ${selected ? 'var(--accent-deep)' : 'rgba(255,255,255,0.4)'}`,
+            cursor: 'pointer',
+          }}
+        >
+          {selected && <Icon name="check" size={13} strokeWidth={3} color="#fff" />}
+        </button>
+
+        {/* Status badge — always visible, shifts right when checkbox showing */}
+        <div style={{ position: 'absolute', top: 10, left: (hovered || selected) ? 42 : 10, transition: 'left var(--t-fast)' }}>
           <StatusBadge status={status} />
         </div>
+
+        {/* Full-screen expand */}
+        {hovered && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onOpenFocusMode(entry.id); }}
+            title="Review full-screen"
+            style={{
+              position: 'absolute', top: 10, right: 10, width: 26, height: 26, borderRadius: 7,
+              background: 'rgba(10,10,13,0.72)', border: '1px solid rgba(255,255,255,0.14)',
+              color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            }}
+          >
+            <Icon name="maximize-2" size={12} strokeWidth={2} />
+          </button>
+        )}
 
         {/* Action overlay */}
         {hovered && (
@@ -131,7 +169,7 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote }) {
           }}>
             <ReviewActions entry={{ ...entry, status }} onSetStatus={onSetStatus} />
             <div style={{ display: 'flex', gap: 6 }}>
-              <a href={entry.url} download={`thee-studio-${entry.id}.jpg`} style={{ flex: 1, textDecoration: 'none' }}>
+              <a href={entry.url} download={`thee-studio-${entry.id}.jpg`} style={{ flex: 1, textDecoration: 'none' }} onClick={e => e.stopPropagation()}>
                 <button style={{
                   width: '100%', padding: '7px 0', borderRadius: 'var(--radius-md)',
                   background: 'rgba(255,255,255,0.92)', border: 'none', cursor: 'pointer',
@@ -143,7 +181,7 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote }) {
               </a>
               <button
                 title="Add note"
-                onClick={() => setNoteOpen(o => !o)}
+                onClick={(e) => { e.stopPropagation(); setNoteOpen(o => !o); }}
                 style={{
                   width: 30, height: 30, borderRadius: 'var(--radius-md)', flexShrink: 0,
                   background: entry.note ? 'var(--accent-gold)' : 'rgba(255,255,255,0.92)',
@@ -155,7 +193,7 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote }) {
               </button>
               <button
                 title="Delete"
-                onClick={() => onDelete(entry.id)}
+                onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
                 style={{
                   width: 30, height: 30, borderRadius: 'var(--radius-md)', flexShrink: 0,
                   background: 'rgba(255,255,255,0.92)', border: 'none', cursor: 'pointer',
@@ -172,7 +210,7 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote }) {
 
       {/* Note editor */}
       {noteOpen && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} onClick={e => e.stopPropagation()}>
           <textarea
             value={note}
             onChange={e => setNote(e.target.value)}
@@ -234,6 +272,9 @@ export function Library() {
   const [library, setLibrary] = React.useState(loadLibrary);
   const [confirm, setConfirm] = React.useState(null);
   const [filter, setFilter] = React.useState('all');
+  const [selected, setSelected] = React.useState(() => new Set());
+  const [focusedId, setFocusedId] = React.useState(null);
+  const [focusModeId, setFocusModeId] = React.useState(null);
 
   const counts = React.useMemo(() => {
     const c = { all: library.length, unreviewed: 0, approved: 0, needs_fix: 0, rejected: 0 };
@@ -244,6 +285,9 @@ export function Library() {
   const visible = filter === 'all'
     ? library
     : library.filter(e => (e.status || 'unreviewed') === filter);
+
+  const focusedIndex = visible.findIndex(e => e.id === focusedId);
+  const focusModeIndex = visible.findIndex(e => e.id === focusModeId);
 
   const handleSetStatus = (id, status) => {
     updateLibraryEntry(id, { status });
@@ -262,6 +306,7 @@ export function Library() {
       onConfirm: () => {
         deleteFromLibrary(id);
         setLibrary(prev => prev.filter(e => e.id !== id));
+        setSelected(prev => { const next = new Set(prev); next.delete(id); return next; });
         setConfirm(null);
       },
     });
@@ -275,6 +320,36 @@ export function Library() {
       onConfirm: () => {
         localStorage.removeItem('ts_library');
         setLibrary([]);
+        setSelected(new Set());
+        setConfirm(null);
+      },
+    });
+  };
+
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelected(new Set());
+
+  const applyBulkStatus = (status) => {
+    selected.forEach(id => handleSetStatus(id, status));
+    clearSelection();
+  };
+
+  const handleBulkDelete = () => {
+    const ids = [...selected];
+    setConfirm({
+      title: `Delete ${ids.length} Image${ids.length > 1 ? 's' : ''}?`,
+      message: 'These images will be permanently removed from your library.',
+      onConfirm: () => {
+        ids.forEach(id => deleteFromLibrary(id));
+        setLibrary(prev => prev.filter(e => !ids.includes(e.id)));
+        clearSelection();
         setConfirm(null);
       },
     });
@@ -286,6 +361,39 @@ export function Library() {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, []);
+
+  // Keyboard review shortcuts — arrows to move the focus ring, A/F/R to
+  // review the focused card. Paused while full-screen mode owns its own
+  // keydown handling, and ignored while typing in a note/text field.
+  React.useEffect(() => {
+    function handleKeyDown(e) {
+      if (focusModeId != null || isTypingTarget(document.activeElement) || confirm) return;
+      if (!visible.length) return;
+
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = Math.min((focusedIndex < 0 ? -1 : focusedIndex) + 1, visible.length - 1);
+        setFocusedId(visible[next].id);
+        return;
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = Math.max((focusedIndex < 0 ? 1 : focusedIndex) - 1, 0);
+        setFocusedId(visible[prev].id);
+        return;
+      }
+      if (focusedIndex < 0) return;
+      const entry = visible[focusedIndex];
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFocusModeId(entry.id); return; }
+      const key = e.key.toLowerCase();
+      if (key === 'a') handleSetStatus(entry.id, entry.status === 'approved' ? 'unreviewed' : 'approved');
+      else if (key === 'f') handleSetStatus(entry.id, entry.status === 'needs_fix' ? 'unreviewed' : 'needs_fix');
+      else if (key === 'r') handleSetStatus(entry.id, entry.status === 'rejected' ? 'unreviewed' : 'rejected');
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, focusedIndex, focusModeId, confirm]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
@@ -301,14 +409,21 @@ export function Library() {
             )}
           </h1>
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 520 }}>
-            Review drafts, approve keepers, flag fixes. Approved media is ready for publishing prep.
+            Review drafts, approve keepers, flag fixes. Click a card then use arrow keys + A/F/R, or go full-screen.
           </p>
         </div>
-        {library.length > 0 && (
-          <Button variant="secondary" onClick={handleClearAll}>
-            <Icon name="trash-2" size={14} /> Clear All
-          </Button>
-        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {visible.length > 0 && (
+            <Button variant="secondary" onClick={() => setFocusModeId((visible[focusedIndex >= 0 ? focusedIndex : 0]).id)}>
+              <Icon name="maximize-2" size={14} /> Review Full-Screen
+            </Button>
+          )}
+          {library.length > 0 && (
+            <Button variant="secondary" onClick={handleClearAll}>
+              <Icon name="trash-2" size={14} /> Clear All
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Review filter bar */}
@@ -340,6 +455,35 @@ export function Library() {
         </div>
       )}
 
+      {/* Bulk action bar — appears once anything is selected */}
+      {selected.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          padding: '10px 16px', borderRadius: 'var(--radius-lg)',
+          background: 'var(--rose-deep)', border: '1px solid var(--accent-deep)',
+          position: 'sticky', top: 8, zIndex: 10,
+        }}>
+          <span style={{ font: '600 0.8rem/1 var(--font-ui)', color: 'var(--accent-deep)' }}>
+            {selected.size} selected
+          </span>
+          <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
+            <Button variant="secondary" size="sm" onClick={() => applyBulkStatus('approved')}>
+              <Icon name="check" size={12} /> Approve
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => applyBulkStatus('needs_fix')}>
+              <Icon name="wrench" size={12} /> Needs Fix
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => applyBulkStatus('rejected')}>
+              <Icon name="x" size={12} /> Reject
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleBulkDelete}>
+              <Icon name="trash-2" size={12} /> Delete
+            </Button>
+            <Button variant="ghost" size="sm" onClick={clearSelection}>Clear</Button>
+          </div>
+        </div>
+      )}
+
       {library.length === 0 ? (
         <EmptyState
           icon="images"
@@ -361,6 +505,11 @@ export function Library() {
               onDelete={handleDelete}
               onSetStatus={handleSetStatus}
               onSaveNote={handleSaveNote}
+              selected={selected.has(entry.id)}
+              onToggleSelect={toggleSelect}
+              focused={entry.id === focusedId}
+              onFocusCard={setFocusedId}
+              onOpenFocusMode={setFocusModeId}
             />
           ))}
         </div>
@@ -374,6 +523,16 @@ export function Library() {
         onConfirm={confirm?.onConfirm}
         onCancel={() => setConfirm(null)}
       />
+
+      {focusModeIndex >= 0 && (
+        <LibraryFocusMode
+          entries={visible}
+          index={focusModeIndex}
+          onIndexChange={(i) => { setFocusModeId(visible[i].id); setFocusedId(visible[i].id); }}
+          onSetStatus={handleSetStatus}
+          onClose={() => setFocusModeId(null)}
+        />
+      )}
     </div>
   );
 }

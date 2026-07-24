@@ -8,13 +8,13 @@ const SCREENS = [
   { id: 'home', label: 'Studio' },
   { id: 'images', label: 'Creator Builder' },
   { id: 'director', label: 'Thee Director' },
-  { id: 'characters', label: 'Characters' },
+  { id: 'characters', label: 'Creators' },
   { id: 'scenes', label: 'Scenes' },
   { id: 'references', label: 'References' },
   { id: 'campaigns', label: 'Campaigns' },
   { id: 'library', label: 'Library' },
   { id: 'history', label: 'History' },
-  { id: 'settings', label: 'Settings' },
+  { id: 'settings', label: 'Engine Library' },
 ];
 
 const OUT = './e2e-audit/results';

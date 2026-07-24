@@ -4,7 +4,7 @@ const SCREENS = [
   { id: 'home',       label: 'Studio' },
   { id: 'images',     label: 'Creator Builder' },
   { id: 'director',   label: 'Thee Director' },
-  { id: 'characters', label: 'Characters' },
+  { id: 'characters', label: 'Creators' },
   { id: 'scenes',      label: 'Scenes' },
   { id: 'references', label: 'References' },
   { id: 'campaigns',  label: 'Campaigns' },

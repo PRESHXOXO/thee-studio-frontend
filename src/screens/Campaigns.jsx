@@ -130,7 +130,7 @@ function CampaignModal({ campaign, characters, onSave, onCancel }) {
           </div>
 
           <div style={FIELD}>
-            <div style={LABEL}>Character</div>
+            <div style={LABEL}>Creator</div>
             <select
               style={{ ...INPUT, cursor: 'pointer' }}
               value={character}

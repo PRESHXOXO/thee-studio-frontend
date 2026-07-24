@@ -118,7 +118,7 @@ function HeroSection({ onCTA }) {
             </div>
             <span style={{ font: '600 0.8125rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Thee Studio</span>
           </div>
-          {['Studio', 'Creator Builder', 'Thee Director', 'Characters', 'Scenes'].map((item, i) => (
+          {['Studio', 'Creator Builder', 'Thee Director', 'Creators', 'Scenes'].map((item, i) => (
             <div key={item} style={{
               padding: '7px 10px', borderRadius: 8, marginBottom: 2,
               background: i === 0 ? 'var(--rose-glass)' : 'transparent',
@@ -131,7 +131,7 @@ function HeroSection({ onCTA }) {
         <div style={{ flex: 1, background: 'var(--cream)', padding: 24 }}>
           <div style={{ font: '600 1.25rem/1 var(--font-display)', color: 'var(--text-strong)', marginBottom: 16 }}>Studio</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            {['Build a Character', 'Generate Images', 'Run a Campaign'].map(t => (
+            {['Build a Creator', 'Generate Images', 'Run a Campaign'].map(t => (
               <div key={t} style={{
                 background: 'var(--white)', borderRadius: 12,
                 border: '1px solid var(--border)',
@@ -165,7 +165,7 @@ function FeaturesSection() {
     { icon: '◇', title: 'Creator Builder', desc: 'Build a new creator\'s look — on-brand lifestyle content, campaign shots, and editorial imagery, all identity-consistent.' },
     { icon: '◉', title: 'Thee Director', desc: 'AI-powered creative direction. Describe a vision, get a full shot list and prompt pack back.' },
     { icon: '⬡', title: 'Campaigns', desc: 'Plan and generate full content campaigns. 30 days of content, one cohesive visual identity.' },
-    { icon: '◎', title: 'Character Library', desc: 'Save, organize, and reuse characters across every project. Your roster, always ready.' },
+    { icon: '◎', title: 'Creator Library', desc: 'Save, organize, and reuse creators across every project. Your roster, always ready.' },
   ];
 
   return (
@@ -300,7 +300,7 @@ function PricingSection({ onCTA }) {
             </div>
             <div style={{ font: 'var(--text-sm)', color: 'rgba(255,255,255,0.5)', marginBottom: 32 }}>per month{yearly ? ', billed yearly' : ''}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
-              {['Everything in Free', 'Unlimited image generation', 'Thee Director', 'Campaigns & planning', 'Character library', 'Priority generation'].map(f => (
+              {['Everything in Free', 'Unlimited image generation', 'Thee Director', 'Campaigns & planning', 'Creator library', 'Priority generation'].map(f => (
                 <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, font: 'var(--text-base)', color: 'rgba(255,255,255,0.85)' }}>
                   <span style={{ color: 'var(--champagne)', fontWeight: 700 }}>✓</span> {f}
                 </div>

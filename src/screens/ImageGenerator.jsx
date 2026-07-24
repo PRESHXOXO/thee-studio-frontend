@@ -40,7 +40,7 @@ function Pill({ label, active, onClick }) {
 // panel — this screen no longer duplicates that.
 export function ImageGenerator({ onNav }) {
   const [aiGenName,     setAiGenName]     = React.useState('');
-  const [aiGenGender,   setAiGenGender]   = React.useState('Woman');
+  const [aiGenGender,   setAiGenGender]   = React.useState('Unspecified');
   const [aiGenSkin,     setAiGenSkin]     = React.useState('Unspecified');
   const [aiGenHairSt,   setAiGenHairSt]   = React.useState('Unspecified');
   const [aiGenHairCo,   setAiGenHairCo]   = React.useState('Unspecified');

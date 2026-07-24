@@ -3,13 +3,11 @@ import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
-import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
-import { analyzeCharacterImage, characterGenerate, extractFaceAnchor, generateReferenceSet } from '../api/studio.js';
-import { SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, STANDARD_NEGATIVE } from '../lib/promptData.js';
-import { Select } from '../components/forms/Select.jsx';
+import { analyzeCharacterImage, extractFaceAnchor, generateReferenceSet } from '../api/studio.js';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
 import { compressImage } from '../lib/imageUtils.js';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
+import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 
 const FIELD_DEFS = [
   { id: 'face',        icon: 'scan-face',    label: 'Face',          placeholder: 'e.g. High cheekbones, almond eyes, soft heart shape' },
@@ -23,186 +21,6 @@ const FIELD_DEFS = [
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6, display: 'block' };
 const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--surface-inset)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
-
-const QUICK_ENGINES = [
-  { id: 'openai_image',           label: 'OpenAI',            icon: 'zap' },
-  { id: 'replicate_photomaker',   label: 'PhotoMaker 🔒',    icon: 'scan-face' },
-  { id: 'replicate_instantid',    label: 'InstantID 🔒',     icon: 'fingerprint' },
-  { id: 'replicate_flux_schnell', label: 'FLUX Schnell',      icon: 'flame' },
-];
-
-const QUICK_SCENES = [
-  { id: 'none',      name: 'No Scene',    icon: 'minus-circle' },
-  { id: 'studio',    name: 'Studio',      icon: 'camera' },
-  { id: 'rooftop',   name: 'Rooftop',     icon: 'sunset' },
-  { id: 'yacht',     name: 'Yacht',       icon: 'anchor' },
-  { id: 'penthouse', name: 'Penthouse',   icon: 'building-2' },
-  { id: 'poolside',  name: 'Poolside',    icon: 'droplets' },
-  { id: 'jet',       name: 'Private Jet', icon: 'plane' },
-  { id: 'hotel',     name: 'Hotel',       icon: 'bed' },
-  { id: 'beach',     name: 'Beach',       icon: 'waves' },
-  { id: 'desert',    name: 'Desert',      icon: 'sun' },
-];
-
-const QUICK_MOODS = ['Clean', 'Luxury', 'Bold', 'Romantic', 'Editorial', 'Cinematic', 'Soft', 'Playful'];
-const PORTRAIT_ANGLES = [
-  'front-facing',
-  'left 3/4 angle',
-  'right 3/4 angle',
-  'left profile',
-  'slight high angle',
-  'over-the-shoulder',
-  'soft smile, front',
-];
-const BATCH_OPTIONS = [1, 2, 4];
-
-// Outfit override — first entry means "use character's wardrobe field"
-const QUICK_OUTFITS = [
-  { id: 'default',          label: "Creator's Style",        prompt: null },
-  { id: 'casual',           label: 'Casual',                 prompt: 'fitted white tee, high-waist dark jeans, clean white sneakers, minimal accessories' },
-  { id: 'athleisure',       label: 'Athleisure',             prompt: 'matching athletic set, sports bra, biker shorts, sleek sneakers, gym bag' },
-  { id: 'elevated_ath',     label: 'Skims Set',              prompt: 'fitted seamless bodysuit, cycling shorts, oversized hoodie, clean sneakers, gold hoops — no logos, no text on clothing' },
-  { id: 'sundress',         label: 'Sundress',               prompt: 'flowy floral mini sundress, strappy sandals, dainty gold jewelry, sunglasses' },
-  { id: 'brunch',           label: 'Brunch',                 prompt: 'linen coord set, strappy mules, sun hat, gold necklace — elevated summer daytime' },
-  { id: 'denim',            label: 'Denim',                  prompt: 'vintage denim jacket, straight-leg jeans, fitted white tee, white sneakers or ankle boots' },
-  { id: 'streetwear',       label: 'Streetwear',             prompt: 'streetwear luxury: clean cargo pants, oversized solid-color hoodie, chunky sneakers, cap — no logos, no text, no graphics on clothing' },
-  { id: 'date_night',       label: 'Date Night',             prompt: 'satin slip dress, strappy stiletto heels, diamond studs, sleek clutch — elegant and alluring' },
-  { id: 'lbd',              label: 'LBD',                    prompt: 'fitted little black dress, pointed-toe pumps, minimal gold jewelry — classic and polished' },
-  { id: 'night_out',        label: 'Night Out',              prompt: 'chic tailored blazer over a bodysuit, wide-leg trousers, heels, bold earrings' },
-  { id: 'club',             label: 'Club Ready',             prompt: 'crystal-embellished mini dress, platform stilettos, full glam makeup, bold jewelry' },
-  { id: 'biz_casual',       label: 'Business Casual',        prompt: 'fitted blazer, tailored trousers, silk blouse, block heels — polished and professional' },
-  { id: 'power_suit',       label: 'Power Suit',             prompt: 'structured monochrome suit, no undershirt, pointed pumps, minimal accessories — commanding' },
-  { id: 'high_fashion',     label: 'High Fashion',           prompt: 'avant-garde editorial look: architectural structured silhouette, fashion week styling, solid fabrics — no logos, no text on clothing' },
-  { id: 'old_money',        label: 'Old Money',              prompt: 'cashmere knit, wide-leg cream trousers, loafers, structured bag — quiet luxury' },
-  { id: 'monochrome',       label: 'Monochrome',             prompt: 'head-to-toe tonal look, clean architectural lines, one color, minimal accessories — solid fabrics only' },
-  { id: 'luxury_casual',    label: 'Luxury Casual',          prompt: 'structured woven bag, linen coord set, slides, gold jewelry — effortless expensive, no logos' },
-  { id: 'resort',           label: 'Resort',                 prompt: 'flowy printed maxi dress, woven sun hat, strappy sandals, gold jewelry — resort luxe' },
-  { id: 'beach',            label: 'Beach',                  prompt: 'designer bikini, lightweight sarong wrap, oversized sunglasses, gold accessories' },
-  { id: 'pool',             label: 'Poolside',               prompt: 'luxury one-piece swimsuit, designer slides, oversized beach hat, linen cover-up' },
-  { id: 'cozy_winter',      label: 'Winter Coat',            prompt: 'oversized tailored coat, turtleneck, knee-high boots, structured bag — cold weather editorial' },
-  { id: 'y2k',              label: 'Y2K',                    prompt: 'Y2K revival: low-rise jeans, rhinestone crop top, butterfly clips, platform sandals' },
-  { id: 'boudoir',          label: 'Studio Editorial',       prompt: 'silk robe, fitted lace bodysuit, soft natural confidence — tasteful editorial studio look' },
-  // — Men's looks —
-  { id: 'men_casual',       label: 'Men — Casual',           prompt: 'fitted white tee, dark slim jeans, clean white sneakers, minimal gold chain — effortless casual' },
-  { id: 'men_streetwear',   label: 'Men — Streetwear',       prompt: 'premium hoodie in solid neutral tone, relaxed joggers, clean sneakers — no logos, elevated streetwear' },
-  { id: 'men_suit',         label: 'Men — Suit',             prompt: 'tailored slim suit, no tie, crisp dress shirt open at collar, oxford shoes — sharp and polished' },
-  { id: 'men_monochrome',   label: 'Men — All Black',        prompt: 'all-black outfit, slim trousers, fitted turtleneck, clean leather shoes — sleek monochrome' },
-  { id: 'men_linen',        label: 'Men — Old Money',        prompt: 'linen shirt, tailored chinos, leather loafers, simple watch — quiet luxury old money' },
-  { id: 'men_designer_set', label: 'Men — Designer Set',     prompt: 'designer short set in solid color, premium sneakers, gold chain — summer luxury lifestyle' },
-  { id: 'men_poolside',     label: 'Men — Poolside',         prompt: 'swim trunks, sun-kissed skin, no shirt — poolside or beach lifestyle editorial' },
-  { id: 'men_tracksuit',    label: 'Men — Tracksuit',        prompt: 'luxury tracksuit in solid color, clean sneakers, no logos — athleisure editorial' },
-  { id: 'men_bomber',       label: 'Men — Bomber',           prompt: 'bomber jacket, slim dark jeans, crisp tee, fresh sneakers — street ready' },
-  { id: 'men_overcoat',     label: 'Men — Overcoat',         prompt: 'structured overcoat, turtleneck, slim trousers, leather boots — winter editorial' },
-  { id: 'men_biz',          label: 'Men — Business',         prompt: 'fitted blazer, chinos, loafers, clean watch, no tie — business casual' },
-];
-
-function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverride = null, mode = 'lifestyle') {
-  const f = char.fields || {};
-  const parts = [];
-
-  // IDENTITY LOCK BLOCK — prepended first when identity is locked
-  if (identityLocked) {
-    const whatChanges = mode === 'portrait'
-      ? 'Camera angle, expression, and framing only — no outfit changes, no complex scene.'
-      : 'Scene, wardrobe, pose, lighting, camera angle, styling, and mood only.';
-
-    // Pull the face anchor inside the lock block so eye color / specific features are LOCKED, not just context
-    const anchorDesc = char.faceAnchor
-      || (f.face ? `${f.face}${f.tone ? `. ${f.tone} complexion.` : ''}` : '');
-
-    const lockedDetails = anchorDesc
-      ? `\n\nLOCKED IDENTITY DETAILS — MUST BE PRESERVED EXACTLY:\n${anchorDesc}\nEvery detail above is non-negotiable. Do not change eye color, skin tone, facial structure, or any listed feature.`
-      : '';
-
-    parts.push(
-      `IDENTITY LOCK — DO NOT RECAST:\nUse the attached reference image(s) as the master identity anchor for ${char.name}. Preserve exact recognizable facial identity: facial proportions, skin tone, eye color, eye shape, eyebrow shape, nose shape, lips, cheekbones, jawline, hairline, and overall appearance.${lockedDetails}\n\nDo not recast the subject. Do not alter ethnicity. Do not change bone structure. Do not change eye color. Do not create a generic influencer face. Do not over-smooth the skin. Do not make the subject look AI-generated.\n\nWHAT STAYS: Face, identity, skin tone, bone structure, eye color, recognizable presence.\nWHAT CHANGES: ${whatChanges}\n\nREFERENCE IMAGES ATTACHED: The subject in the output must match the same person from all attached reference images.`
-    );
-  }
-
-  // PORTRAIT MODE — simplified prompt, return early
-  if (mode === 'portrait') {
-    // outfitOverride carries the angle string in portrait mode
-    const angle = outfitOverride || 'front-facing';
-    if (char.faceAnchor) {
-      parts.push(`TALENT — ${char.name}: ${char.faceAnchor}.`);
-    } else if (f.face || f.tone) {
-      parts.push(`TALENT — ${char.name}: ${[f.face, f.tone && `${f.tone} complexion`].filter(Boolean).join('. ')}.`);
-    }
-    parts.push(`PORTRAIT: Realistic photographic portrait. ${angle}. Neutral clean background. Natural studio lighting. Preserve exact identity. No complex scene, no props, no other people.`);
-    parts.push('QUALITY: Ultra-realistic portrait photography. Natural skin texture. Believable facial features. Shot on 85mm lens at f/2.8.');
-    parts.push('AVOID: Face drift, altered bone structure, changed ethnicity, generic model face, over-smoothed skin, AI look, warped features.');
-    return parts.join('\n\n');
-  }
-
-  // LIFESTYLE MODE — full prompt. Standard template: opening line, IMPORTANT
-  // identity-anchor instruction, SUBJECT, OUTFIT, HAIR, SCENE, ART DIRECTION,
-  // POSE & COMPOSITION, LIGHTING, CAMERA & IMAGE FEEL, QUALITY & RETOUCHING,
-  // NEGATIVE INSTRUCTIONS, FINAL GOAL.
-  const possessive = f.gender === 'Man' ? 'his' : 'her';
-  const personNoun = f.gender === 'Man' ? 'man' : 'woman';
-
-  parts.push('Create a photorealistic 4K lifestyle and fashion image for a premium brand campaign.');
-
-  if (identityLocked) {
-    parts.push(
-      `IMPORTANT:\nUse the uploaded reference image as the identity anchor for ${char.name}. Preserve ${possessive} recognizable face, beauty, skin tone, and overall look. ${char.name} must read as the same ${personNoun} from the reference image, not a generic model. Photorealistic only. No illustration, no cartoon styling, no plastic AI finish, no fantasy gloss.`
-    );
-  }
-
-  // SUBJECT — merged face/skin description + presence/personality in one
-  // flowing paragraph. Body descriptors intentionally excluded: they trigger
-  // OpenAI output moderation when combined with fashion framing, and build
-  // is already locked via the reference image.
-  const subjectFace = char.faceAnchor || [f.face, f.tone && `${f.tone} complexion`].filter(Boolean).join('. ');
-  const subjectParts = [subjectFace, f.personality].filter(Boolean);
-  if (subjectParts.length) {
-    parts.push(`SUBJECT — ${char.name.toUpperCase()}:\n${subjectParts.join(' ')}`);
-  }
-
-  // OUTFIT
-  const wardrobe = outfitOverride || f.wardrobe;
-  if (wardrobe) {
-    parts.push(
-      `OUTFIT:\nStyle ${char.name} in ${wardrobe}. All wardrobe and accessories should feel premium and believable, with real fabric weight, accurate drape, natural folds, and realistic material texture.`
-    );
-  }
-
-  // HAIR
-  if (f.hair) {
-    parts.push(`HAIR:\n${f.hair}, with full strand detail, realistic density, and believable natural movement.`);
-  }
-
-  // SCENE
-  if (sceneName) {
-    parts.push(
-      `SCENE:\n${sceneName}. The setting should feel authentic and lived-in, not like a generic studio backdrop — premium materials, natural or ambient light, and a believable atmosphere.`
-    );
-  }
-
-  // ART DIRECTION
-  const artDirectionParts = [mood || 'Clean'].filter(Boolean);
-  if (f.niche) artDirectionParts.push(f.niche);
-  parts.push(`ART DIRECTION:\n${artDirectionParts.join(' — ')} lighting with a premium campaign feel. Warm refined color grading. The environment should feel cinematic, elevated, and believable.`);
-
-  parts.push(
-    'POSE & COMPOSITION:\nThree-quarter body fashion photograph, framed clearly enough to showcase the full outfit and accessories. Both arms fully visible and anatomically correct — neither arm cropped, hidden, or merged into the torso. Natural confident posture, candid-feeling but composed — no awkward or exaggerated poses, no stiff stance. Hands should look relaxed and realistic. Composition should feel intentional, premium, and well-balanced with tasteful negative space.'
-  );
-  parts.push(
-    'LIGHTING:\nSoft, dimensional, photographer-quality lighting that wraps naturally around the subject. Realistic shadows, believable highlights, and depth across skin, hair, jewelry, clothing, and any environmental reflections.'
-  );
-  parts.push(
-    'CAMERA & IMAGE FEEL:\nShot like a real premium campaign on a Canon EOS R5 with an 85mm portrait lens at f/1.4, Kodak Portra 400 film rendering. Shallow depth of field with natural bokeh. Crisp focus on the face, eyes, hair, jewelry, and outfit details. The image should feel like a real professional fashion/lifestyle shoot, not an AI prototype.'
-  );
-  parts.push(
-    'QUALITY & RETOUCHING:\nCommercial-level retouching only. Preserve natural skin texture, visible pores, realistic highlights, natural body proportions, accurate anatomy, believable hands, and individual hair strands. No text, logos, brand names, or graphic prints on clothing. The final image should feel polished and premium without erasing humanity.'
-  );
-
-  parts.push(
-    `FINAL GOAL:\nA photorealistic${sceneName ? ` ${sceneName.toLowerCase()}` : ''} fashion campaign image of ${char.name} that feels polished, stylish, and expensive — like it was captured by a real photographer for a premium lifestyle brand. The image must feel believable, natural, and editorial, while clearly showcasing the outfit and styling.`
-  );
-
-  return parts.join('\n\n');
-}
 
 function loadCharacters() {
   try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
@@ -251,26 +69,6 @@ function AutoGrowTextarea({ value, onChange, placeholder, disabled, style }) {
         ...style,
       }}
     />
-  );
-}
-
-function PillButton({ active, onClick, children, style }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '7px 13px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
-        border: `1.5px solid ${active ? 'var(--accent-deep)' : 'var(--border)'}`,
-        background: active ? 'var(--rose-deep)' : 'transparent',
-        color: active ? 'var(--accent-deep)' : 'var(--text-muted)',
-        font: '500 0.8125rem/1 var(--font-ui)', fontFamily: 'inherit',
-        transition: 'all var(--t-fast)',
-        ...style,
-      }}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -436,19 +234,9 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
   const [saveError, setSaveError]   = React.useState('');
   const [saved, setSaved]           = React.useState(false);
 
-  // Quick Shoot state
-  const [quickScene,    setQuickScene]    = React.useState('none');
-  const [quickMood,     setQuickMood]     = React.useState('Clean');
-  const [quickOutfit,   setQuickOutfit]   = React.useState('default');
-  const [quickEngine,   setQuickEngine]   = React.useState('openai_image');
-  const [quickBatch,    setQuickBatch]    = React.useState(1);
-  const [activeRef,     setActiveRef]     = React.useState(0); // index into getAllImages
-  const [generating,    setGenerating]    = React.useState(false);
-  const [genImages,     setGenImages]     = React.useState([]);
-  const [genError,      setGenError]      = React.useState('');
-  const [identityMode,  setIdentityMode]  = React.useState('lifestyle'); // 'portrait' | 'lifestyle'
-  const [quickAngle,    setQuickAngle]    = React.useState('front-facing');
-  const [anchorSaved,   setAnchorSaved]   = React.useState(false); // brief toast
+  // Bumped by ShootBuilder's onGenerated so the shot-history strip refreshes
+  // without Characters.jsx needing to own the generation state itself.
+  const [shotRefreshTick, setShotRefreshTick] = React.useState(0);
 
   // Reference set generation
   const [refSetLoading, setRefSetLoading] = React.useState(false);
@@ -471,10 +259,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
         .filter(e => e.character === active.id || e.character === active.name)
         .slice(0, 16)
     );
-  }, [activeId, characters, genImages]);
-
-  // Reset activeRef when switching characters
-  React.useEffect(() => { setActiveRef(0); setGenImages([]); setGenError(''); }, [activeId]);
+  }, [activeId, characters, shotRefreshTick]);
 
   React.useEffect(() => {
     if (!onCharacterChange) return;
@@ -541,88 +326,19 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     setCharacters(updated);
   };
 
-  const handleQuickShoot = async () => {
-    if (!active) return;
-    const allImages = getAllImages(active);
-
-    // Block generation if identity locked but no reference image
-    if (active.locked && !allImages.length) {
-      setGenError('Identity lock is ON but no reference images are uploaded. Add a reference photo to this creator first.');
-      return;
-    }
-
-    const sceneName = quickScene === 'none' ? '' : QUICK_SCENES.find(s => s.id === quickScene)?.name || '';
-    // In portrait mode, outfitOverride carries the angle string
-    const outfitOrAngle = identityMode === 'portrait'
-      ? quickAngle
-      : QUICK_OUTFITS.find(o => o.id === quickOutfit)?.prompt || null;
-
-    const positivePrompt = buildCharacterPrompt(active, sceneName, quickMood, !!active.locked, outfitOrAngle, identityMode);
-
-    if (!allImages.length) {
-      onNav && onNav('images', { positivePrompt, negativePrompt: STANDARD_NEGATIVE });
-      return;
-    }
-
-    setGenerating(true);
-    setGenImages([]);
-    setGenError('');
-    try {
-      const result = await characterGenerate({
-        engineId: quickEngine,
-        positivePrompt,
-        negativePrompt: STANDARD_NEGATIVE,
-        characterImage: allImages[activeRef] || allImages[0],
-        anchorImages: allImages,   // all anchors — backend uses all for Gemini
-        mode: identityMode,
-        batchSize: quickBatch,
-      });
-      const imgs = result.images || [];
-      setGenImages(imgs);
-      imgs.forEach(url => {
-        saveToLibrary(url, {
-          source: 'quick_shoot',
-          character: active.id,
-          engine: quickEngine,
-          scene: sceneName || undefined,
-          mood: quickMood,
-          mode: identityMode,
-        }).catch(() => {});
-      });
-    } catch (e) {
-      setGenError(e.message || 'Generation failed');
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleSaveAsAnchor = async (url) => {
-    if (!active) return;
-    try {
-      // Convert external/Gradio URLs to data URLs before compressing so anchors
-      // don't expire when the Gradio session ends.
-      let src = url;
-      if (!url.startsWith('data:')) {
-        const res = await fetch(url);
-        const blob = await res.blob();
-        src = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
-      }
-      const compressed = await compressImage(src);
-      const updated = characters.map(c => {
-        if (c.id !== activeId) return c;
-        const existing = getAllImages(c);
-        // Deduplicate by checking if this exact data URL already exists
-        if (existing.includes(compressed)) return c;
-        const newRefs = [...existing, compressed];
-        return { ...c, refImages: newRefs, image: newRefs[0] };
-      });
-      saveCharacters(updated);
-      setCharacters(updated);
-      setAnchorSaved(true);
-      setTimeout(() => setAnchorSaved(false), 2000);
-    } catch (e) {
-      console.warn('Save as anchor failed:', e);
-    }
+  // ShootBuilder handles its own generation state; this just persists a
+  // newly-approved shot as another reference angle on the active creator.
+  const handleSaveAsAnchorForActive = (compressedDataUrl) => {
+    if (!activeId) return;
+    const updated = characters.map(c => {
+      if (c.id !== activeId) return c;
+      const existing = getAllImages(c);
+      if (existing.includes(compressedDataUrl)) return c; // already saved
+      const newRefs = [...existing, compressedDataUrl];
+      return { ...c, refImages: newRefs, image: newRefs[0] };
+    });
+    saveCharacters(updated);
+    setCharacters(updated);
   };
 
   const handleNew = () => {
@@ -1018,221 +734,13 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
         </div>
       )}
 
-      {/* Quick Shoot */}
+      {/* Quick Shoot — shared with the unified Director screen's Guided tab */}
       {activeId != null && !editing && active && (
-        <Card style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ ...LABEL, marginBottom: 2 }}>Quick Shoot</div>
-              <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                {getAllImages(active).length
-                  ? `${getAllImages(active).length} reference photo${getAllImages(active).length > 1 ? 's' : ''} · portrait used as visual reference`
-                  : 'No portrait uploaded — will generate from identity fields only.'}
-              </div>
-            </div>
-            {active.locked && (
-              <span style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                font: '600 0.75rem/1 var(--font-ui)', color: 'var(--accent-deep)',
-                background: 'var(--rose-deep)', padding: '5px 10px', borderRadius: 'var(--radius-pill)',
-              }}>
-                <Icon name="fingerprint" size={13} /> Identity Locked
-              </span>
-            )}
-          </div>
-
-          {/* Reference picker — only when multiple refs */}
-          {getAllImages(active).length > 1 && (
-            <div>
-              <div style={{ ...LABEL, marginBottom: 10 }}>Reference Photo</div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {getAllImages(active).map((img, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setActiveRef(i)}
-                    style={{
-                      width: 52, height: 69, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', padding: 0,
-                      border: `2px solid ${activeRef === i ? 'var(--accent-deep)' : 'var(--border)'}`,
-                      boxShadow: activeRef === i ? 'var(--shadow-sm)' : 'none',
-                      transition: 'border-color var(--t-fast)', background: 'none', flexShrink: 0,
-                    }}
-                  >
-                    <img src={img} alt={`Ref ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  </button>
-                ))}
-                <span style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', marginLeft: 4 }}>
-                  Using ref {activeRef + 1}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Engine */}
-          <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>Engine</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {QUICK_ENGINES.map(eng => (
-                <PillButton key={eng.id} active={quickEngine === eng.id} onClick={() => setQuickEngine(eng.id)}>
-                  <Icon name={eng.icon} size={13} strokeWidth={1.75} /> {eng.label}
-                </PillButton>
-              ))}
-            </div>
-          </div>
-
-          {/* Identity Mode selector */}
-          <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>Mode</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <PillButton active={identityMode === 'portrait'} onClick={() => setIdentityMode('portrait')}>
-                <Icon name="user" size={13} strokeWidth={1.75} /> Portrait Anchor
-              </PillButton>
-              <PillButton active={identityMode === 'lifestyle'} onClick={() => setIdentityMode('lifestyle')}>
-                <Icon name="layout" size={13} strokeWidth={1.75} /> Lifestyle Scene
-              </PillButton>
-            </div>
-            {identityMode === 'portrait' && (
-              <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
-                Simple angle portrait — preserves identity with minimal scene variables.
-              </div>
-            )}
-            {identityMode === 'lifestyle' && getAllImages(active).length === 1 && (
-              <div style={{ font: 'var(--text-xs)', color: 'var(--status-warn)', background: 'var(--status-warn-bg)', border: '1px solid rgba(255,178,56,0.35)', borderRadius: 'var(--radius-md)', padding: '7px 10px', marginTop: 8, lineHeight: 1.5 }}>
-                For stronger identity consistency, add 2–4 more reference photos to this creator.
-              </div>
-            )}
-          </div>
-
-          {/* Portrait Angle selector — shown only in portrait mode */}
-          {identityMode === 'portrait' && (
-            <div>
-              <div style={{ ...LABEL, marginBottom: 10 }}>Camera Angle</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {PORTRAIT_ANGLES.map(angle => (
-                  <PillButton key={angle} active={quickAngle === angle} onClick={() => setQuickAngle(angle)}>
-                    {angle}
-                  </PillButton>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Scene — hidden in portrait mode */}
-          {identityMode === 'lifestyle' && (
-            <div>
-              <div style={{ ...LABEL, marginBottom: 10 }}>Scene</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {QUICK_SCENES.map(sc => (
-                  <PillButton key={sc.id} active={quickScene === sc.id} onClick={() => setQuickScene(sc.id)}>
-                    <Icon name={sc.icon} size={13} strokeWidth={1.75} /> {sc.name}
-                  </PillButton>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Outfit — hidden in portrait mode */}
-          {identityMode === 'lifestyle' && (
-            <div>
-              <div style={{ ...LABEL, marginBottom: 10 }}>
-                Outfit
-                {quickOutfit !== 'default' && (
-                  <button
-                    onClick={() => setQuickOutfit('default')}
-                    style={{ marginLeft: 10, font: '500 0.72rem/1 var(--font-ui)', color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
-                  >
-                    reset
-                  </button>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-                {QUICK_OUTFITS.map(o => (
-                  <PillButton key={o.id} active={quickOutfit === o.id} onClick={() => setQuickOutfit(o.id)} style={{ flexShrink: 0 }}>
-                    {o.label}
-                  </PillButton>
-                ))}
-              </div>
-              {quickOutfit !== 'default' && (
-                <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', marginTop: 6, lineHeight: 1.4 }}>
-                  {QUICK_OUTFITS.find(o => o.id === quickOutfit)?.prompt}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Mood — hidden in portrait mode */}
-          {identityMode === 'lifestyle' && (
-            <div>
-              <div style={{ ...LABEL, marginBottom: 10 }}>Mood</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {QUICK_MOODS.map(m => (
-                  <PillButton key={m} active={quickMood === m} onClick={() => setQuickMood(m)}>
-                    {m}
-                  </PillButton>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Batch size */}
-          <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>Batch</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {BATCH_OPTIONS.map(n => (
-                <PillButton key={n} active={quickBatch === n} onClick={() => setQuickBatch(n)}>
-                  {n} image{n > 1 ? 's' : ''}
-                </PillButton>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Button variant="primary" onClick={handleQuickShoot} loading={generating} disabled={generating} style={{ alignSelf: 'flex-start' }}>
-              <Icon name="zap" size={15} /> {generating ? 'Generating…' : 'Build + Generate'}
-            </Button>
-            <GenerationProgress
-              active={generating}
-              identityLocked={!!active?.locked}
-              engine={quickEngine}
-              batchSize={quickBatch}
-            />
-          </div>
-
-          {genError && (
-            <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>
-          )}
-
-          {anchorSaved && (
-            <div style={{ font: 'var(--text-sm)', color: 'var(--accent-deep)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Icon name="check" size={14} /> Saved as anchor photo!
-            </div>
-          )}
-
-          {genImages.length > 0 && (
-            <div>
-              <div style={{ ...LABEL, marginBottom: 12 }}>
-                Result · {genImages.length} image{genImages.length > 1 ? 's' : ''}
-              </div>
-              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                {genImages.map((url, i) => (
-                  <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 160 }}>
-                    <div style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
-                      <img src={url} alt={`Generated ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                    <a href={url} download={`thee-studio-${Date.now()}-${i}.jpg`} target="_blank" rel="noreferrer">
-                      <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }}>
-                        <Icon name="download" size={13} /> Download
-                      </Button>
-                    </a>
-                    <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }} onClick={() => handleSaveAsAnchor(url)}>
-                      <Icon name="bookmark" size={13} /> Save as Anchor
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </Card>
+        <ShootBuilder
+          creator={active}
+          onGenerated={() => setShotRefreshTick(t => t + 1)}
+          onSaveAsCreator={handleSaveAsAnchorForActive}
+        />
       )}
 
       {/* Shot History */}

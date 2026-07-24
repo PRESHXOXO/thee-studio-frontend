@@ -17,4 +17,14 @@
 
   /* ---- Focus ring — hot pink ---- */
   --focus-ring: 0 0 0 3px rgba(255, 46, 126, 0.40);
+
+  /* ---- Card depth by content type ----
+     Image-forward content (creator photos, reference thumbnails, library
+     media) gets resting depth that steps up on select/hover. Data/nav
+     surfaces (stat pills, quick actions, picker containers) stay flat —
+     the contrast is deliberate, not an oversight. */
+  --depth-media-rest:  var(--shadow-xs);
+  --depth-media-active: var(--shadow-sm);
+  --depth-media-hover: var(--shadow-md);
+  --depth-flat: none;
 }

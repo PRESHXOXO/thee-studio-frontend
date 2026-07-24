@@ -178,7 +178,7 @@ function CampaignModal({ campaign, characters, onSave, onCancel }) {
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', paddingTop: 4, borderTop: '1px solid var(--border)' }}>
           <Button variant="secondary" onClick={onCancel}>Cancel</Button>
-          <Button variant="primary" onClick={handleSave} disabled={!name.trim()}>
+          <Button variant="accent" onClick={handleSave} disabled={!name.trim()}>
             {isNew ? 'Create Campaign' : 'Save Changes'}
           </Button>
         </div>
@@ -335,7 +335,7 @@ function CampaignDetail({ campaign, characters, library, onBack, onEdit, onNav }
         <div style={{ display: 'flex', gap: 8 }}>
           <Button variant="secondary" onClick={() => onEdit(campaign)}><Icon name="pencil" size={14} /> Edit</Button>
           <Button
-            variant="primary"
+            variant="accent"
             onClick={() => onNav && onNav('director', {
               vision: campaign.description || campaign.name,
               campaignId: campaign.id,
@@ -478,7 +478,7 @@ export function Campaigns({ onNav }) {
         title="Campaigns"
         subtitle="Plan and organize your shoots. Group creative direction, characters, and assets by campaign."
         actions={
-          <Button variant="primary" onClick={() => setModal({ mode: 'create' })}>
+          <Button variant="accent" onClick={() => setModal({ mode: 'create' })}>
             <Icon name="plus" size={15} /> New Campaign
           </Button>
         }
@@ -558,7 +558,7 @@ export function Campaigns({ onNav }) {
           />
         )
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 'var(--grid-gap-card)' }}>
           {filtered.map(camp => (
             <CampaignCard
               key={camp.id}

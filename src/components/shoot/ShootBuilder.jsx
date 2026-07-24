@@ -251,7 +251,7 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
                 style={{
                   width: 52, height: 69, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', padding: 0,
                   border: `2px solid ${activeRef === i ? 'var(--accent-deep)' : 'var(--border)'}`,
-                  boxShadow: activeRef === i ? 'var(--shadow-sm)' : 'var(--shadow-xs)',
+                  boxShadow: activeRef === i ? 'var(--depth-media-active)' : 'var(--depth-media-rest)',
                   background: 'none', flexShrink: 0, transition: 'box-shadow var(--t-fast), border-color var(--t-fast)',
                 }}
               >

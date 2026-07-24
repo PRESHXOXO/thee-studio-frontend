@@ -9,7 +9,13 @@ export function Button({ children, variant = 'primary', size = 'md', icon, iconR
   }[size];
 
   const variants = {
+    // Reserved for the action that actually produces generated pixels
+    // (Build + Generate, Generate Headshot, Generate with X) — the gradient
+    // is a signal, not decoration, so it only fires there.
     primary: { background: 'var(--grad-coral)', color: 'var(--text-on-accent)', boxShadow: 'var(--shadow-coral)', border: '1px solid transparent' },
+    // Solid-fill affirmative action that isn't itself a generation call —
+    // data saves, launchers into another screen, approvals.
+    accent: { background: 'var(--accent-deep)', color: 'var(--text-on-accent)', boxShadow: 'var(--shadow-sm)', border: '1px solid transparent' },
     secondary: { background: 'var(--white)', color: 'var(--accent-deep)', border: '1px solid var(--peach)', boxShadow: 'var(--shadow-xs)' },
     utility: { background: 'var(--cream-deep)', color: 'var(--text-body)', border: '1px solid var(--border)' },
     ghost: { background: 'transparent', color: 'var(--text-body)', border: '1px solid transparent' },

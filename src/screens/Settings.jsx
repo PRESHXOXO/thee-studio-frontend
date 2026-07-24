@@ -162,7 +162,7 @@ function KeyField({ label, description, placeholder, localStorageKey, onSave, on
           autoFocus={editing}
           style={{ flex: 1, padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--surface-input, var(--cream-light))', font: 'var(--text-sm)', color: 'var(--text-strong)', outline: 'none', fontFamily: 'monospace', letterSpacing: '0.05em' }}
         />
-        <Button variant="primary" onClick={handleSave} disabled={!key.trim() || st === 'saving'}>
+        <Button variant="accent" onClick={handleSave} disabled={!key.trim() || st === 'saving'}>
           {st === 'saving' ? 'Saving…' : 'Save'}
         </Button>
         {configured && (

@@ -82,6 +82,7 @@ export default function App() {
   const [activeNav, setActiveNav]             = React.useState('home');
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
   const [pendingDirector,  setPendingDirector]  = React.useState(null);
+  const [pendingImages,    setPendingImages]    = React.useState(null);
   const [activeCharacter,  setActiveCharacter]  = React.useState(() => {
     try {
       const chars = JSON.parse(localStorage.getItem('ts_characters') || '[]');
@@ -101,9 +102,11 @@ export default function App() {
     if (id === 'characters' && data === 'import') setPendingImportRequest(true);
     else if (id === 'characters' && data) setPendingCharacter(data);
     if (id === 'director'   && data) setPendingDirector(data);
+    if (id === 'images'     && data) setPendingImages(data);
     if (id !== 'characters' || data !== 'import') setPendingImportRequest(false);
     if (id !== 'characters' || !data || data === 'import') setPendingCharacter(null);
     if (id !== 'director'  || !data) setPendingDirector(null);
+    if (id !== 'images'    || !data) setPendingImages(null);
     setActiveNav(id);
   }, []);
 
@@ -118,6 +121,11 @@ export default function App() {
   if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
   if (activeNav === 'characters' && pendingImportRequest) screenProps.initialImportRequest = true;
   if (activeNav === 'characters') screenProps.onCharacterChange = setActiveCharacter;
+  if (activeNav === 'images'     && pendingImages) {
+    screenProps.initialName   = pendingImages.name   || '';
+    screenProps.initialNiche  = pendingImages.niche   || '';
+    screenProps.initialVision = pendingImages.vision  || '';
+  }
   // Same setter as Characters' onCharacterChange — Director can change the
   // active creator too, and the sidebar chip needs to reflect it without
   // waiting for a nav/remount to Characters.

@@ -337,7 +337,7 @@ export function PromptLab({ onNav }) {
           </div>
         )}
 
-        <Button variant="primary" loading={building} disabled={building || !rawInput.trim()} onClick={handleBuild} style={{ alignSelf: 'flex-start' }}>
+        <Button variant="accent" loading={building} disabled={building || !rawInput.trim()} onClick={handleBuild} style={{ alignSelf: 'flex-start' }}>
           <Icon name="wand-2" size={15} style={building ? { animation: 'spin 1.2s linear infinite' } : {}} />
           {building ? 'Engineering…' : result ? 'Rebuild prompt' : 'Build my prompt'}
         </Button>

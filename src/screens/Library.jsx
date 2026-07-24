@@ -225,7 +225,7 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote, selected, onTog
             }}
           />
           <div style={{ display: 'flex', gap: 6 }}>
-            <Button variant="primary" size="sm" onClick={commitNote}>Save note</Button>
+            <Button variant="accent" size="sm" onClick={commitNote}>Save note</Button>
             <Button variant="ghost" size="sm" onClick={() => setNoteOpen(false)}>Cancel</Button>
           </div>
         </div>
@@ -497,7 +497,7 @@ export function Library() {
           body="Hover any image and use the review buttons to move it into this stage."
         />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 'var(--grid-gap-media)' }}>
           {visible.map(entry => (
             <LibraryCard
               key={entry.id}

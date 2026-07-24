@@ -25,4 +25,12 @@
   --topbar-h: 64px;
   --content-max: 1180px;
   --gutter: 28px;
+
+  /* ---- Card grid gaps — one scale, by content density, not per-screen ----
+     Standard content-card grids (Scenes, Campaigns, Quick Actions,
+     pipeline tiles) share one gap so rhythm doesn't drift screen to
+     screen. Media grids (Library, Cast roster) run slightly looser since
+     the cards themselves carry more visual weight. */
+  --grid-gap-card: var(--space-5);   /* 20px */
+  --grid-gap-media: var(--space-5);  /* 20px */
 }

@@ -44,7 +44,7 @@ function ShortcutCard({ item, onNav }) {
 
 function StatPill({ icon, value, label }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--depth-flat)' }}>
       <span style={{ color: 'var(--accent-deep)', display: 'flex' }}>
         <Icon name={icon} size={15} strokeWidth={1.75} />
       </span>
@@ -133,7 +133,7 @@ export function StudioHome({ onNav }) {
         </h1>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <Button variant="secondary" onClick={() => onNav && onNav('images')}><Icon name="wand-2" size={15} /> New Creator</Button>
-          <Button variant="primary" onClick={() => onNav && onNav('characters', 'import')}><Icon name="upload" size={15} /> Import Creator</Button>
+          <Button variant="accent" onClick={() => onNav && onNav('characters', 'import')}><Icon name="upload" size={15} /> Import Creator</Button>
         </div>
 
         {/* Live stats */}
@@ -167,7 +167,7 @@ export function StudioHome({ onNav }) {
               <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 5 }}>Next Step</div>
               <div style={{ font: 'var(--text-base)', color: 'var(--text-body)' }}>{step.text}</div>
             </div>
-            <Button variant="primary" onClick={() => onNav && onNav(step.nav, step.data)}>
+            <Button variant="accent" onClick={() => onNav && onNav(step.nav, step.data)}>
               {step.cta} <Icon name="arrow-right" size={15} />
             </Button>
           </div>
@@ -178,7 +178,7 @@ export function StudioHome({ onNav }) {
       {libCount > 0 && (
         <div>
           <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Production Pipeline</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--grid-gap-card)' }}>
             <PipelineCard icon="eye" count={pipeline.unreviewed} label="Needs review" tone={{ color: 'var(--cobalt)', bg: 'var(--cobalt-soft)', hex: '#4D9FFF' }} onClick={() => onNav && onNav('library')} />
             <PipelineCard icon="wrench" count={pipeline.needs_fix} label="Needs fix" tone={{ color: 'var(--status-warn)', bg: 'var(--status-warn-bg)', hex: '#FFB238' }} onClick={() => onNav && onNav('library')} />
             <PipelineCard icon="check-circle" count={pipeline.approved} label="Approved — publish-ready" tone={{ color: 'var(--status-ready)', bg: 'var(--status-ready-bg)', hex: '#2DD4A8' }} onClick={() => onNav && onNav('library')} />
@@ -189,7 +189,7 @@ export function StudioHome({ onNav }) {
       {/* Studio Shortcuts */}
       <div>
         <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Quick Actions</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 'var(--grid-gap-card)' }}>
           {SHORTCUTS.map(s => <ShortcutCard key={s.nav} item={s} onNav={onNav} />)}
         </div>
       </div>

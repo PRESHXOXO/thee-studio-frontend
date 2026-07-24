@@ -94,8 +94,8 @@ function TraitSummary({ name, chips }) {
 // as a creator. Shooting/generation-with-a-prompt lives on the Guided
 // tab of the unified Director screen and on each creator's Quick Shoot
 // panel — this screen no longer duplicates that.
-export function ImageGenerator({ onNav }) {
-  const [aiGenName,     setAiGenName]     = React.useState('');
+export function ImageGenerator({ onNav, initialName = '', initialNiche = '', initialVision = '' }) {
+  const [aiGenName,     setAiGenName]     = React.useState(initialName);
   const [aiGenGender,   setAiGenGender]   = React.useState('Unspecified');
   const [aiGenSkin,     setAiGenSkin]     = React.useState('Unspecified');
   const [aiGenHairSt,   setAiGenHairSt]   = React.useState('Unspecified');
@@ -105,8 +105,8 @@ export function ImageGenerator({ onNav }) {
   const [aiGenFeatures, setAiGenFeatures] = React.useState('None');
   const [aiGenJewelry,  setAiGenJewelry]  = React.useState('None');
   const [aiGenClothing, setAiGenClothing] = React.useState('Unspecified');
-  const [aiGenNiche,    setAiGenNiche]    = React.useState('');
-  const [aiGenVision,   setAiGenVision]   = React.useState('');
+  const [aiGenNiche,    setAiGenNiche]    = React.useState(initialNiche);
+  const [aiGenVision,   setAiGenVision]   = React.useState(initialVision);
   const [aiGenStep,      setAiGenStep]      = React.useState('');
   const [aiGenImages,    setAiGenImages]    = React.useState([]);
   const [aiGenAnchor,    setAiGenAnchor]    = React.useState('');
@@ -633,7 +633,7 @@ export function ImageGenerator({ onNav }) {
                   </Button>
                 ) : (
                   <>
-                    <Button variant="primary" onClick={handleSaveCreator} loading={aiGenSaving} disabled={aiGenLoading || aiGenSaving}>
+                    <Button variant="accent" onClick={handleSaveCreator} loading={aiGenSaving} disabled={aiGenLoading || aiGenSaving}>
                       <Icon name="user-check" size={15} /> {aiGenSaving ? 'Saving…' : 'Save Creator'}
                     </Button>
                     <Button variant="secondary" onClick={handleAiGenerate} disabled={aiGenLoading || aiGenSaving}>

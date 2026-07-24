@@ -127,7 +127,7 @@ export function References({ onNav }) {
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 480 }}>Curate the visual language that keeps every creator on-brand.</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button variant="primary" onClick={() => document.getElementById('ref-upload').click()}>
+          <Button variant="accent" onClick={() => document.getElementById('ref-upload').click()}>
             <Icon name="plus" size={15} /> Add Reference
             <input id="ref-upload" type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => handleUpload(Array.from(e.target.files))} />
           </Button>

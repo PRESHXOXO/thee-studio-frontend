@@ -46,7 +46,7 @@ export class StudioErrorBoundary extends React.Component {
         <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', maxWidth: 440, lineHeight: 1.55 }}>
           Your creators and saved media are safe. Head back to Studio Home, or pick another tool from the sidebar.
         </div>
-        <Button variant="primary" onClick={this.handleGoHome}>
+        <Button variant="accent" onClick={this.handleGoHome}>
           <Icon name="layout-dashboard" size={15} /> Back to Studio Home
         </Button>
       </div>

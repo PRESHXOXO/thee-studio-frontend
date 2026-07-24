@@ -62,7 +62,7 @@ export function Scenes({ onNav }) {
         subtitle="Browse available scene presets. Click a scene to open it in Thee Director."
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--grid-gap-card)' }}>
         {SCENE_DATA.map(scene => (
           <SceneCard
             key={scene.id}

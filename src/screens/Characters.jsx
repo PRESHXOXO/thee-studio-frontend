@@ -9,6 +9,16 @@ import { compressImage } from '../lib/imageUtils.js';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
 import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 
+// Starter archetypes for the empty-cast state — no fake portraits to seed
+// with, so these hand off to New Creator with niche/energy pre-filled
+// instead of dropping the user into a blank roster.
+const CAST_ARCHETYPES = [
+  { icon: 'sparkles',  name: 'Beauty Editorial', niche: 'Beauty & Glam',       vision: 'Editorial Luxury' },
+  { icon: 'dumbbell',  name: 'Fitness Coach',     niche: 'Fitness & Wellness', vision: 'Clean & Minimal' },
+  { icon: 'plane',     name: 'Travel Lifestyle',  niche: 'Lifestyle & Travel', vision: 'Natural & Earthy' },
+  { icon: 'shirt',     name: 'Street Style',      niche: 'Fashion & Style',    vision: 'Street & Urban' },
+];
+
 const FIELD_DEFS = [
   { id: 'face',        icon: 'scan-face',    label: 'Face',          placeholder: 'e.g. High cheekbones, almond eyes, soft heart shape' },
   { id: 'hair',        icon: 'wind',         label: 'Hair',          placeholder: 'e.g. Silk press, deep espresso, side part' },
@@ -111,7 +121,7 @@ function RefImageSlot({ src, active, onClick, onDelete, onUpload, index }) {
       style={{
         width: 58, height: 77, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', flexShrink: 0, position: 'relative',
         border: `2px solid ${active ? 'var(--accent-deep)' : 'transparent'}`,
-        boxShadow: active ? 'var(--shadow-sm)' : 'var(--shadow-xs)',
+        boxShadow: active ? 'var(--depth-media-active)' : 'var(--depth-media-rest)',
         transition: 'border-color var(--t-fast), box-shadow var(--t-fast)',
       }}
     >
@@ -560,7 +570,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
               <Icon name="check" size={14} /> Saved!
             </span>
           )}
-          {editing && <Button variant="primary" onClick={handleSave}><Icon name="save" size={15} /> Save Creator</Button>}
+          {editing && <Button variant="accent" onClick={handleSave}><Icon name="save" size={15} /> Save Creator</Button>}
           {editing && <Button variant="secondary" onClick={() => { setEditing(null); setAnalyzeError(''); setSaveError(''); }}>Cancel</Button>}
           {!editing && active && (
             <Button
@@ -776,7 +786,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
       {characters.length > 0 && (
         <div>
           <div style={{ ...LABEL, marginBottom: 16 }}>Your Creators</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 'var(--grid-gap-media)' }}>
             {characters.map(c => (
               <CreatorCard
                 key={c.id}
@@ -791,10 +801,37 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
       )}
 
       {characters.length === 0 && !editing && (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-faint)' }}>
-          <Icon name="sparkles" size={40} strokeWidth={1} />
-          <div style={{ font: 'var(--text-lg)', marginTop: 16, marginBottom: 8, color: 'var(--text-muted)' }}>No creators yet</div>
-          <div style={{ font: 'var(--text-sm)' }}>Import a photo or click New Creator to get started.</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ font: '600 1rem/1 var(--font-ui)', color: 'var(--text-strong)', marginBottom: 6 }}>Start your cast</div>
+            <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>Pick an archetype to open New Creator with a niche and energy already dialed in — or import a photo instead.</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+            {CAST_ARCHETYPES.map(a => (
+              <button
+                key={a.name}
+                onClick={() => onNav && onNav('images', { name: '', niche: a.niche, vision: a.vision })}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10,
+                  padding: '18px 16px', borderRadius: 'var(--radius-lg)', border: '1.5px dashed var(--border-strong)',
+                  background: 'var(--cream)', cursor: 'pointer', textAlign: 'left', transition: 'all var(--t-fast)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--rose-glass)'; e.currentTarget.style.borderColor = 'var(--accent-deep)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--cream)'; e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
+              >
+                <span style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: 'var(--rose-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-deep)' }}>
+                  <Icon name={a.icon} size={17} strokeWidth={1.5} />
+                </span>
+                <div style={{ font: '600 0.85rem/1.2 var(--font-ui)', color: 'var(--text-strong)' }}>{a.name}</div>
+                <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>{a.niche} · {a.vision}</div>
+              </button>
+            ))}
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              <Icon name="upload" size={14} /> Or import a photo
+            </Button>
+          </div>
         </div>
       )}
 

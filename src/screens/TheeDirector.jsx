@@ -61,7 +61,7 @@ function CharacterSelector({ characters, selectedId, onSelect }) {
               <div style={{
                 width: 44, height: 58, borderRadius: 8, overflow: 'hidden',
                 background: 'var(--grad-portrait)', flexShrink: 0,
-                boxShadow: img ? 'var(--shadow-xs)' : 'none',
+                boxShadow: img ? 'var(--depth-media-rest)' : 'var(--depth-flat)',
               }}>
                 {img
                   ? <img src={img} alt={char.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

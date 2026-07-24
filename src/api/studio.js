@@ -173,6 +173,14 @@ export async function buildDirectorOutputs({
 
 // Sends a base64 image data URL to the backend vision model and returns
 // structured character field data ({ face, hair, body, wardrobe, tone, personality, niche }).
+// Rewrite absolute Gradio host URLs to relative so the Vite proxy serves
+// them same-origin — without this, <img>/<canvas> reads are cross-origin
+// and canvas.toDataURL() throws a silent, unrecoverable SecurityError.
+function relativizeUrl(url) {
+  if (!url || url.startsWith('data:')) return url;
+  return url.replace(/^https?:\/\/127\.0\.0\.1:\d+\/gradio_api/, '/gradio_api');
+}
+
 // Uses /run/analyze_character — in Gradio 6.x the URL path IS the api_name.
 export async function characterGenerate({ engineId, positivePrompt, negativePrompt, characterImage, anchorImages = [], mode = 'lifestyle', imageSize = 'Vertical 9:16', batchSize = 1 }) {
   const raw = await callNamedEndpoint('character_generate', [
@@ -201,6 +209,7 @@ export async function generateCharacterSeed(params) {
   const raw = await callNamedEndpoint('character_seed_generate', [JSON.stringify(params)]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
+  parsed.image = relativizeUrl(parsed.image);
   return parsed; // { image, faceAnchor }
 }
 
@@ -215,6 +224,7 @@ export async function generateCharacterVariationShot(params) {
   const raw = await callNamedEndpoint('character_variation_shot', [JSON.stringify(params)]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
+  parsed.image = relativizeUrl(parsed.image);
   return parsed; // { image }
 }
 

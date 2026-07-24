@@ -233,6 +233,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
   const [analyzeError, setAnalyzeError] = React.useState('');
   const [saveError, setSaveError]   = React.useState('');
   const [saved, setSaved]           = React.useState(false);
+  const [activeRef, setActiveRef]   = React.useState(0);
 
   // Bumped by ShootBuilder's onGenerated so the shot-history strip refreshes
   // without Characters.jsx needing to own the generation state itself.
@@ -260,6 +261,10 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
         .slice(0, 16)
     );
   }, [activeId, characters, shotRefreshTick]);
+
+  React.useEffect(() => {
+    setActiveRef(0);
+  }, [activeId, editing]);
 
   React.useEffect(() => {
     if (!onCharacterChange) return;
@@ -530,7 +535,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     : active;
 
   const displayImages = displayChar ? getAllImages(displayChar) : [];
-  const primaryDisplay = displayImages[0] || null;
+  const primaryDisplay = displayImages[editing ? 0 : activeRef] || displayImages[0] || null;
 
   const showPanel = !!(editing || activeId != null);
 

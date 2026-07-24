@@ -23,3 +23,8 @@
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
 }
+
+@keyframes generation-progress-sweep {
+  from { transform: translateX(-140%); }
+  to   { transform: translateX(440%); }
+}

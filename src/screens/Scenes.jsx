@@ -34,11 +34,12 @@ function SceneCard({ scene, onUse }) {
       }}
     >
       <div style={{
-        width: 40, height: 40, borderRadius: 'var(--radius)',
-        background: 'var(--rose-deep)', color: 'var(--accent-deep)',
+        width: 46, height: 46, borderRadius: 'var(--radius-lg)',
+        background: 'var(--grad-rose)', color: 'var(--accent-deep)',
+        boxShadow: 'var(--shadow-xs)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <Icon name={scene.icon} size={20} strokeWidth={1.5} />
+        <Icon name={scene.icon} size={21} strokeWidth={1.5} />
       </div>
       <div>
         <div style={{ font: 'var(--display-sm)', color: 'var(--text-strong)' }}>{scene.name}</div>

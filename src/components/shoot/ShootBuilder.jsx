@@ -251,7 +251,8 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
                 style={{
                   width: 52, height: 69, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', padding: 0,
                   border: `2px solid ${activeRef === i ? 'var(--accent-deep)' : 'var(--border)'}`,
-                  background: 'none', flexShrink: 0,
+                  boxShadow: activeRef === i ? 'var(--shadow-sm)' : 'var(--shadow-xs)',
+                  background: 'none', flexShrink: 0, transition: 'box-shadow var(--t-fast), border-color var(--t-fast)',
                 }}
               >
                 <img src={img} alt={`Ref ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />

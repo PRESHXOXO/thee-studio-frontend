@@ -111,8 +111,8 @@ function RefImageSlot({ src, active, onClick, onDelete, onUpload, index }) {
       style={{
         width: 58, height: 77, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', flexShrink: 0, position: 'relative',
         border: `2px solid ${active ? 'var(--accent-deep)' : 'transparent'}`,
-        boxShadow: active ? 'var(--shadow-sm)' : 'none',
-        transition: 'border-color var(--t-fast)',
+        boxShadow: active ? 'var(--shadow-sm)' : 'var(--shadow-xs)',
+        transition: 'border-color var(--t-fast), box-shadow var(--t-fast)',
       }}
     >
       <img src={src} alt={`Ref ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

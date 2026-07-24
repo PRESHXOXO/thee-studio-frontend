@@ -17,6 +17,16 @@ const STATUS_META = {
 
 const CATEGORY_OPTIONS = ['Lifestyle', 'Fashion', 'Beauty', 'Fitness', 'Travel', 'Promo', 'Campaign', 'Collab'];
 
+// Starter briefs — real, editable drafts to launch from instead of a blank
+// form. Selecting one opens the create modal pre-filled; nothing is saved
+// until the user reviews and hits Save.
+const CAMPAIGN_TEMPLATES = [
+  { icon: 'plane', name: 'Resort Launch', category: 'Travel', description: 'Sun-drenched poolside energy, warm tones, editorial but relaxed. 5-7 lifestyle shots across a long weekend getaway.' },
+  { icon: 'shirt', name: 'Capsule Drop', category: 'Fashion', description: 'Editorial lookbook for a small seasonal collection — clean backdrops, confident posing, consistent lighting across every piece.' },
+  { icon: 'dumbbell', name: '30-Day Wellness', category: 'Fitness', description: 'A month of consistent content: morning routine, workout, recovery. Same energy, same look, different day each time.' },
+  { icon: 'sparkles', name: 'Brand Collab', category: 'Promo', description: 'Sponsored content for a product partner — natural integration, clear product visibility, on-brand mood throughout.' },
+];
+
 function loadCampaigns() {
   try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; }
 }
@@ -508,13 +518,38 @@ export function Campaigns({ onNav }) {
 
       {filtered.length === 0 ? (
         campaigns.length === 0 ? (
-          <EmptyState
-            icon="megaphone"
-            title="No campaigns yet"
-            body="Create a campaign to plan your shoots. Set a creative brief, assign a creator, and track from draft to complete."
-            cta="New Campaign"
-            onCta={() => setModal({ mode: 'create' })}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ font: '600 1.05rem/1 var(--font-display)', color: 'var(--text-strong)', marginBottom: 6 }}>Start from a brief</div>
+              <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>Pick one to open a pre-filled draft — edit anything before saving.</div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+              {CAMPAIGN_TEMPLATES.map(t => (
+                <button
+                  key={t.name}
+                  onClick={() => setModal({ mode: 'create', campaign: { name: t.name, category: t.category, description: t.description } })}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10,
+                    padding: '18px 16px', borderRadius: 'var(--radius-lg)', border: '1.5px dashed var(--border-strong)',
+                    background: 'var(--cream)', cursor: 'pointer', textAlign: 'left', transition: 'all var(--t-fast)',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--rose-glass)'; e.currentTarget.style.borderColor = 'var(--accent-deep)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--cream)'; e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
+                >
+                  <span style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: 'var(--rose-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-deep)' }}>
+                    <Icon name={t.icon} size={17} strokeWidth={1.5} />
+                  </span>
+                  <div style={{ font: '600 0.85rem/1.2 var(--font-ui)', color: 'var(--text-strong)' }}>{t.name}</div>
+                  <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.45 }}>{t.description}</div>
+                </button>
+              ))}
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <Button variant="secondary" onClick={() => setModal({ mode: 'create' })}>
+                <Icon name="plus" size={14} /> Or start from scratch
+              </Button>
+            </div>
+          </div>
         ) : (
           <EmptyState
             icon="filter"

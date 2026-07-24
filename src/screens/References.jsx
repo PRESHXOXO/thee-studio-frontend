@@ -71,9 +71,19 @@ function UploadCard({ onUpload }) {
   );
 }
 
+// Starter boards — no fake photos to seed with, so these prime the upload
+// with a real tag/framing instead of dropping the user into a blank box.
+const REFERENCE_TEMPLATES = [
+  { id: 'editorial', tag: 'Editorial Beauty', icon: 'sparkles', desc: 'Close-up beauty, clean studio light, high detail' },
+  { id: 'street',    tag: 'Street Style',     icon: 'footprints', desc: 'Candid, on-location, editorial streetwear' },
+  { id: 'golden',    tag: 'Golden Hour',      icon: 'sun',       desc: 'Warm outdoor lifestyle, low sun, soft glow' },
+  { id: 'studio',    tag: 'Studio Portrait',  icon: 'aperture',  desc: 'Seamless backdrop, controlled lighting, posed' },
+];
+
 export function References({ onNav }) {
   const [refs, setRefs] = React.useState(loadRefs);
   const [selected, setSelected] = React.useState(new Set());
+  const pendingTagRef = React.useRef('Uploaded');
 
   const toggleSelect = (id) => {
     setSelected(prev => {
@@ -84,6 +94,8 @@ export function References({ onNav }) {
   };
 
   const handleUpload = (files) => {
+    const tag = pendingTagRef.current;
+    pendingTagRef.current = 'Uploaded';
     const readers = files.map((file, i) => new Promise((resolve, reject) => {
       const fr = new FileReader();
       fr.onload = ev => resolve({
@@ -91,7 +103,7 @@ export function References({ onNav }) {
         src: ev.target.result,
         creator: 'My Reference',
         caption: file.name.replace(/\.[^.]+$/, ''),
-        tag: 'Uploaded',
+        tag,
       });
       fr.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
       fr.readAsDataURL(file);
@@ -135,14 +147,38 @@ export function References({ onNav }) {
       )}
 
       {refs.length === 0 ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '64px 24px', border: '2px dashed var(--border-strong)', borderRadius: 'var(--radius-lg)', color: 'var(--text-faint)' }}>
-          <Icon name="image" size={36} strokeWidth={1} />
-          <div style={{ font: '600 1rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>No references yet</div>
-          <div style={{ font: 'var(--text-sm)', color: 'var(--text-faint)', textAlign: 'center', maxWidth: 320 }}>Upload reference images to build your visual library. They'll be saved here for future shoots.</div>
-          <Button variant="primary" onClick={() => document.getElementById('ref-upload-empty').click()}>
-            <Icon name="plus" size={14} /> Add Reference
-            <input id="ref-upload-empty" type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => handleUpload(Array.from(e.target.files))} />
-          </Button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ font: '600 1rem/1 var(--font-ui)', color: 'var(--text-strong)', marginBottom: 6 }}>Start a mood board</div>
+            <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>Pick a starting point — it tags what you upload so your library stays organized from the first photo.</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+            {REFERENCE_TEMPLATES.map(t => (
+              <button
+                key={t.id}
+                onClick={() => { pendingTagRef.current = t.tag; document.getElementById('ref-upload-empty').click(); }}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10,
+                  padding: '18px 16px', borderRadius: 'var(--radius-lg)', border: '1.5px dashed var(--border-strong)',
+                  background: 'var(--cream)', cursor: 'pointer', textAlign: 'left', transition: 'all var(--t-fast)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--rose-glass)'; e.currentTarget.style.borderColor = 'var(--accent-deep)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--cream)'; e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
+              >
+                <span style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: 'var(--rose-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-deep)' }}>
+                  <Icon name={t.icon} size={17} strokeWidth={1.5} />
+                </span>
+                <div style={{ font: '600 0.85rem/1.2 var(--font-ui)', color: 'var(--text-strong)' }}>{t.tag}</div>
+                <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.4 }}>{t.desc}</div>
+              </button>
+            ))}
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <Button variant="secondary" onClick={() => document.getElementById('ref-upload-empty').click()}>
+              <Icon name="plus" size={14} /> Or just add a reference
+            </Button>
+          </div>
+          <input id="ref-upload-empty" type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => handleUpload(Array.from(e.target.files))} />
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14 }}>

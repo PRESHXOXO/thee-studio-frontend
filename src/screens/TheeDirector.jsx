@@ -10,6 +10,7 @@ import { GenerationProgress } from '../components/feedback/GenerationProgress.js
 import { Icon } from '../components/core/Icon.jsx';
 import { buildDirectorOutputs, generateImage, characterGenerate, sanitizeForOpenAI, describeOutfitImage } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
+import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
 import {
   LOCATIONS, GENDERS, SKIN_TONES, HAIR_COLORS,
   EYE_DETAILS, SPECIAL_FEATURES, STANDARD_NEGATIVE,
@@ -200,7 +201,16 @@ function HistoryPanel({ history, onLoad }) {
 
 export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' }) {
   const [characters]    = React.useState(loadCharacters);
-  const [selectedCharId, setSelectedCharId] = React.useState(null);
+  const [selectedCharId, setSelectedCharId] = React.useState(() => resolveActiveCreator(loadCharacters())?.id ?? null);
+  // Escape hatch out of the "pick a creator" gate — build a subject with raw
+  // attributes instead. Skips the gate entirely once a creator is chosen.
+  const [buildWithoutCreator, setBuildWithoutCreator] = React.useState(false);
+
+  const selectCreator = (id) => {
+    setSelectedCharId(id);
+    saveActiveCreatorId(id);
+    if (id != null) setBuildWithoutCreator(false);
+  };
 
   const [vision,       setVision]       = React.useState(initialVision);
   const [contentType,  setContentType]  = React.useState('Portrait');
@@ -547,15 +557,38 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
         </div>
       </div>
 
-      {/* Character selector */}
-      {characters.length > 0 && (
-        <Card style={{ padding: '16px 20px' }}>
-          <CharacterSelector characters={characters} selectedId={selectedCharId} onSelect={setSelectedCharId} />
+      {/* Pick-a-creator gate — front and center when creators exist but none
+          is active yet. "Build without a creator" is a real, supported path
+          (raw-attribute subject, saveable as a creator afterward), so it
+          stays one click away instead of being blocked outright. */}
+      {characters.length > 0 && !selectedCharId && !buildWithoutCreator ? (
+        <Card style={{ display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center', textAlign: 'center', padding: '40px 32px' }}>
+          <Icon name="user-round-search" size={30} strokeWidth={1.25} style={{ color: 'var(--text-faint)' }} />
+          <div>
+            <div style={{ font: '600 1.0625rem/1.3 var(--font-display)', color: 'var(--text-strong)', marginBottom: 6 }}>Pick a creator to start shooting</div>
+            <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>Director builds every shot around a saved creator's locked identity.</div>
+          </div>
+          <div style={{ width: '100%', maxWidth: 560 }}>
+            <CharacterSelector characters={characters} selectedId={selectedCharId} onSelect={selectCreator} />
+          </div>
+          <button
+            onClick={() => setBuildWithoutCreator(true)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'var(--text-sm)', color: 'var(--accent-deep)', textDecoration: 'underline', padding: 0, fontFamily: 'inherit' }}
+          >
+            Or build a new subject without a creator
+          </button>
         </Card>
-      )}
+      ) : (
+        <>
+          {/* Character selector */}
+          {characters.length > 0 && (
+            <Card style={{ padding: '16px 20px' }}>
+              <CharacterSelector characters={characters} selectedId={selectedCharId} onSelect={selectCreator} />
+            </Card>
+          )}
 
-      {/* Subject Details */}
-      <Card style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Subject Details */}
+          <Card style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3 style={LABEL}>Subject Details</h3>
           {identityLocked && (
@@ -886,6 +919,8 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
 
         {genError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>}
       </Card>
+        </>
+      )}
 
       {/* Inline generation results */}
       {genImages.length > 0 && (

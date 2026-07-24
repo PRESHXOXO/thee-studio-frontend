@@ -9,6 +9,7 @@ import { SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, STANDARD_NEGATI
 import { Select } from '../components/forms/Select.jsx';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
 import { compressImage } from '../lib/imageUtils.js';
+import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
 
 const FIELD_DEFS = [
   { id: 'face',        icon: 'scan-face',    label: 'Face',          placeholder: 'e.g. High cheekbones, almond eyes, soft heart shape' },
@@ -225,6 +226,34 @@ function getAllImages(char) {
   return [];
 }
 
+// Identity fields hold full paragraphs, not single words — a plain <input>
+// clips everything past the visible width. Grows with content, capped so one
+// runaway field can't push the rest of the grid off-screen.
+function AutoGrowTextarea({ value, onChange, placeholder, disabled, style }) {
+  const ref = React.useRef(null);
+  const resize = (el) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  };
+  React.useEffect(() => { resize(ref.current); }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      disabled={disabled}
+      rows={1}
+      style={{
+        ...INPUT_STYLE, resize: 'vertical', overflow: 'hidden', lineHeight: 1.5,
+        minHeight: 36, maxHeight: 240, fontFamily: 'inherit',
+        ...style,
+      }}
+    />
+  );
+}
+
 function PillButton({ active, onClick, children, style }) {
   return (
     <button
@@ -398,7 +427,7 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
 
 export function Characters({ initialCharacter, onCharacterChange, onNav }) {
   const [characters, setCharacters] = React.useState(loadCharacters);
-  const [activeId, setActiveId]     = React.useState(null);
+  const [activeId, setActiveId]     = React.useState(() => resolveActiveCreator(loadCharacters())?.id ?? null);
   const [editing, setEditing]       = React.useState(null);
   const [analyzing, setAnalyzing]   = React.useState(false);
   const [analyzeError, setAnalyzeError] = React.useState('');
@@ -635,6 +664,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     setCharacters(updated);
     const savedId = activeId ?? updated[updated.length - 1].id;
     setActiveId(savedId);
+    saveActiveCreatorId(savedId);
     setEditing(null);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -649,7 +679,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         const updated = characters.filter(c => c.id !== id);
         saveCharacters(updated);
         setCharacters(updated);
-        if (activeId === id) { setActiveId(null); setEditing(null); }
+        if (activeId === id) { setActiveId(null); saveActiveCreatorId(null); setEditing(null); }
         setConfirm(null);
       },
     });
@@ -888,14 +918,14 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
                   {f.label}
                 </label>
                 {editing
-                  ? <input
+                  ? <AutoGrowTextarea
                       value={editing.fields[f.id] || ''}
-                      onChange={e => setEditing(ed => ({ ...ed, fields: { ...ed.fields, [f.id]: e.target.value } }))}
+                      onChange={v => setEditing(ed => ({ ...ed, fields: { ...ed.fields, [f.id]: v } }))}
                       placeholder={analyzing ? 'Analyzing…' : f.placeholder}
-                      style={{ ...INPUT_STYLE, opacity: analyzing ? 0.5 : 1 }}
+                      style={{ opacity: analyzing ? 0.5 : 1 }}
                       disabled={analyzing}
                     />
-                  : <div style={{ font: 'var(--text-sm)', color: displayChar?.fields?.[f.id] ? 'var(--text-body)' : 'var(--text-faint)', lineHeight: 1.5 }}>
+                  : <div style={{ font: 'var(--text-sm)', color: displayChar?.fields?.[f.id] ? 'var(--text-body)' : 'var(--text-faint)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                       {displayChar?.fields?.[f.id] || '—'}
                     </div>
                 }
@@ -1156,7 +1186,7 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
                 key={c.id}
                 char={c}
                 selected={c.id === activeId && !editing}
-                onClick={() => { setActiveId(c.id); setEditing(null); setAnalyzeError(''); setSaveError(''); }}
+                onClick={() => { setActiveId(c.id); saveActiveCreatorId(c.id); setEditing(null); setAnalyzeError(''); setSaveError(''); }}
                 onDelete={() => handleDelete(c.id)}
               />
             ))}

@@ -13,6 +13,7 @@ import { Library } from './screens/Library.jsx';
 import { History } from './screens/History.jsx';
 import { Settings } from './screens/Settings.jsx';
 import { loadLibrary } from './lib/library.js';
+import { resolveActiveCreator } from './lib/activeCreator.js';
 import { Landing } from './screens/Landing.jsx';
 import { Auth } from './screens/Auth.jsx';
 import { SceneFlow } from './screens/SceneFlow.jsx';
@@ -79,7 +80,12 @@ export default function App() {
   const [pendingPrompts,   setPendingPrompts]   = React.useState(null);
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
   const [pendingDirector,  setPendingDirector]  = React.useState(null);
-  const [activeCharacter,  setActiveCharacter]  = React.useState(null);
+  const [activeCharacter,  setActiveCharacter]  = React.useState(() => {
+    try {
+      const chars = JSON.parse(localStorage.getItem('ts_characters') || '[]');
+      return resolveActiveCreator(chars);
+    } catch { return null; }
+  });
   const [libCount, setLibCount]               = React.useState(() => loadLibrary().length);
   const backendStatus = useBackendStatus();
 

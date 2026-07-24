@@ -5,6 +5,7 @@ import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { generateCharacterSeed, generateCharacterVariationShot } from '../api/studio.js';
 import { compressImage } from '../lib/imageUtils.js';
+import { saveActiveCreatorId } from '../lib/activeCreator.js';
 import {
   GENDERS, SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES,
   getHairStyleOptions, getClothingOptions, getJewelryOptions, getPhysiqueOptions,
@@ -14,6 +15,7 @@ import { ImageLightbox } from '../components/feedback/ImageLightbox.jsx';
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 };
 const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--surface-inset)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
+const PREVIEW_TOP_OFFSET = 84;
 
 function Pill({ label, active, onClick }) {
   return (
@@ -30,6 +32,60 @@ function Pill({ label, active, onClick }) {
     >
       {label}
     </button>
+  );
+}
+
+function resolveLabel(value, options) {
+  if (!options) return value;
+  return options.find(o => o.value === value)?.label || value;
+}
+
+// Live trait summary — fills in as the user makes choices, so the creator
+// being built feels tangible before any image exists, not just after.
+function TraitSummary({ name, chips }) {
+  const filledCount = chips.filter(c => c.filled).length;
+  const ratio = filledCount / chips.length;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '18px 0 4px' }}>
+        <div style={{
+          width: 84, height: 84, borderRadius: '50%',
+          background: `conic-gradient(var(--accent-deep) ${ratio * 360}deg, var(--rose-glass) 0deg)`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'background 0.4s ease',
+        }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: '50%', background: 'var(--surface-card)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Icon name="user-round" size={32} strokeWidth={1.25} style={{ color: ratio > 0 ? 'var(--accent-deep)' : 'var(--text-faint)' }} />
+          </div>
+        </div>
+        <div style={{ font: '600 0.95rem/1.2 var(--font-display)', color: 'var(--text-strong)', textAlign: 'center' }}>
+          {name || 'Your Creator'}
+        </div>
+        <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>{filledCount}/{chips.length} traits set</div>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {chips.map(chip => (
+          <span
+            key={chip.label}
+            style={{
+              padding: '5px 10px', borderRadius: 'var(--radius-pill)',
+              font: '500 0.7rem/1 var(--font-ui)',
+              transition: 'all 0.3s ease',
+              ...(chip.filled
+                ? { background: 'var(--rose-deep)', color: 'var(--accent-deep)', border: '1px solid var(--accent-deep)' }
+                : { background: 'transparent', color: 'var(--text-faint)', border: '1px dashed var(--border)' }),
+            }}
+          >
+            {chip.filled ? chip.display : chip.label}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -61,10 +117,13 @@ export function ImageGenerator({ onNav }) {
   const [aiGenApproval,  setAiGenApproval]  = React.useState(false); // waiting for user to approve headshot
   const [aiGenLocked,    setAiGenLocked]    = React.useState(false); // identity lock animation active
   const [lightboxSrc,    setLightboxSrc]    = React.useState(null);
+  const [aiGenSaveError, setAiGenSaveError] = React.useState('');
+  const [aiGenSaving,    setAiGenSaving]    = React.useState(false);
 
   const aiGenHairOptions     = getHairStyleOptions(aiGenGender);
   const aiGenClothingOptions = getClothingOptions(aiGenGender);
   const aiGenJewelryOptions  = getJewelryOptions(aiGenGender);
+  const aiGenBodyOptions     = getPhysiqueOptions(aiGenGender);
 
   const handleAiGenGenderChange = (newGender) => {
     const newHair     = getHairStyleOptions(newGender).find(o => o.value === aiGenHairSt)  ? aiGenHairSt   : 'Unspecified';
@@ -77,6 +136,21 @@ export function ImageGenerator({ onNav }) {
     setAiGenJewelry(newJewelry);
     setAiGenBody(newBody);
   };
+
+  // Live trait chips — drives the preview panel's tag summary.
+  const traitChips = [
+    { label: 'Gender',    value: aiGenGender,   options: GENDERS,             empty: 'Unspecified' },
+    { label: 'Skin Tone', value: aiGenSkin,     options: SKIN_TONES,          empty: 'Unspecified' },
+    { label: 'Hair Style',value: aiGenHairSt,   options: aiGenHairOptions,    empty: 'Unspecified' },
+    { label: 'Hair Color',value: aiGenHairCo,   options: HAIR_COLORS,         empty: 'Unspecified' },
+    { label: 'Eyes',      value: aiGenEye,      options: EYE_DETAILS,         empty: 'Unspecified' },
+    { label: 'Build',     value: aiGenBody,     options: aiGenBodyOptions,    empty: 'Unspecified' },
+    { label: 'Features',  value: aiGenFeatures, options: SPECIAL_FEATURES,    empty: 'None' },
+    { label: 'Jewelry',   value: aiGenJewelry,  options: aiGenJewelryOptions, empty: 'None' },
+    { label: 'Look',      value: aiGenClothing, options: aiGenClothingOptions,empty: 'Unspecified' },
+    { label: 'Niche',     value: aiGenNiche,    options: null,                empty: '' },
+    { label: 'Energy',    value: aiGenVision,   options: null,                empty: '' },
+  ].map(c => ({ ...c, filled: !!c.value && c.value !== c.empty, display: resolveLabel(c.value, c.options) }));
 
   // Smooth progress animation for AI generation
   React.useEffect(() => {
@@ -178,6 +252,8 @@ export function ImageGenerator({ onNav }) {
     if (!aiGenImages.length) return;
     const validImgs = aiGenImages.filter(img => img && !img.startsWith('ERROR:'));
     if (!validImgs.length) return;
+    setAiGenSaving(true);
+    setAiGenSaveError('');
     const compressed = await Promise.all(validImgs.slice(0, 5).map(img => compressImage(img)));
     const newChar = {
       id: Date.now().toString(),
@@ -191,7 +267,20 @@ export function ImageGenerator({ onNav }) {
       const existing = JSON.parse(localStorage.getItem('ts_characters') || '[]');
       existing.push(newChar);
       localStorage.setItem('ts_characters', JSON.stringify(existing));
-    } catch {}
+    } catch (e) {
+      // A storage failure here would otherwise be silent — the user's
+      // generated creator would vanish with no feedback at all. Stay put
+      // and surface it instead of navigating away as if it saved.
+      setAiGenSaving(false);
+      setAiGenSaveError(
+        e?.name === 'QuotaExceededError'
+          ? 'Save failed: browser storage is full. Free up space (e.g. clear old Library images) and try again.'
+          : `Save failed: ${e?.message || 'could not write to browser storage'}.`
+      );
+      return;
+    }
+    saveActiveCreatorId(newChar.id);
+    setAiGenSaving(false);
     onNav?.('characters');
   };
 
@@ -207,100 +296,110 @@ export function ImageGenerator({ onNav }) {
         </div>
       </div>
 
-      {/* Build with Thee Studio — AI subject generation */}
-      <Card style={{ padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 'var(--radius)',
-            background: 'var(--rose-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--accent-deep)', flexShrink: 0,
-          }}>
-            <Icon name="wand-2" size={16} strokeWidth={1.75} />
-          </div>
-          <div>
-            <div style={{ font: '600 0.88rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Build with Thee Studio</div>
-            <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 3 }}>
-              Describe your subject — AI generates 5 reference photos and locks their face for identity-consistent generation
-            </div>
-          </div>
-        </div>
+      {/* Two-column build layout: form left, live preview docked right */}
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Row 1: Name + Gender */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <div style={LABEL}>Creator Name</div>
-                <input value={aiGenName} onChange={e => setAiGenName(e.target.value)} placeholder="e.g. Angel, Maya, Jade…" style={INPUT_STYLE} />
-              </div>
-              <div>
-                <div style={LABEL}>Gender</div>
-                <Select value={aiGenGender} onChange={handleAiGenGenderChange} options={GENDERS} />
-              </div>
+        {/* Build with Thee Studio — AI subject generation form */}
+        <Card style={{ flex: '1 1 460px', minWidth: 320, padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: 'var(--radius)',
+              background: 'var(--rose-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--accent-deep)', flexShrink: 0,
+            }}>
+              <Icon name="wand-2" size={16} strokeWidth={1.75} />
             </div>
-            {/* Row 2: Skin + Eye */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <div style={LABEL}>Skin Tone</div>
-                <Select value={aiGenSkin} onChange={setAiGenSkin} options={SKIN_TONES} />
-              </div>
-              <div>
-                <div style={LABEL}>Eye Detail</div>
-                <Select value={aiGenEye} onChange={setAiGenEye} options={EYE_DETAILS} />
-              </div>
-            </div>
-            {/* Row 3: Hair Style + Hair Color */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <div style={LABEL}>Hair Style</div>
-                <Select value={aiGenHairSt} onChange={setAiGenHairSt} options={aiGenHairOptions} />
-              </div>
-              <div>
-                <div style={LABEL}>Hair Color</div>
-                <Select value={aiGenHairCo} onChange={setAiGenHairCo} options={HAIR_COLORS} />
-              </div>
-            </div>
-            {/* Row 4: Special Features + Jewelry */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <div style={LABEL}>Special Features</div>
-                <Select value={aiGenFeatures} onChange={setAiGenFeatures} options={SPECIAL_FEATURES} />
-              </div>
-              <div>
-                <div style={LABEL}>Signature Jewelry</div>
-                <Select value={aiGenJewelry} onChange={setAiGenJewelry} options={aiGenJewelryOptions} />
-              </div>
-            </div>
-            {/* Row 5: Body + Clothing */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <div style={LABEL}>Their Build</div>
-                <Select value={aiGenBody} onChange={setAiGenBody} options={getPhysiqueOptions(aiGenGender)} />
-              </div>
-              <div>
-                <div style={LABEL}>Signature Look / Clothing</div>
-                <Select value={aiGenClothing} onChange={setAiGenClothing} options={aiGenClothingOptions} />
-              </div>
-            </div>
-            {/* Row 6: Their World (Content Niche pills) */}
             <div>
-              <div style={LABEL}>Their World</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                {CONTENT_NICHES.map(n => (
-                  <Pill key={n} label={n} active={aiGenNiche === n} onClick={() => setAiGenNiche(aiGenNiche === n ? '' : n)} />
-                ))}
+              <div style={{ font: '600 0.88rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Build with Thee Studio</div>
+              <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 3 }}>
+                Describe your subject — AI generates 5 reference photos and locks their face for identity-consistent generation
               </div>
             </div>
-            {/* Row 7: Their Energy (Style Direction pills) */}
-            <div>
-              <div style={LABEL}>Their Energy</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                {STYLE_DIRECTIONS.map(d => (
-                  <Pill key={d} label={d} active={aiGenVision === d} onClick={() => setAiGenVision(aiGenVision === d ? '' : d)} />
-                ))}
-              </div>
-            </div>
+          </div>
 
-            {aiGenError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{aiGenError}</p>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Row 1: Name + Gender */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <div style={LABEL}>Creator Name</div>
+                  <input value={aiGenName} onChange={e => setAiGenName(e.target.value)} placeholder="e.g. Angel, Maya, Jade…" style={INPUT_STYLE} />
+                </div>
+                <div>
+                  <div style={LABEL}>Gender</div>
+                  <Select value={aiGenGender} onChange={handleAiGenGenderChange} options={GENDERS} />
+                </div>
+              </div>
+              {/* Row 2: Skin + Eye */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <div style={LABEL}>Skin Tone</div>
+                  <Select value={aiGenSkin} onChange={setAiGenSkin} options={SKIN_TONES} />
+                </div>
+                <div>
+                  <div style={LABEL}>Eye Detail</div>
+                  <Select value={aiGenEye} onChange={setAiGenEye} options={EYE_DETAILS} />
+                </div>
+              </div>
+              {/* Row 3: Hair Style + Hair Color */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <div style={LABEL}>Hair Style</div>
+                  <Select value={aiGenHairSt} onChange={setAiGenHairSt} options={aiGenHairOptions} />
+                </div>
+                <div>
+                  <div style={LABEL}>Hair Color</div>
+                  <Select value={aiGenHairCo} onChange={setAiGenHairCo} options={HAIR_COLORS} />
+                </div>
+              </div>
+              {/* Row 4: Special Features + Jewelry */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <div style={LABEL}>Special Features</div>
+                  <Select value={aiGenFeatures} onChange={setAiGenFeatures} options={SPECIAL_FEATURES} />
+                </div>
+                <div>
+                  <div style={LABEL}>Signature Jewelry</div>
+                  <Select value={aiGenJewelry} onChange={setAiGenJewelry} options={aiGenJewelryOptions} />
+                </div>
+              </div>
+              {/* Row 5: Body + Clothing */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <div style={LABEL}>Their Build</div>
+                  <Select value={aiGenBody} onChange={setAiGenBody} options={aiGenBodyOptions} />
+                </div>
+                <div>
+                  <div style={LABEL}>Signature Look / Clothing</div>
+                  <Select value={aiGenClothing} onChange={setAiGenClothing} options={aiGenClothingOptions} />
+                </div>
+              </div>
+              {/* Row 6: Their World (Content Niche pills) */}
+              <div>
+                <div style={LABEL}>Their World</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                  {CONTENT_NICHES.map(n => (
+                    <Pill key={n} label={n} active={aiGenNiche === n} onClick={() => setAiGenNiche(aiGenNiche === n ? '' : n)} />
+                  ))}
+                </div>
+              </div>
+              {/* Row 7: Their Energy (Style Direction pills) */}
+              <div>
+                <div style={LABEL}>Their Energy</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                  {STYLE_DIRECTIONS.map(d => (
+                    <Pill key={d} label={d} active={aiGenVision === d} onClick={() => setAiGenVision(aiGenVision === d ? '' : d)} />
+                  ))}
+                </div>
+              </div>
+            </div>
+        </Card>
+
+        {/* Live preview panel — docked, updates as fields are chosen */}
+        <div style={{ flex: '0 0 320px', minWidth: 280, position: 'sticky', top: PREVIEW_TOP_OFFSET }}>
+          <Card style={{ padding: '18px 18px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+              {aiGenLocked ? 'Identity Locked' : aiGenApproval ? 'Headshot Preview' : aiGenImages.length > 0 ? `Reference Photos · ${aiGenImages.length}/5` : 'Creator Preview'}
+            </div>
 
             {/* Progress bar */}
             {(aiGenLoading || aiGenImages.length > 0) && (
@@ -316,10 +415,25 @@ export function ImageGenerator({ onNav }) {
                     {Math.round(aiGenProgress)}%
                   </span>
                 </div>
-                <div style={{ height: 6, background: 'var(--rose-deep)', borderRadius: 99, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${aiGenProgress}%`, background: 'var(--grad-coral)', borderRadius: 99 }} />
+                <div
+                  role="progressbar"
+                  aria-label="Creator generation progress"
+                  aria-valuenow={Math.round(aiGenProgress)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  style={{ height: 6, background: 'var(--rose-deep)', borderRadius: 99, overflow: 'hidden', position: 'relative' }}
+                >
+                  <div style={{ height: '100%', width: `${aiGenProgress}%`, background: 'var(--grad-coral)', borderRadius: 99, transition: 'width 0.15s linear' }} />
+                  {/* Indeterminate shimmer while parked at a stage ceiling waiting on the backend — makes the long real-generation waits read as "working," not frozen */}
+                  {aiGenLoading && aiGenProgress > 0 && (
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, height: '100%', width: '40%',
+                      background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)',
+                      animation: 'generation-progress-sweep 1.3s ease-in-out infinite',
+                    }} />
+                  )}
                 </div>
-                {!aiGenApproval && (
+                {!aiGenApproval && (aiGenLoading || aiGenImages.length > 1) && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
                     {['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'].map((label, i) => (
                       <div key={i} style={{ textAlign: 'center', font: '500 0.6rem/1 var(--font-ui)', letterSpacing: '0.03em', textTransform: 'uppercase', color: aiGenImages[i] ? 'var(--accent-deep)' : 'var(--text-faint)', transition: 'color 0.4s ease' }}>
@@ -331,13 +445,14 @@ export function ImageGenerator({ onNav }) {
               </div>
             )}
 
-            {/* Generated image preview */}
-            {aiGenImages.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                  {aiGenLocked ? 'Identity Locked' : aiGenApproval ? 'Headshot Preview' : `Reference Photos · ${aiGenImages.length}/5`}
-                  {aiGenAnchor && !aiGenApproval && !aiGenLocked && <span style={{ color: 'var(--accent-deep)', marginLeft: 10 }}>● Face Lock Ready</span>}
-                </div>
+            {/* Main preview area — trait summary before generation, real photos after */}
+            {aiGenImages.length === 0 ? (
+              <TraitSummary name={aiGenName} chips={traitChips} />
+            ) : (
+              <>
+                {aiGenAnchor && !aiGenApproval && !aiGenLocked && (
+                  <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)' }}>● Face Lock Ready</span>
+                )}
                 {(aiGenApproval || aiGenLocked) ? (
                   // Approval / locked view — headshot centered with optional lock animation
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
@@ -370,7 +485,7 @@ export function ImageGenerator({ onNav }) {
                       }
                     `}</style>
 
-                    <div style={{ width: '45%', position: 'relative' }}>
+                    <div style={{ width: '70%', position: 'relative' }}>
                       {/* Headshot */}
                       <div
                         onClick={() => !aiGenLocked && setLightboxSrc(aiGenImages[0])}
@@ -468,25 +583,28 @@ export function ImageGenerator({ onNav }) {
                     )}
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                     {['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'].map((label, i) => (
-                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <div
                           onClick={() => aiGenImages[i] && !aiGenImages[i].startsWith('ERROR:') && setLightboxSrc(aiGenImages[i])}
-                          style={{ aspectRatio: '2/3', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--rose-glass)', border: '1px solid var(--border)', cursor: aiGenImages[i] ? 'zoom-in' : 'default' }}
+                          style={{ aspectRatio: '2/3', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--rose-glass)', border: '1px solid var(--border)', cursor: aiGenImages[i] ? 'zoom-in' : 'default' }}
                         >
                           {aiGenImages[i] && !aiGenImages[i].startsWith('ERROR:')
                             ? <img src={aiGenImages[i]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={label} />
                             : aiGenLoading && <div style={{ width: '100%', height: '100%', background: 'var(--grad-portrait)', opacity: 0.4 }} />
                           }
                         </div>
-                        <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.65rem' }}>{label}</div>
+                        <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.03em', fontSize: '0.58rem' }}>{label}</div>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
+              </>
             )}
+
+            {aiGenError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{aiGenError}</p>}
+            {aiGenSaveError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{aiGenSaveError}</p>}
 
             {/* Actions */}
             {aiGenApproval && !aiGenLoading ? (
@@ -509,24 +627,25 @@ export function ImageGenerator({ onNav }) {
             ) : (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {aiGenImages.length <= 1 ? (
-                  <Button variant="primary" loading={aiGenLoading} onClick={handleAiGenerate} disabled={aiGenLoading}>
+                  <Button variant="primary" loading={aiGenLoading} onClick={handleAiGenerate} disabled={aiGenLoading} full>
                     <Icon name="sparkles" size={15} style={aiGenLoading ? { animation: 'spin 1s linear infinite' } : {}} />
                     {aiGenLoading ? (aiGenStep || 'Generating…') : 'Generate Headshot'}
                   </Button>
                 ) : (
                   <>
-                    <Button variant="primary" onClick={handleSaveCreator} disabled={aiGenLoading}>
-                      <Icon name="user-check" size={15} /> Save Creator
+                    <Button variant="primary" onClick={handleSaveCreator} loading={aiGenSaving} disabled={aiGenLoading || aiGenSaving}>
+                      <Icon name="user-check" size={15} /> {aiGenSaving ? 'Saving…' : 'Save Creator'}
                     </Button>
-                    <Button variant="secondary" onClick={handleAiGenerate} disabled={aiGenLoading}>
+                    <Button variant="secondary" onClick={handleAiGenerate} disabled={aiGenLoading || aiGenSaving}>
                       <Icon name="refresh-cw" size={14} /> Start Over
                     </Button>
                   </>
                 )}
               </div>
             )}
-          </div>
-      </Card>
+          </Card>
+        </div>
+      </div>
 
       {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
 

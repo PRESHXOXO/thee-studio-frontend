@@ -95,16 +95,19 @@ const MODES = [
   { id: 'talk',     label: 'Talk It Through',    icon: 'message-circle' },
 ];
 
-export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'None', initialVision = '', initialCampaign = null }) {
+export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'None', initialVision = '', initialCampaign = null, initialCreatorId = null }) {
   const [mode, setMode] = React.useState('guided');
   const [characters, setCharacters] = React.useState(loadCharacters);
-  // A campaign's assigned creator takes priority over "whatever was last
-  // active" — arriving via "Open in Director" is a deliberate choice of who
-  // this session is about.
+  // A campaign's (or a re-run/fork handoff's) assigned creator takes priority
+  // over "whatever was last active" — arriving via "Open in Director" or
+  // "Re-run" is a deliberate choice of who this session is about.
   const [selectedCharId, setSelectedCharId] = React.useState(() => {
     const chars = loadCharacters();
     if (initialCampaign?.creatorId != null && chars.some(c => c.id === initialCampaign.creatorId)) {
       return initialCampaign.creatorId;
+    }
+    if (initialCreatorId != null && chars.some(c => c.id === initialCreatorId)) {
+      return initialCreatorId;
     }
     return resolveActiveCreator(chars)?.id ?? null;
   });
@@ -121,7 +124,7 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
       onActiveCreatorChange?.(characters.find(c => c.id === selectedCharId) || null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCampaign?.id]);
+  }, [initialCampaign?.id, initialCreatorId]);
 
   const selectCreator = (id) => {
     setSelectedCharId(id);

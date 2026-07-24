@@ -128,6 +128,11 @@ export default function App() {
         brief: pendingDirector.campaignBrief || '',
         creatorId: pendingDirector.creatorId ?? null,
       };
+    } else if (pendingDirector.creatorId != null) {
+      // Re-run/fork handoffs (e.g. from History) carry a creator without a
+      // campaign context — pre-select it the same way, just without the
+      // pinned-campaign banner.
+      screenProps.initialCreatorId = pendingDirector.creatorId;
     }
   }
 

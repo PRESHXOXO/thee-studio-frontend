@@ -119,6 +119,10 @@ export default function App() {
   if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
   if (activeNav === 'characters' && pendingImportRequest) screenProps.initialImportRequest = true;
   if (activeNav === 'characters') screenProps.onCharacterChange = setActiveCharacter;
+  // Same setter as Characters' onCharacterChange — Director can change the
+  // active creator too, and the sidebar chip needs to reflect it without
+  // waiting for a nav/remount to Characters.
+  if (activeNav === 'director') screenProps.onActiveCreatorChange = setActiveCharacter;
   if (activeNav === 'director'   && pendingDirector) {
     screenProps.initialScene  = pendingDirector.scene  || 'None';
     screenProps.initialVision = pendingDirector.vision || '';

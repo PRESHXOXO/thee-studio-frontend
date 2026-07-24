@@ -199,7 +199,7 @@ function HistoryPanel({ history, onLoad }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' }) {
+export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'None', initialVision = '' }) {
   const [characters]    = React.useState(loadCharacters);
   const [selectedCharId, setSelectedCharId] = React.useState(() => resolveActiveCreator(loadCharacters())?.id ?? null);
   // Escape hatch out of the "pick a creator" gate — build a subject with raw
@@ -210,6 +210,10 @@ export function TheeDirector({ onNav, initialScene = 'None', initialVision = '' 
     setSelectedCharId(id);
     saveActiveCreatorId(id);
     if (id != null) setBuildWithoutCreator(false);
+    // Push the change up so the sidebar chip updates immediately instead of
+    // only reflecting whatever Characters last set — no global store, this
+    // is the cheap version: caller passes the same setter Characters uses.
+    onActiveCreatorChange?.(characters.find(c => c.id === id) || null);
   };
 
   const [vision,       setVision]       = React.useState(initialVision);

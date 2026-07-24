@@ -8,7 +8,7 @@ function loadCharacters() {
 }
 
 const SHORTCUTS = [
-  { icon: 'upload',       label: 'Import Creator', sub: 'Add to your cast', nav: 'characters' },
+  { icon: 'upload',       label: 'Import Creator', sub: 'Add to your cast', nav: 'characters', data: 'import' },
   { icon: 'image',        label: 'Creator Builder', sub: 'Build a new creator', nav: 'images' },
   { icon: 'clapperboard', label: 'Thee Director',   sub: 'Build a prompt',   nav: 'director' },
   { icon: 'megaphone',    label: 'Campaigns',       sub: 'Launch a shoot',   nav: 'campaigns' },
@@ -18,7 +18,7 @@ function ShortcutCard({ item, onNav }) {
   const [hovered, setHovered] = React.useState(false);
   return (
     <button
-      onClick={() => onNav && onNav(item.nav)}
+      onClick={() => onNav && onNav(item.nav, item.data)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -89,7 +89,7 @@ function PipelineCard({ icon, count, label, tone, onClick }) {
 
 // Suggest the user's next move based on current studio state.
 function nextStep({ charCount, libCount, unreviewed }) {
-  if (charCount === 0) return { icon: 'sparkles', text: 'Start by importing a creator — your cast drives everything else.', nav: 'characters', cta: 'Import Creator' };
+  if (charCount === 0) return { icon: 'sparkles', text: 'Start by importing a creator — your cast drives everything else.', nav: 'characters', data: 'import', cta: 'Import Creator' };
   if (libCount === 0)  return { icon: 'clapperboard', text: 'Your cast is ready. Build a scene and generate your first draft.', nav: 'sceneflow', cta: 'Open Scene Flow' };
   if (unreviewed > 0)  return { icon: 'eye', text: `${unreviewed} draft${unreviewed !== 1 ? 's' : ''} waiting for review. Approve keepers, flag fixes.`, nav: 'library', cta: 'Review Drafts' };
   return { icon: 'megaphone', text: 'Pipeline is clear. Plan your next shoot or launch a campaign.', nav: 'campaigns', cta: 'Open Campaigns' };
@@ -133,7 +133,7 @@ export function StudioHome({ onNav }) {
         </h1>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <Button variant="secondary" onClick={() => onNav && onNav('images')}><Icon name="wand-2" size={15} /> New Creator</Button>
-          <Button variant="primary" onClick={() => onNav && onNav('characters')}><Icon name="upload" size={15} /> Import Creator</Button>
+          <Button variant="primary" onClick={() => onNav && onNav('characters', 'import')}><Icon name="upload" size={15} /> Import Creator</Button>
         </div>
 
         {/* Live stats */}
@@ -167,7 +167,7 @@ export function StudioHome({ onNav }) {
               <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 5 }}>Next Step</div>
               <div style={{ font: 'var(--text-base)', color: 'var(--text-body)' }}>{step.text}</div>
             </div>
-            <Button variant="primary" onClick={() => onNav && onNav(step.nav)}>
+            <Button variant="primary" onClick={() => onNav && onNav(step.nav, step.data)}>
               {step.cta} <Icon name="arrow-right" size={15} />
             </Button>
           </div>

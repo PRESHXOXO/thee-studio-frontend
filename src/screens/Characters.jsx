@@ -425,10 +425,12 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
   );
 }
 
-export function Characters({ initialCharacter, onCharacterChange, onNav }) {
+export function Characters({ initialCharacter, initialImportRequest, onCharacterChange, onNav }) {
   const [characters, setCharacters] = React.useState(loadCharacters);
   const [activeId, setActiveId]     = React.useState(() => resolveActiveCreator(loadCharacters())?.id ?? null);
   const [editing, setEditing]       = React.useState(null);
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [importFilesError, setImportFilesError] = React.useState('');
   const [analyzing, setAnalyzing]   = React.useState(false);
   const [analyzeError, setAnalyzeError] = React.useState('');
   const [saveError, setSaveError]   = React.useState('');
@@ -496,6 +498,12 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     };
     init();
   }, [initialCharacter]);
+
+  // "Import Creator" entry points elsewhere in the app (Studio Home) land
+  // here wanting the photo-import panel specifically, not a blank form.
+  React.useEffect(() => {
+    if (initialImportRequest) setImportOpen(true);
+  }, [initialImportRequest]);
 
   const runAnalysis = async (imageDataUrl, currentEditing) => {
     setAnalyzing(true);
@@ -622,6 +630,37 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
     setActiveId(null);
     setAnalyzeError('');
     setSaveError('');
+  };
+
+  // "Import from Photos" — reads up to 5 reference images, runs the same
+  // vision analysis as the "Re-analyze" button (on the first image), and
+  // drops the user into the normal review/edit panel with fields prefilled.
+  const handleImportFiles = (fileList) => {
+    const files = Array.from(fileList || []).slice(0, 5);
+    if (!files.length) return;
+    setImportFilesError('');
+    const readers = files.map(file => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = ev => resolve(ev.target.result);
+      reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+      reader.readAsDataURL(file);
+    }));
+    Promise.all(readers)
+      .then(dataUrls => Promise.all(dataUrls.map(compressImage)))
+      .then(compressed => {
+        const newEditing = {
+          name: 'New Creator',
+          refImages: compressed,
+          fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])),
+        };
+        setEditing(newEditing);
+        setActiveId(null);
+        setAnalyzeError('');
+        setSaveError('');
+        setImportOpen(false);
+        runAnalysis(compressed[0], newEditing);
+      })
+      .catch(e => setImportFilesError(e.message || 'Could not read those photos.'));
   };
 
   const handleEdit = (char) => {
@@ -812,7 +851,8 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
             </Button>
           )}
           {!editing && active && <Button variant="secondary" onClick={() => handleEdit(active)}><Icon name="pencil" size={14} /> Edit</Button>}
-          <Button variant="secondary" onClick={handleNew}><Icon name="upload" size={15} /> Import Creator</Button>
+          <Button variant="secondary" onClick={handleNew}><Icon name="user-plus" size={15} /> Create from Scratch</Button>
+          <Button variant="secondary" onClick={() => { setImportOpen(true); setImportFilesError(''); }}><Icon name="upload" size={15} /> Import from Photos</Button>
         </div>
       </div>
 
@@ -827,8 +867,51 @@ export function Characters({ initialCharacter, onCharacterChange, onNav }) {
         </p>
       )}
 
+      {/* Import from Photos — upload 1-5 references, analyze the first,
+          then hand off to the normal review/edit panel below. */}
+      {importOpen && (
+        <Card style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ font: '600 0.9375rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Import from Photos</div>
+              <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 3 }}>
+                Upload 1–5 reference photos. Thee Studio reads the first one to prefill face, hair, skin tone, body, wardrobe, personality, and content niche — review and adjust before saving.
+              </div>
+            </div>
+            <button
+              onClick={() => setImportOpen(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: 4, display: 'flex' }}
+            >
+              <Icon name="x" size={16} />
+            </button>
+          </div>
+          <label
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
+              padding: '32px 20px', borderRadius: 'var(--radius-lg)', border: '1.5px dashed var(--border)',
+              background: 'var(--surface-raised)', cursor: 'pointer', color: 'var(--text-faint)',
+              transition: 'border-color var(--t-fast)',
+            }}
+          >
+            <Icon name="images" size={26} strokeWidth={1.5} />
+            <span style={{ font: '600 0.875rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>Click to choose photos</span>
+            <span style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>Up to 5 images · JPG or PNG</span>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: 'none' }}
+              onChange={e => { handleImportFiles(e.target.files); e.target.value = ''; }}
+            />
+          </label>
+          {importFilesError && (
+            <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{importFilesError}</p>
+          )}
+        </Card>
+      )}
+
       {/* Detail panel */}
-      {showPanel && (
+      {!importOpen && showPanel && (
         <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 20, alignItems: 'start' }}>
 
           {/* Portrait + reference slots */}

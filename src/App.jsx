@@ -87,16 +87,22 @@ export default function App() {
     } catch { return null; }
   });
   const [libCount, setLibCount]               = React.useState(() => loadLibrary().length);
+  const [pendingImportRequest, setPendingImportRequest] = React.useState(false);
   const backendStatus = useBackendStatus();
 
   // Refresh library count whenever user navigates (catches new saves)
   const handleNav = React.useCallback((id, data) => {
     setLibCount(loadLibrary().length);
     if (id === 'images'     && data) setPendingPrompts(data);
-    if (id === 'characters' && data) setPendingCharacter(data);
+    // data === 'import' is a sentinel from "Import Creator" entry points
+    // (Studio Home) — distinct from the AI-builder handoff object, which
+    // carries {name, image, ...} and goes through pendingCharacter instead.
+    if (id === 'characters' && data === 'import') setPendingImportRequest(true);
+    else if (id === 'characters' && data) setPendingCharacter(data);
     if (id === 'director'   && data) setPendingDirector(data);
     if (id !== 'images')     setPendingPrompts(null);
-    if (id !== 'characters' || !data) setPendingCharacter(null);
+    if (id !== 'characters' || data !== 'import') setPendingImportRequest(false);
+    if (id !== 'characters' || !data || data === 'import') setPendingCharacter(null);
     if (id !== 'director'  || !data) setPendingDirector(null);
     setActiveNav(id);
   }, []);
@@ -111,6 +117,7 @@ export default function App() {
   const screenProps = { onNav: handleNav };
   if (activeNav === 'images'     && pendingPrompts)   screenProps.initialPrompts   = pendingPrompts;
   if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
+  if (activeNav === 'characters' && pendingImportRequest) screenProps.initialImportRequest = true;
   if (activeNav === 'characters') screenProps.onCharacterChange = setActiveCharacter;
   if (activeNav === 'director'   && pendingDirector) {
     screenProps.initialScene  = pendingDirector.scene  || 'None';

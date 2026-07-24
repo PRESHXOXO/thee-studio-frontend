@@ -55,10 +55,31 @@ function EngineRow({ engine, isActive, onSelect }) {
   );
 }
 
+// No backend endpoint returns the actual saved key (or validates a specific
+// engine's credentials) — only a same-origin /config reachability check
+// exists. "Test Connection" is scoped honestly to that: it confirms the
+// backend that accepted your key is actually reachable right now, not that
+// the key itself is still valid server-side.
+async function pingBackend() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch('/config', { signal: controller.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function KeyField({ label, description, placeholder, localStorageKey, onSave, onSaved }) {
   const [key, setKey] = React.useState('');
   const [st, setSt] = React.useState(null);
   const [err, setErr] = React.useState('');
+  const [editing, setEditing] = React.useState(false);
+  const [configured, setConfigured] = React.useState(() => !!localStorageKey && localStorage.getItem(localStorageKey) === '1');
+  const [testState, setTestState] = React.useState(null); // null | 'testing' | 'ok' | 'fail'
 
   async function handleSave() {
     if (!key.trim()) return;
@@ -67,8 +88,55 @@ function KeyField({ label, description, placeholder, localStorageKey, onSave, on
       await onSave(key.trim());
       if (localStorageKey) localStorage.setItem(localStorageKey, '1');
       setSt('ok'); setKey('');
+      setConfigured(true);
+      setEditing(false);
+      setTestState(null);
       onSaved?.();
     } catch (e) { setSt('error'); setErr(e.message); }
+  }
+
+  async function handleTest() {
+    setTestState('testing');
+    const ok = await pingBackend();
+    setTestState(ok ? 'ok' : 'fail');
+  }
+
+  if (configured && !editing) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ font: '600 0.9375rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>{label}</div>
+            <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 3 }}>{description}</div>
+          </div>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, font: '600 0.75rem/1 var(--font-ui)', color: 'var(--status-ready)', background: 'var(--status-ready-bg)', padding: '4px 10px', borderRadius: 'var(--radius-pill)', flexShrink: 0 }}>
+            <Icon name="check-circle" size={12} strokeWidth={2.25} /> Connected
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            flex: 1, padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)',
+            background: 'var(--cream-deep)', font: '500 0.9rem/1 var(--font-mono)', letterSpacing: '0.15em', color: 'var(--text-faint)',
+          }}>
+            {placeholder.slice(0, 3)}••••••••••••••••
+          </div>
+          <Button variant="secondary" onClick={handleTest} disabled={testState === 'testing'}>
+            {testState === 'testing' ? 'Testing…' : 'Test Connection'}
+          </Button>
+          <Button variant="ghost" onClick={() => { setEditing(true); setTestState(null); }}>Replace</Button>
+        </div>
+        {testState === 'ok' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, font: 'var(--text-sm)', color: 'var(--status-ready)', background: 'var(--status-ready-bg)', padding: '9px 12px', borderRadius: 'var(--radius-md)' }}>
+            <Icon name="check-circle" size={14} /> Backend reachable — key accepted at last save.
+          </div>
+        )}
+        {testState === 'fail' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, font: 'var(--text-sm)', color: 'var(--status-warn)', background: 'var(--status-warn-bg)', padding: '9px 12px', borderRadius: 'var(--radius-md)' }}>
+            <Icon name="alert-triangle" size={14} /> Backend unreachable right now — check the server is running.
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -91,11 +159,15 @@ function KeyField({ label, description, placeholder, localStorageKey, onSave, on
           onChange={e => { setKey(e.target.value); setSt(null); }}
           onKeyDown={e => e.key === 'Enter' && handleSave()}
           placeholder={placeholder}
+          autoFocus={editing}
           style={{ flex: 1, padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--surface-input, var(--cream-light))', font: 'var(--text-sm)', color: 'var(--text-strong)', outline: 'none', fontFamily: 'monospace', letterSpacing: '0.05em' }}
         />
         <Button variant="primary" onClick={handleSave} disabled={!key.trim() || st === 'saving'}>
           {st === 'saving' ? 'Saving…' : 'Save'}
         </Button>
+        {configured && (
+          <Button variant="ghost" onClick={() => { setEditing(false); setKey(''); setSt(null); }}>Cancel</Button>
+        )}
       </div>
     </div>
   );

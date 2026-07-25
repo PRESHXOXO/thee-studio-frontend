@@ -44,7 +44,7 @@
   --surface-dark:       var(--plum);
   --surface-sidebar:    #FFFFFF;  /* white, separated from content by border only */
   --surface-raised:     var(--white);
-  --surface-app-translucent: rgba(247,246,252,0.82); /* topbar blur backdrop */
+  --surface-app-translucent: rgba(247,246,252,0.96); /* topbar backdrop — near-opaque so content slides cleanly behind it instead of ghosting/hard-clipping at the border on scroll */
 
   /* ---- Semantic: text ---- */
   --text-strong:   #17132A;         /* headlines — near-black navy */

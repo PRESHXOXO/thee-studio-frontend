@@ -36,20 +36,26 @@ async function mockGeneration(page, { delayMs = 250 } = {}) {
   return () => variationCalls;
 }
 
+// Picks an option from the custom combobox at index `idx`: click its trigger,
+// then click the option (in the document.body portal) by visible label.
+async function pickCombo(page, idx, optionLabel) {
+  await page.locator('[role="combobox"]').nth(idx).click();
+  await page.getByRole('option', { name: optionLabel, exact: true }).first().click();
+}
+
 // Fills all 9 Step 1 required fields in DOM order:
 // adultAgeRange, gender, distinctiveFeatures, skinTone, skinUndertone,
 // hairStyle, hairColor, overallBuild.
 async function fillBaseStep(page, name) {
   await page.getByPlaceholder(/Angel, Maya, Jade/).fill(name);
-  const selects = page.locator('select');
-  await selects.nth(0).selectOption('25-29');
-  await selects.nth(1).selectOption('Woman');
-  await selects.nth(2).selectOption('deep dimples when smiling');
-  await selects.nth(3).selectOption('warm caramel with honey undertones');
-  await selects.nth(4).selectOption('Warm');
-  await selects.nth(5).selectOption({ index: 1 }); // first real hair style option
-  await selects.nth(6).selectOption('burgundy wine');
-  await selects.nth(7).selectOption({ index: 1 }); // first real build option
+  await pickCombo(page, 0, '25–29');           // en-dash label
+  await pickCombo(page, 1, 'Woman');
+  await pickCombo(page, 2, 'Deep Dimples');
+  await pickCombo(page, 3, 'Warm Caramel — honey');
+  await pickCombo(page, 4, 'Warm');
+  await pickCombo(page, 5, 'Pixie Cut');
+  await pickCombo(page, 6, 'Burgundy / Wine');
+  await pickCombo(page, 7, 'Curvy / Hourglass');
 }
 
 test('full 5-step wizard generates, locks, and Save Creator persists everywhere', async ({ page }) => {

@@ -221,9 +221,22 @@ export function StudioHome({ onNav }) {
                 <img src={entry.url} alt="Generated" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               </div>
             ))}
-            {Array.from({ length: Math.max(0, 5 - recent.length) }).map((_, i) => (
-              <div key={`ph-${i}`} style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-lg)', background: 'var(--grad-portrait)', opacity: 0.18 }} />
-            ))}
+            {/* One real "generate more" slot instead of blank gradient
+                fillers — an affordance, not dead padding. */}
+            <button
+              onClick={() => onNav && onNav('director')}
+              style={{
+                aspectRatio: '3/4', borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+                border: '1.5px dashed var(--border)', background: 'transparent',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
+                color: 'var(--text-faint)', fontFamily: 'inherit', transition: 'all var(--t-fast)',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-deep)'; e.currentTarget.style.background = 'var(--rose-glass)'; e.currentTarget.style.color = 'var(--accent-deep)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-faint)'; }}
+            >
+              <Icon name="plus" size={22} strokeWidth={1.75} />
+              <span style={{ font: '600 0.8rem/1.2 var(--font-ui)', textAlign: 'center' }}>Generate more</span>
+            </button>
           </div>
         ) : (
           <div

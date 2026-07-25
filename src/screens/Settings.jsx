@@ -2,19 +2,23 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { saveApiKey, saveGeminiKey, saveReplicateKey, saveFalKey } from '../api/studio.js';
+import { saveApiKey, saveGeminiKey, saveReplicateKey, saveFalKey, fetchApiKeyStatus } from '../api/studio.js';
 
+// `provider` maps an engine to the backend api_key_status flag so a key set
+// server-side (in .env at boot) reads as connected even if it was never saved
+// through this UI — the "everything shows Needs setup while OpenAI generates"
+// bug.
 const ENGINES = [
-  { id: 'openai',              name: 'OpenAI — gpt-image-2',           desc: 'Cloud · photorealistic studio quality',              status: 'dynamic',     statusKey: 'ts_openai_configured',    icon: 'cloud' },
-  { id: 'nano_banana',         name: 'Nano Banana',                    desc: 'Google Gemini 2.5 Flash · free tier · 60 rpm',       status: 'dynamic',     statusKey: 'ts_gemini_configured',    icon: 'zap' },
-  { id: 'photomaker',          name: 'PhotoMaker — Identity Lock',      desc: 'Replicate · face-locked from your reference photo',  status: 'dynamic',     statusKey: 'ts_replicate_configured', icon: 'scan-face' },
-  { id: 'instantid',           name: 'InstantID',                      desc: 'Replicate · SDXL face-locked character shots',       status: 'dynamic',     statusKey: 'ts_replicate_configured', icon: 'fingerprint' },
-  { id: 'flux_schnell',        name: 'FLUX Schnell',                   desc: 'Replicate · fast editorial proofs',                  status: 'dynamic',     statusKey: 'ts_replicate_configured', icon: 'flame' },
-  { id: 'fal_flux_ultra',      name: 'FAL FLUX Ultra',                 desc: 'FAL.ai · FLUX Pro 1.1 Ultra · highest quality · uncensored', status: 'dynamic', statusKey: 'ts_fal_configured',      icon: 'star' },
-  { id: 'fal_flux_dev',        name: 'FAL FLUX Dev',                   desc: 'FAL.ai · FLUX Dev · fast & high quality · uncensored', status: 'dynamic',   statusKey: 'ts_fal_configured',      icon: 'zap' },
-  { id: 'uncensored_xl',       name: 'Uncensored Portrait XL',         desc: 'Local ComfyUI · epiCRealism XL · no restrictions',   status: 'needs-setup', statusKey: null,                      icon: 'unlock' },
-  { id: 'comfyui',             name: 'Local ComfyUI',                  desc: 'On your machine · full control',                     status: 'needs-setup', statusKey: null,                      icon: 'cpu' },
-  { id: 'prompt',              name: 'Prompt Only',                    desc: 'No image engine · writes prompts',                   status: 'idle',        statusKey: null,                      icon: 'type' },
+  { id: 'openai',              name: 'OpenAI — gpt-image-2',           desc: 'Cloud · photorealistic studio quality',              status: 'dynamic',     statusKey: 'ts_openai_configured',    provider: 'openai',    icon: 'cloud' },
+  { id: 'nano_banana',         name: 'Nano Banana',                    desc: 'Google Gemini 2.5 Flash · free tier · 60 rpm',       status: 'dynamic',     statusKey: 'ts_gemini_configured',    provider: 'gemini',    icon: 'zap' },
+  { id: 'photomaker',          name: 'PhotoMaker — Identity Lock',      desc: 'Replicate · face-locked from your reference photo',  status: 'dynamic',     statusKey: 'ts_replicate_configured', provider: 'replicate', icon: 'scan-face' },
+  { id: 'instantid',           name: 'InstantID',                      desc: 'Replicate · SDXL face-locked character shots',       status: 'dynamic',     statusKey: 'ts_replicate_configured', provider: 'replicate', icon: 'fingerprint' },
+  { id: 'flux_schnell',        name: 'FLUX Schnell',                   desc: 'Replicate · fast editorial proofs',                  status: 'dynamic',     statusKey: 'ts_replicate_configured', provider: 'replicate', icon: 'flame' },
+  { id: 'fal_flux_ultra',      name: 'FAL FLUX Ultra',                 desc: 'FAL.ai · FLUX Pro 1.1 Ultra · highest quality · uncensored', status: 'dynamic', statusKey: 'ts_fal_configured',      provider: 'fal',       icon: 'star' },
+  { id: 'fal_flux_dev',        name: 'FAL FLUX Dev',                   desc: 'FAL.ai · FLUX Dev · fast & high quality · uncensored', status: 'dynamic',   statusKey: 'ts_fal_configured',      provider: 'fal',       icon: 'zap' },
+  { id: 'uncensored_xl',       name: 'Uncensored Portrait XL',         desc: 'Local ComfyUI · epiCRealism XL · no restrictions',   status: 'needs-setup', statusKey: null,                      provider: null,        icon: 'unlock' },
+  { id: 'comfyui',             name: 'Local ComfyUI',                  desc: 'On your machine · full control',                     status: 'needs-setup', statusKey: null,                      provider: null,        icon: 'cpu' },
+  { id: 'prompt',              name: 'Prompt Only',                    desc: 'No image engine · writes prompts',                   status: 'idle',        statusKey: null,                      provider: null,        icon: 'type' },
 ];
 
 const STATUS_CONFIG = {
@@ -23,9 +27,11 @@ const STATUS_CONFIG = {
   'idle':        { label: 'Idle',         color: 'var(--status-off)',   bg: 'var(--status-off-bg)' },
 };
 
-function resolveEngineStatus(engine) {
+function resolveEngineStatus(engine, keyStatus = {}) {
   if (engine.status !== 'dynamic') return engine.status;
-  return engine.statusKey && localStorage.getItem(engine.statusKey) === '1' ? 'connected' : 'needs-setup';
+  const serverHasKey = engine.provider && keyStatus[engine.provider];
+  const uiSavedKey = engine.statusKey && localStorage.getItem(engine.statusKey) === '1';
+  return serverHasKey || uiSavedKey ? 'connected' : 'needs-setup';
 }
 
 function EngineRow({ engine, isActive, onSelect }) {
@@ -73,13 +79,20 @@ async function pingBackend() {
   }
 }
 
-function KeyField({ label, description, placeholder, localStorageKey, onSave, onSaved }) {
+function KeyField({ label, description, placeholder, localStorageKey, serverConfigured = false, onSave, onSaved }) {
   const [key, setKey] = React.useState('');
   const [st, setSt] = React.useState(null);
   const [err, setErr] = React.useState('');
   const [editing, setEditing] = React.useState(false);
   const [configured, setConfigured] = React.useState(() => !!localStorageKey && localStorage.getItem(localStorageKey) === '1');
   const [testState, setTestState] = React.useState(null); // null | 'testing' | 'ok' | 'fail'
+
+  // Server-side config arrives async (Settings fetches api_key_status) — once
+  // it reports this provider as present, show the masked "Connected" state
+  // even if the key was never entered through this UI.
+  React.useEffect(() => {
+    if (serverConfigured) setConfigured(true);
+  }, [serverConfigured]);
 
   async function handleSave() {
     if (!key.trim()) return;
@@ -176,11 +189,20 @@ function KeyField({ label, description, placeholder, localStorageKey, onSave, on
 export function Settings() {
   const [activeEngine, setActiveEngine] = React.useState('openai');
   const [savedTick, setSavedTick] = React.useState(0);
+  const [keyStatus, setKeyStatus] = React.useState({}); // { openai, gemini, replicate, fal }
   const engineDef = ENGINES.find(e => e.id === activeEngine);
-  const engine = engineDef ? { ...engineDef, status: resolveEngineStatus(engineDef) } : engineDef;
+  const engine = engineDef ? { ...engineDef, status: resolveEngineStatus(engineDef, keyStatus) } : engineDef;
   const s = STATUS_CONFIG[engine?.status || 'idle'];
 
   const onKeySaved = React.useCallback(() => setSavedTick(t => t + 1), []);
+
+  // Pull real server-side key config on mount and after any save, so a key
+  // that lives in .env (not saved through this UI) still reads as connected.
+  React.useEffect(() => {
+    let live = true;
+    fetchApiKeyStatus().then(st => { if (live) setKeyStatus(st || {}); });
+    return () => { live = false; };
+  }, [savedTick]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
@@ -202,6 +224,7 @@ export function Settings() {
           description="Required for gpt-image-2 image generation, AI character building, and the Prompt Lab prompt engine."
           placeholder="sk-..."
           localStorageKey="ts_openai_configured"
+          serverConfigured={!!keyStatus.openai}
           onSave={saveApiKey}
           onSaved={onKeySaved}
         />
@@ -213,6 +236,7 @@ export function Settings() {
           description="Required for Nano Banana 2 and Nano Banana Pro image generation. Free tier available at aistudio.google.com."
           placeholder="AIza..."
           localStorageKey="ts_gemini_configured"
+          serverConfigured={!!keyStatus.gemini}
           onSave={saveGeminiKey}
           onSaved={onKeySaved}
         />
@@ -224,6 +248,7 @@ export function Settings() {
           description="Required for InstantID identity lock and FLUX Schnell. Get your token at replicate.com."
           placeholder="r8_..."
           localStorageKey="ts_replicate_configured"
+          serverConfigured={!!keyStatus.replicate}
           onSave={saveReplicateKey}
           onSaved={onKeySaved}
         />
@@ -235,6 +260,7 @@ export function Settings() {
           description="Required for FAL FLUX Ultra and FAL FLUX Dev — highest quality uncensored generation. Get your key at fal.ai."
           placeholder="your-fal-key..."
           localStorageKey="ts_fal_configured"
+          serverConfigured={!!keyStatus.fal}
           onSave={saveFalKey}
           onSaved={onKeySaved}
         />
@@ -247,7 +273,7 @@ export function Settings() {
         <Card style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '16px' }}>
           <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '4px 4px 12px', margin: 0 }}>Active Engines</div>
           {ENGINES.map(e => (
-            <EngineRow key={e.id} engine={{ ...e, status: resolveEngineStatus(e) }} isActive={activeEngine === e.id} onSelect={setActiveEngine} />
+            <EngineRow key={e.id} engine={{ ...e, status: resolveEngineStatus(e, keyStatus) }} isActive={activeEngine === e.id} onSelect={setActiveEngine} />
           ))}
         </Card>
 

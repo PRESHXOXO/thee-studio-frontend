@@ -286,7 +286,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     const init = async () => {
       const compressed = initialCharacter.image ? await compressImage(initialCharacter.image) : null;
       const newEditing = {
-        name: initialCharacter.name || 'New Creator',
+        name: initialCharacter.name || '',
         refImages: compressed ? [compressed] : [],
         fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])),
       };
@@ -357,7 +357,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
   };
 
   const handleNew = () => {
-    setEditing({ name: 'New Creator', refImages: [], fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])) });
+    setEditing({ name: '', refImages: [], fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])) });
     setActiveId(null);
     setAnalyzeError('');
     setSaveError('');
@@ -380,7 +380,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
       .then(dataUrls => Promise.all(dataUrls.map(compressImage)))
       .then(compressed => {
         const newEditing = {
-          name: 'New Creator',
+          name: '',
           refImages: compressed,
           fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])),
         };
@@ -408,6 +408,13 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
   const handleSave = () => {
     if (!editing) return;
     setSaveError('');
+    // Require a real name — blocks the old "New Creator" placeholder from
+    // being saved as an actual creator name (collided with the nav CTA,
+    // truncated in Director's picker, showed up as a subject in History).
+    if (!editing.name?.trim()) {
+      setSaveError('Give your creator a name before saving.');
+      return;
+    }
     // Normalize: always store refImages, keep legacy image as first ref for compat
     const charData = {
       ...editing,
@@ -716,7 +723,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
               </div>
             )}
             {editing
-              ? <input value={editing.name} onChange={e => setEditing(ed => ({ ...ed, name: e.target.value }))} style={{ ...INPUT_STYLE, textAlign: 'center', fontWeight: 600 }} />
+              ? <input value={editing.name} onChange={e => setEditing(ed => ({ ...ed, name: e.target.value }))} placeholder="Name your creator" style={{ ...INPUT_STYLE, textAlign: 'center', fontWeight: 600 }} />
               : <div style={{ textAlign: 'center', font: '600 0.9375rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>
                   {displayChar?.name}
                 </div>

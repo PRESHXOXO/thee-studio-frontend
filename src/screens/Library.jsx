@@ -145,19 +145,35 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote, selected, onTog
           <StatusBadge status={status} />
         </div>
 
-        {/* Full-screen expand */}
+        {/* Top-right utilities — full-screen review + delete. Delete is
+            pulled out of the bottom review/download cluster and tinted red
+            so it's not a misclick away from Download/Edit; it still routes
+            through the confirm dialog. */}
         {hovered && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onOpenFocusMode(entry.id); }}
-            title="Review full-screen"
-            style={{
-              position: 'absolute', top: 10, right: 10, width: 26, height: 26, borderRadius: 7,
-              background: 'rgba(10,10,13,0.72)', border: '1px solid rgba(255,255,255,0.14)',
-              color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-            }}
-          >
-            <Icon name="maximize-2" size={12} strokeWidth={2} />
-          </button>
+          <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6 }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenFocusMode(entry.id); }}
+              title="Review full-screen"
+              style={{
+                width: 26, height: 26, borderRadius: 7,
+                background: 'rgba(10,10,13,0.72)', border: '1px solid rgba(255,255,255,0.14)',
+                color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+              }}
+            >
+              <Icon name="maximize-2" size={12} strokeWidth={2} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
+              title="Delete"
+              style={{
+                width: 26, height: 26, borderRadius: 7,
+                background: 'rgba(220,38,38,0.9)', border: '1px solid rgba(255,255,255,0.2)',
+                color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+              }}
+            >
+              <Icon name="trash-2" size={12} strokeWidth={2} />
+            </button>
+          </div>
         )}
 
         {/* Action overlay */}
@@ -190,18 +206,6 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote, selected, onTog
                 }}
               >
                 <Icon name="pencil" size={13} />
-              </button>
-              <button
-                title="Delete"
-                onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
-                style={{
-                  width: 30, height: 30, borderRadius: 'var(--radius-md)', flexShrink: 0,
-                  background: 'rgba(255,255,255,0.92)', border: 'none', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--cherry)',
-                }}
-              >
-                <Icon name="trash-2" size={13} />
               </button>
             </div>
           </div>
@@ -419,7 +423,7 @@ export function Library() {
             </Button>
           )}
           {library.length > 0 && (
-            <Button variant="secondary" onClick={handleClearAll}>
+            <Button variant="ghost" onClick={handleClearAll} style={{ color: 'var(--text-muted)' }}>
               <Icon name="trash-2" size={14} /> Clear All
             </Button>
           )}

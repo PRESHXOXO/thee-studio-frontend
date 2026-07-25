@@ -5,6 +5,22 @@ function loadJSON(key) {
   try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
 }
 
+// Same source vocabulary History/Library display. Unknown values fall back
+// to underscore→title-case so a raw internal value like "quick_shoot" can
+// never leak into the activity panel.
+const SOURCE_LABELS = {
+  generator:   'New Creator',
+  quick_shoot: 'Quick Shoot',
+  scene_flow:  'Scene Flow',
+  prompt_lab:  'Describe It',
+  director:    'Thee Director',
+};
+function humanizeSource(source) {
+  if (!source) return 'Generated';
+  return SOURCE_LABELS[source]
+    || source.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export function buildActivityFeed(limit = 8) {
   const items = [];
 
@@ -12,7 +28,7 @@ export function buildActivityFeed(limit = 8) {
     id: `lib_${entry.id}`,
     icon: 'image-plus',
     title: entry.campaign ? 'New campaign shot' : 'New shot generated',
-    subtitle: entry.scene ? `Scene: ${entry.scene}` : (entry.source || 'Generated'),
+    subtitle: entry.scene ? `Scene: ${entry.scene}` : humanizeSource(entry.source),
     at: entry.savedAt,
     navId: 'library',
   }));

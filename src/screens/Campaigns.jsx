@@ -475,6 +475,7 @@ export function Campaigns({ onNav }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
       <PageHeader
+        eyebrow="Campaign Planning"
         title="Campaigns"
         subtitle="Plan and organize your shoots. Group creative direction, characters, and assets by campaign."
         actions={

@@ -282,6 +282,20 @@ export async function saveFalKey(key) {
   return parsed;
 }
 
+// Which providers have a key configured server-side (UI-saved or already in
+// .env at boot). Lets Engine Library badges reflect real config instead of
+// only a browser-local "saved via UI" flag. Returns {} on any failure so the
+// caller falls back to the local flag rather than blanking every badge.
+export async function fetchApiKeyStatus() {
+  try {
+    const raw = await callNamedEndpoint('api_key_status', ['']);
+    const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+    return parsed && !parsed.error ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 export async function generateImage({
   engine = '',
   performanceMode = 'Balanced',

@@ -407,6 +407,10 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
           aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden',
           background: 'var(--grad-portrait)', border: '1px solid var(--border)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          // Split layout constrains this via its 340px panel. Stacked (Cast
+          // Quick Shoot) has no such cap, so bound it or a 3/4 portrait fills
+          // the whole card at full width.
+          width: '100%', maxWidth: layout === 'split' ? 'none' : 260, alignSelf: 'center',
         }}>
           {livePreviewImg
             ? <img src={livePreviewImg} alt={creator?.name || 'Reference'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

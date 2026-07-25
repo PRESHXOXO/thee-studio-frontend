@@ -23,7 +23,7 @@ export function Topbar({ context = 'Studio', actions, user = 'Thee Studio', user
     <header style={{
       height: 'var(--topbar-h)', flex: 'none', boxSizing: 'border-box',
       display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px',
-      borderBottom: '1px solid var(--border)', background: 'rgba(15,10,34,0.82)',
+      borderBottom: '1px solid var(--border)', background: 'var(--surface-app-translucent)',
       backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
       position: 'fixed', top: 0, left: 'var(--sidebar-w)', right: 0, zIndex: 99, ...style,
     }}>
@@ -35,7 +35,7 @@ export function Topbar({ context = 'Studio', actions, user = 'Thee Studio', user
         onClick={() => setSearchOpen(true)}
         style={{
           display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 'var(--radius-pill)',
-          border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)', cursor: 'pointer',
+          border: '1px solid var(--border)', background: 'var(--surface-inset)', cursor: 'pointer',
           color: 'var(--text-faint)', font: '500 0.8rem/1 var(--font-ui)', fontFamily: 'inherit',
           maxWidth: 280, width: '100%', marginLeft: 12,
         }}

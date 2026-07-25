@@ -75,18 +75,17 @@ export function Sidebar({ items = [], active, onNavigate, footer, activeCharacte
                 display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
                 padding: '9px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', border: 'none',
                 font: `${on ? 600 : 500} 0.9375rem/1 var(--font-ui)`,
-                color: on ? 'var(--accent-deep)' : 'var(--text-body)',
-                background: on ? 'var(--rose-deep)' : 'transparent',
+                color: on ? 'var(--accent-indigo)' : 'var(--text-body)',
+                background: on ? 'var(--accent-indigo-soft)' : 'transparent',
                 transition: 'background var(--t-fast), color var(--t-fast)', position: 'relative',
               }}
               onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = 'var(--cream-deep)'; }}
               onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}
             >
-              {on && <span style={{ position: 'absolute', left: -12, top: 8, bottom: 8, width: 3, borderRadius: 999, background: 'var(--grad-coral)' }} />}
               <Icon name={it.icon} size={17} strokeWidth={on ? 2.1 : 1.75} />
               <span style={{ flex: 1 }}>{it.label}</span>
               {it.badge && (
-                <span style={{ font: '600 0.625rem/1 var(--font-ui)', color: 'var(--accent-deep)', background: 'var(--blush)', padding: '3px 7px', borderRadius: 999 }}>
+                <span style={{ font: '600 0.625rem/1 var(--font-ui)', color: 'var(--accent-indigo)', background: 'var(--white)', padding: '3px 7px', borderRadius: 999 }}>
                   {it.badge}
                 </span>
               )}

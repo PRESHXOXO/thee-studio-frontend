@@ -1,5 +1,5 @@
 import React from 'react';
-import { generateCharacterSeed, generateCharacterVariationShot } from '../api/studio.js';
+import { generateCharacterSeed, generateCharacterVariationShot, parseCreatorCorrection } from '../api/studio.js';
 import { compressImage } from '../lib/imageUtils.js';
 import { saveActiveCreatorId } from '../lib/activeCreator.js';
 import {
@@ -15,7 +15,18 @@ import { BodyIdentityForm } from '../components/creatorBuilder/BodyIdentityForm.
 import { CreatorBrandForm } from '../components/creatorBuilder/CreatorBrandForm.jsx';
 
 const DRAFT_KEY = 'ts_creator_draft';
-const SHOT_LABELS = ['Bust Up', '¾ Left', '¾ Right', 'Full Body']; // indices 1-4 of images[]; see IdentityReferencePack note on backend angle mapping
+// Identity pack (images[1..4]) — backend shotIndex per angle. Full Body
+// (shotIndex 3) is deliberately excluded from the identity pack; it's
+// generated separately in Step 4 (Body Identity) instead, matching the
+// "face first, body later" flow. Side Profile (4) and Front Smile (5) were
+// added to app.py's SHOTS list specifically to fill out the 5-angle set.
+const PACK_SHOTS = [
+  { label: 'Left ¾',        shotIndex: 1 },
+  { label: 'Right ¾',       shotIndex: 2 },
+  { label: 'Side Profile',  shotIndex: 4 },
+  { label: 'Front Smile',   shotIndex: 5 },
+];
+const FULL_BODY_SHOT_INDEX = 3;
 
 function loadSavedDraft() {
   try {
@@ -138,10 +149,24 @@ export function ImageGenerator({ onNav, initialName = '', initialNiche = '', ini
     if (!correctionText.trim()) return;
     setApplyingCorrection(true);
     setLookError('');
-    const patch = parseCorrectionText(correctionText, draft.coreIdentity.gender);
+    // Real backend parsing (GPT-4o-mini) first; falls back to the local
+    // keyword heuristic only if the endpoint errors (offline, no key, etc.)
+    // — the raw text always still rides along to generation either way, so
+    // a parsing failure never loses what the user typed.
+    let patch;
+    try {
+      patch = await parseCreatorCorrection(correctionText, draft.coreIdentity.gender);
+    } catch {
+      patch = parseCorrectionText(correctionText, draft.coreIdentity.gender);
+    }
     let nextDraft = draft;
     if (patch.hairColor) nextDraft = { ...nextDraft, hairIdentity: { ...nextDraft.hairIdentity, color: patch.hairColor } };
     if (patch.facialFullness) nextDraft = { ...nextDraft, coreIdentity: { ...nextDraft.coreIdentity, facialFullness: patch.facialFullness } };
+    if (patch.faceShape) nextDraft = { ...nextDraft, coreIdentity: { ...nextDraft.coreIdentity, faceShape: patch.faceShape } };
+    if (patch.eyeShape) nextDraft = { ...nextDraft, coreIdentity: { ...nextDraft.coreIdentity, eyeShape: patch.eyeShape } };
+    if (patch.browShape) nextDraft = { ...nextDraft, coreIdentity: { ...nextDraft.coreIdentity, browShape: patch.browShape } };
+    if (patch.noseShape) nextDraft = { ...nextDraft, coreIdentity: { ...nextDraft.coreIdentity, noseShape: patch.noseShape } };
+    if (patch.lipShape) nextDraft = { ...nextDraft, coreIdentity: { ...nextDraft.coreIdentity, lipShape: patch.lipShape } };
     if (nextDraft !== draft) patchDraft(nextDraft);
     try {
       const result = await generateCharacterSeed(buildGenParams(nextDraft, correctionText));
@@ -170,10 +195,10 @@ export function ImageGenerator({ onNav, initialName = '', initialNiche = '', ini
       faceAnchor: draft.identityReferences.faceAnchor,
     };
     let current = images.slice(0, 1);
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < PACK_SHOTS.length; i++) {
       try {
-        const result = await generateCharacterVariationShot({ ...baseParams, shotIndex: i });
-        current = [...current, { label: SHOT_LABELS[i], url: result.image || null, status: 'pending' }];
+        const result = await generateCharacterVariationShot({ ...baseParams, shotIndex: PACK_SHOTS[i].shotIndex });
+        current = [...current, { label: PACK_SHOTS[i].label, url: result.image || null, status: 'pending' }];
         const snapshot = current;
         setDraft(prev => touchDraft({ ...prev, identityReferences: { ...prev.identityReferences, images: snapshot } }));
       } catch (e) {
@@ -199,7 +224,7 @@ export function ImageGenerator({ onNav, initialName = '', initialNiche = '', ini
         const result = await generateCharacterSeed(buildGenParams(draft));
         url = result.image;
       } else {
-        const result = await generateCharacterVariationShot({ ...baseParams, shotIndex: index - 1 });
+        const result = await generateCharacterVariationShot({ ...baseParams, shotIndex: PACK_SHOTS[index - 1].shotIndex });
         url = result.image;
       }
       setDraft(prev => {
@@ -251,12 +276,11 @@ export function ImageGenerator({ onNav, initialName = '', initialNiche = '', ini
         seedImage: images[0].url,
         faceAnchor: draft.identityReferences.faceAnchor,
       };
-      const result = await generateCharacterVariationShot({ ...baseParams, shotIndex: 3 }); // "Full Body" slot
-      setDraft(prev => {
-        const nextImages = [...prev.identityReferences.images];
-        nextImages[4] = { ...nextImages[4], url: result.image, status: 'approved' };
-        return touchDraft({ ...prev, identityReferences: { ...prev.identityReferences, images: nextImages } });
-      });
+      const result = await generateCharacterVariationShot({ ...baseParams, shotIndex: FULL_BODY_SHOT_INDEX });
+      setDraft(prev => touchDraft({
+        ...prev,
+        identityReferences: { ...prev.identityReferences, fullBodyReference: result.image },
+      }));
     } catch (e) {
       setPackError(e.message || 'Refinement failed');
     } finally {
@@ -273,6 +297,10 @@ export function ImageGenerator({ onNav, initialName = '', initialNiche = '', ini
     const compressed = await Promise.all(validImgs.map(i => compressImage(i.url)));
     const primaryIdx = draft.identityReferences.primaryReference ?? 0;
     const primaryCompressed = compressed[primaryIdx] || compressed[0];
+    let fullBodyCompressed = null;
+    if (draft.identityReferences.fullBodyReference) {
+      fullBodyCompressed = await compressImage(draft.identityReferences.fullBodyReference);
+    }
 
     // Legacy flat shape preserved exactly (refImages/image/locked/fields) so
     // every existing consumer (ShootBuilder, Characters, Quick Shoot) keeps
@@ -281,7 +309,7 @@ export function ImageGenerator({ onNav, initialName = '', initialNiche = '', ini
       id: draft.id,
       name: draft.name || 'Creator',
       faceAnchor: draft.identityReferences.faceAnchor,
-      refImages: [primaryCompressed, ...compressed.filter((_, i) => i !== primaryIdx)],
+      refImages: [primaryCompressed, ...compressed.filter((_, i) => i !== primaryIdx), ...(fullBodyCompressed ? [fullBodyCompressed] : [])],
       image: primaryCompressed,
       locked: true,
       fields: {
@@ -389,7 +417,7 @@ export function ImageGenerator({ onNav, initialName = '', initialNiche = '', ini
           <BodyIdentityForm
             draft={draft}
             onChange={patchDraft}
-            fullBodyUrl={images[4]?.url}
+            fullBodyUrl={draft.identityReferences.fullBodyReference}
             onRefineFullBody={handleRefineFullBody}
             refining={refiningBody}
             onContinue={() => goTo('brand')}

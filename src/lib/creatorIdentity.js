@@ -4,16 +4,17 @@
 // (brandProfile) per the "build the human first, style second" principle —
 // brand edits must never be able to drift the locked face/body.
 //
-// Backend reality check: character_seed_generate / character_variation_shot
+// Backend note: character_seed_generate / character_variation_shot
 // (src/api/studio.js) take a loose params object and build the actual
-// generation prompt server-side (Python/Gradio, not in this repo). There is
-// no endpoint that accepts structured face-shape/body-proportion fields
-// individually, and no dedicated "natural language -> structured fields"
-// AI endpoint. Fields with no direct backend param (face shape, brow shape,
-// body proportions, etc.) are folded into the existing free-text `vision`
-// field the backend already reads — additive, doesn't require a backend
-// change, but isn't true structured control either. Flagged in the New
-// Creator screen's summary, not hidden.
+// generation prompt server-side (Python/Gradio app.py, sienna-studio-private
+// repo). There is still no endpoint that accepts structured face-shape/
+// body-proportion fields individually — fields with no direct backend
+// param (face shape, brow shape, body proportions, etc.) are folded into
+// the existing free-text `vision` field the backend already reads. A real
+// natural-language -> structured-fields endpoint (parse_creator_correction,
+// GPT-4o-mini JSON mode) was added to app.py and is used by
+// api/studio.js's parseCreatorCorrection() — parseCorrectionText() below
+// is now only the offline/error fallback for that call.
 
 export const AGE_RANGES = [
   { value: '18-24', label: '18–24' },
@@ -132,7 +133,8 @@ export function blankCreatorDraft() {
 
     identityReferences: {
       primaryReference: null, // index into images[] currently marked primary
-      images: [], // [{ label, url, status: 'pending'|'generating'|'approved'|'error' }]
+      images: [], // [{ label, url, status: 'pending'|'generating'|'approved'|'error' }] — the 5-angle identity pack
+      fullBodyReference: null, // Step 4's dedicated full-body shot — not part of the face pack
       faceAnchor: '',
     },
 

@@ -5,15 +5,11 @@ import { Icon } from '../core/Icon.jsx';
 import { ReferenceImageCard } from './ReferenceImageCard.jsx';
 
 // Step 3 — five standardized identity reference images, individually
-// approvable/regeneratable. Backend note: the existing generation pipeline
-// (character_seed_generate + character_variation_shot) produces a fixed
-// 5-shot set — Headshot, Bust Up, ¾ Left, ¾ Right, Full Body — driven by
-// whatever the Python backend actually does per shotIndex, which this
-// frontend can't see or change. These are real, working labels for what
-// the backend actually returns, not the exact front-neutral/left-¾/right-¾/
-// side-profile/front-smile angle set from the brief — relabeling them
-// without matching backend behavior would just be a UI lie. Flagged in the
-// New Creator summary as a backend follow-up, not silently swapped in.
+// approvable/regeneratable: Headshot (front-neutral, the Step 2 seed) +
+// Left ¾, Right ¾, Side Profile, Front Smile (app.py's SHOTS list,
+// shotIndex 1/2/4/5 — 4 and 5 were added there specifically for this).
+// Full Body (shotIndex 3) is intentionally not in this pack — it's
+// generated separately in Step 4 once the face is locked.
 export function IdentityReferencePack({
   name, images, regeneratingIndex, generating,
   onApprove, onRegenerate, onSetPrimary, primaryIndex,

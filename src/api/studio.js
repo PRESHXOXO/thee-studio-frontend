@@ -228,6 +228,17 @@ export async function generateCharacterVariationShot(params) {
   return parsed; // { image }
 }
 
+// Translates a freeform correction into structured Creator Builder identity
+// fields via the backend's parse_creator_correction (GPT-4o-mini JSON mode).
+// Returns {} (not an error) when nothing could be confidently mapped —
+// callers should still send the raw text through to generation regardless.
+export async function parseCreatorCorrection(text, gender) {
+  const raw = await callNamedEndpoint('parse_creator_correction', [JSON.stringify({ text, gender })]);
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed;
+}
+
 export async function describeOutfitImage(imageDataUrl) {
   const raw = await callNamedEndpoint('outfit_describe', [imageDataUrl]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];

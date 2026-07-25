@@ -1,7 +1,7 @@
 /* Thee Studio™ — Typography tokens */
 :root {
   /* ---- Families ---- */
-  --font-display: 'Bodoni Moda', 'Times New Roman', serif;   /* editorial headlines */
+  --font-display: 'Space Grotesk', 'Hanken Grotesk', system-ui, sans-serif;   /* modern grotesque headlines */
   --font-ui:      'Hanken Grotesk', system-ui, sans-serif;    /* UI + body */
   --font-mono:    'Space Mono', ui-monospace, monospace;      /* technical labels */
 

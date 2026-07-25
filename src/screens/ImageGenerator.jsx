@@ -1,278 +1,309 @@
 import React from 'react';
-import { Card } from '../components/surfaces/Card.jsx';
-import { Select } from '../components/forms/Select.jsx';
-import { Button } from '../components/core/Button.jsx';
-import { Icon } from '../components/core/Icon.jsx';
 import { generateCharacterSeed, generateCharacterVariationShot } from '../api/studio.js';
 import { compressImage } from '../lib/imageUtils.js';
 import { saveActiveCreatorId } from '../lib/activeCreator.js';
 import {
-  GENDERS, SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES,
-  getHairStyleOptions, getClothingOptions, getJewelryOptions, getPhysiqueOptions,
-  CONTENT_NICHES, STYLE_DIRECTIONS,
-} from '../lib/promptData.js';
-import { ImageLightbox } from '../components/feedback/ImageLightbox.jsx';
+  blankCreatorDraft, touchDraft, composeDescription, composeBodyDescription,
+  parseCorrectionText, CREATOR_STATUS,
+} from '../lib/creatorIdentity.js';
+import { CreatorBuilderProgress } from '../components/creatorBuilder/CreatorBuilderProgress.jsx';
+import { BaseIdentityForm } from '../components/creatorBuilder/BaseIdentityForm.jsx';
+import { CreatorFirstLook } from '../components/creatorBuilder/CreatorFirstLook.jsx';
+import { IdentityReferencePack } from '../components/creatorBuilder/IdentityReferencePack.jsx';
+import { CreatorLockSuccess } from '../components/creatorBuilder/CreatorLockSuccess.jsx';
+import { BodyIdentityForm } from '../components/creatorBuilder/BodyIdentityForm.jsx';
+import { CreatorBrandForm } from '../components/creatorBuilder/CreatorBrandForm.jsx';
 
-const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 };
-const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--surface-inset)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
-const PREVIEW_TOP_OFFSET = 84;
+const DRAFT_KEY = 'ts_creator_draft';
+const SHOT_LABELS = ['Bust Up', '¾ Left', '¾ Right', 'Full Body']; // indices 1-4 of images[]; see IdentityReferencePack note on backend angle mapping
 
-function Pill({ label, active, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: '6px 14px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
-        border: `1.5px solid ${active ? 'var(--accent-deep)' : 'var(--border)'}`,
-        background: active ? 'var(--rose-deep)' : 'transparent',
-        color: active ? 'var(--accent-deep)' : 'var(--text-muted)',
-        font: '500 0.78rem/1 var(--font-ui)',
-        transition: 'all var(--t-fast)',
-      }}
-    >
-      {label}
-    </button>
-  );
+function loadSavedDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
 }
 
-function resolveLabel(value, options) {
-  if (!options) return value;
-  return options.find(o => o.value === value)?.label || value;
-}
-
-// Live trait summary — fills in as the user makes choices, so the creator
-// being built feels tangible before any image exists, not just after.
-function TraitSummary({ name, chips }) {
-  const filledCount = chips.filter(c => c.filled).length;
-  const ratio = filledCount / chips.length;
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '18px 0 4px' }}>
-        <div style={{
-          width: 84, height: 84, borderRadius: '50%',
-          background: `conic-gradient(var(--accent-deep) ${ratio * 360}deg, var(--rose-glass) 0deg)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'background 0.4s ease',
-        }}>
-          <div style={{
-            width: 72, height: 72, borderRadius: '50%', background: 'var(--surface-card)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Icon name="user-round" size={32} strokeWidth={1.25} style={{ color: ratio > 0 ? 'var(--accent-deep)' : 'var(--text-faint)' }} />
-          </div>
-        </div>
-        <div style={{ font: '600 0.95rem/1.2 var(--font-display)', color: 'var(--text-strong)', textAlign: 'center' }}>
-          {name || 'Your Creator'}
-        </div>
-        <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>{filledCount}/{chips.length} traits set</div>
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {chips.map(chip => (
-          <span
-            key={chip.label}
-            style={{
-              padding: '5px 10px', borderRadius: 'var(--radius-pill)',
-              font: '500 0.7rem/1 var(--font-ui)',
-              transition: 'all 0.3s ease',
-              ...(chip.filled
-                ? { background: 'var(--rose-deep)', color: 'var(--accent-deep)', border: '1px solid var(--accent-deep)' }
-                : { background: 'transparent', color: 'var(--text-faint)', border: '1px dashed var(--border)' }),
-            }}
-          >
-            {chip.filled ? chip.display : chip.label}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Creator Builder — pure identity-creation wizard. Describe a subject,
-// generate a headshot, approve it, generate the full casting sheet, save
-// as a creator. Shooting/generation-with-a-prompt lives on the Guided
-// tab of the unified Director screen and on each creator's Quick Shoot
-// panel — this screen no longer duplicates that.
-export function ImageGenerator({ onNav, initialName = '', initialNiche = '', initialVision = '' }) {
-  const [aiGenName,     setAiGenName]     = React.useState(initialName);
-  const [aiGenGender,   setAiGenGender]   = React.useState('Unspecified');
-  const [aiGenSkin,     setAiGenSkin]     = React.useState('Unspecified');
-  const [aiGenHairSt,   setAiGenHairSt]   = React.useState('Unspecified');
-  const [aiGenHairCo,   setAiGenHairCo]   = React.useState('Unspecified');
-  const [aiGenEye,      setAiGenEye]      = React.useState('Unspecified');
-  const [aiGenBody,     setAiGenBody]     = React.useState('Unspecified');
-  const [aiGenFeatures, setAiGenFeatures] = React.useState('None');
-  const [aiGenJewelry,  setAiGenJewelry]  = React.useState('None');
-  const [aiGenClothing, setAiGenClothing] = React.useState('Unspecified');
-  const [aiGenNiche,    setAiGenNiche]    = React.useState(initialNiche);
-  const [aiGenVision,   setAiGenVision]   = React.useState(initialVision);
-  const [aiGenStep,      setAiGenStep]      = React.useState('');
-  const [aiGenImages,    setAiGenImages]    = React.useState([]);
-  const [aiGenAnchor,    setAiGenAnchor]    = React.useState('');
-  const [aiGenLoading,   setAiGenLoading]   = React.useState(false);
-  const [aiGenError,     setAiGenError]     = React.useState('');
-  const [aiGenProgress,  setAiGenProgress]  = React.useState(0);
-  const [aiGenSeed,      setAiGenSeed]      = React.useState(null); // { image, faceAnchor, skinToneLock }
-  const [aiGenApproval,  setAiGenApproval]  = React.useState(false); // waiting for user to approve headshot
-  const [aiGenLocked,    setAiGenLocked]    = React.useState(false); // identity lock animation active
-  const [lightboxSrc,    setLightboxSrc]    = React.useState(null);
-  const [aiGenSaveError, setAiGenSaveError] = React.useState('');
-  const [aiGenSaving,    setAiGenSaving]    = React.useState(false);
-
-  const aiGenHairOptions     = getHairStyleOptions(aiGenGender);
-  const aiGenClothingOptions = getClothingOptions(aiGenGender);
-  const aiGenJewelryOptions  = getJewelryOptions(aiGenGender);
-  const aiGenBodyOptions     = getPhysiqueOptions(aiGenGender);
-
-  const handleAiGenGenderChange = (newGender) => {
-    const newHair     = getHairStyleOptions(newGender).find(o => o.value === aiGenHairSt)  ? aiGenHairSt   : 'Unspecified';
-    const newClothing = getClothingOptions(newGender).find(o => o.value === aiGenClothing) ? aiGenClothing : 'Unspecified';
-    const newJewelry  = getJewelryOptions(newGender).find(o => o.value === aiGenJewelry)   ? aiGenJewelry  : 'None';
-    const newBody     = getPhysiqueOptions(newGender).find(o => o.value === aiGenBody)      ? aiGenBody     : 'Unspecified';
-    setAiGenGender(newGender);
-    setAiGenHairSt(newHair);
-    setAiGenClothing(newClothing);
-    setAiGenJewelry(newJewelry);
-    setAiGenBody(newBody);
+function buildGenParams(draft, extraNote = '') {
+  const { name, coreIdentity: core, hairIdentity: hair, bodyIdentity: body } = draft;
+  const vision = [composeDescription(draft), extraNote].filter(Boolean).join(' ');
+  return {
+    name: name || 'Creator',
+    gender: core.gender,
+    skinTone: core.skinTone,
+    hairStyle: hair.style,
+    hairColor: hair.color,
+    eyeDetail: 'Unspecified',
+    body: body.overallBuild,
+    features: core.distinctiveFeatures,
+    jewelry: 'None',      // styling is Step 5 territory, not sent during identity generation
+    clothing: 'Unspecified',
+    niche: '',
+    vision,
   };
+}
 
-  // Live trait chips — drives the preview panel's tag summary.
-  const traitChips = [
-    { label: 'Gender',    value: aiGenGender,   options: GENDERS,             empty: 'Unspecified' },
-    { label: 'Skin Tone', value: aiGenSkin,     options: SKIN_TONES,          empty: 'Unspecified' },
-    { label: 'Hair Style',value: aiGenHairSt,   options: aiGenHairOptions,    empty: 'Unspecified' },
-    { label: 'Hair Color',value: aiGenHairCo,   options: HAIR_COLORS,         empty: 'Unspecified' },
-    { label: 'Eyes',      value: aiGenEye,      options: EYE_DETAILS,         empty: 'Unspecified' },
-    { label: 'Build',     value: aiGenBody,     options: aiGenBodyOptions,    empty: 'Unspecified' },
-    { label: 'Features',  value: aiGenFeatures, options: SPECIAL_FEATURES,    empty: 'None' },
-    { label: 'Jewelry',   value: aiGenJewelry,  options: aiGenJewelryOptions, empty: 'None' },
-    { label: 'Look',      value: aiGenClothing, options: aiGenClothingOptions,empty: 'Unspecified' },
-    { label: 'Niche',     value: aiGenNiche,    options: null,                empty: '' },
-    { label: 'Energy',    value: aiGenVision,   options: null,                empty: '' },
-  ].map(c => ({ ...c, filled: !!c.value && c.value !== c.empty, display: resolveLabel(c.value, c.options) }));
+// New Creator — five-step guided build: Describe -> Preview -> Refine ->
+// Lock -> Style. Replaces the old single-page form; the underlying
+// generation calls (generateCharacterSeed / generateCharacterVariationShot)
+// are unchanged so nothing that worked before stops working.
+export function ImageGenerator({ onNav, initialName = '', initialNiche = '', initialVision = '' }) {
+  const hasArchetypeHandoff = !!(initialName || initialNiche || initialVision);
 
-  // Smooth progress animation for AI generation
-  React.useEffect(() => {
-    if (!aiGenLoading && aiGenImages.length === 0) { setAiGenProgress(0); return; }
-    if (!aiGenLoading) { setAiGenProgress(100); return; }
-    // Step 1 (headshot only): ceiling at 100. Step 2 (4 variations): index into remaining slots.
-    const ceilings = aiGenApproval ? [100] : [14, 32, 52, 70, 88, 100];
-    const ceiling  = aiGenApproval ? 100 : ceilings[Math.min(aiGenImages.length, 5)];
-    const id = setInterval(() => {
-      setAiGenProgress(prev => {
-        if (prev >= ceiling) return prev;
-        const step = Math.max(0.2, (ceiling - prev) * 0.04);
-        return Math.min(ceiling, prev + step);
-      });
-    }, 40);
-    return () => clearInterval(id);
-  }, [aiGenLoading, aiGenImages.length, aiGenApproval]);
-
-  const _buildAiGenParams = () => ({
-    name: aiGenName || 'Creator',
-    gender: aiGenGender,
-    skinTone: aiGenSkin,
-    hairStyle: aiGenHairSt,
-    hairColor: aiGenHairCo,
-    eyeDetail: aiGenEye,
-    body: aiGenBody,
-    features: aiGenFeatures,
-    jewelry: aiGenJewelry,
-    clothing: aiGenClothing,
-    niche: aiGenNiche,
-    vision: aiGenVision,
+  const [draft, setDraft] = React.useState(() => {
+    if (!hasArchetypeHandoff) {
+      const saved = loadSavedDraft();
+      if (saved) return saved;
+    }
+    const fresh = blankCreatorDraft();
+    if (initialName) fresh.name = initialName;
+    if (initialNiche) fresh.brandProfile.worlds = [initialNiche];
+    if (initialVision) fresh.brandProfile.energies = [initialVision];
+    return fresh;
   });
 
-  // Step 1 — generate headshot only, then wait for approval
-  const handleAiGenerate = async () => {
-    setAiGenLoading(true);
-    setAiGenError('');
-    setAiGenImages([]);
-    setAiGenAnchor('');
-    setAiGenSeed(null);
-    setAiGenApproval(false);
-    setAiGenLocked(false);
-    setAiGenProgress(0);
+  const [step, setStep] = React.useState('base');
+  const [furthestStep, setFurthestStep] = React.useState('base');
+  const [lockJustApproved, setLockJustApproved] = React.useState(false);
+
+  const [generatingBase, setGeneratingBase] = React.useState(false);
+  const [lookError, setLookError] = React.useState('');
+  const [applyingCorrection, setApplyingCorrection] = React.useState(false);
+  const [correctionText, setCorrectionText] = React.useState('');
+
+  const [packGenerating, setPackGenerating] = React.useState(false);
+  const [regeneratingIndex, setRegeneratingIndex] = React.useState(null);
+  const [packError, setPackError] = React.useState('');
+
+  const [refiningBody, setRefiningBody] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState('');
+
+  // Autosave the draft so the user can exit and return later without
+  // losing selections — cleared once the creator is actually saved.
+  React.useEffect(() => {
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch {}
+  }, [draft]);
+
+  const goTo = (id) => {
+    setStep(id);
+    const order = ['base', 'look', 'lock', 'body', 'brand'];
+    if (order.indexOf(id) > order.indexOf(furthestStep)) setFurthestStep(id);
+  };
+
+  const patchDraft = (next) => setDraft(touchDraft(next));
+
+  const images = draft.identityReferences.images;
+
+  // --- Step 1 -> Step 2: generate first-look headshot ---
+  const handleGenerateFirstLook = async () => {
+    setGeneratingBase(true);
+    setLookError('');
     try {
-      setAiGenStep('Generating headshot…');
-      const seedResult = await generateCharacterSeed(_buildAiGenParams());
-      setAiGenSeed(seedResult);
-      setAiGenImages([seedResult.image]);
-      setAiGenAnchor(seedResult.faceAnchor || '');
-      setAiGenApproval(true);
-      setAiGenStep('');
+      const result = await generateCharacterSeed(buildGenParams(draft));
+      patchDraft({
+        ...draft,
+        identityReferences: {
+          ...draft.identityReferences,
+          faceAnchor: result.faceAnchor || '',
+          images: [{ label: 'Headshot', url: result.image, status: 'pending' }],
+          primaryReference: null,
+        },
+      });
+      goTo('look');
     } catch (e) {
-      setAiGenError(e.message || 'Generation failed');
-      setAiGenStep('');
+      setLookError(e.message || 'Generation failed');
     } finally {
-      setAiGenLoading(false);
+      setGeneratingBase(false);
     }
   };
 
-  // Step 2 — user approved, fire lock animation then generate 4 shots one at a time
-  const handleAiGenApprove = async () => {
-    if (!aiGenSeed) return;
-    setAiGenLocked(true);
-    setAiGenApproval(false);
-    setAiGenLoading(true);
-    setAiGenError('');
-    setAiGenProgress(0);
-    const shotLabels = ['Bust Up', '¾ Left', '¾ Right', 'Full Body'];
+  const handleRegenerateLook = async () => {
+    setGeneratingBase(true);
+    setLookError('');
+    try {
+      const result = await generateCharacterSeed(buildGenParams(draft));
+      patchDraft({
+        ...draft,
+        identityReferences: { ...draft.identityReferences, faceAnchor: result.faceAnchor || '', images: [{ label: 'Headshot', url: result.image, status: 'pending' }] },
+      });
+    } catch (e) {
+      setLookError(e.message || 'Generation failed');
+    } finally {
+      setGeneratingBase(false);
+    }
+  };
+
+  const handleApplyCorrection = async () => {
+    if (!correctionText.trim()) return;
+    setApplyingCorrection(true);
+    setLookError('');
+    const patch = parseCorrectionText(correctionText, draft.coreIdentity.gender);
+    let nextDraft = draft;
+    if (patch.hairColor) nextDraft = { ...nextDraft, hairIdentity: { ...nextDraft.hairIdentity, color: patch.hairColor } };
+    if (patch.facialFullness) nextDraft = { ...nextDraft, coreIdentity: { ...nextDraft.coreIdentity, facialFullness: patch.facialFullness } };
+    if (nextDraft !== draft) patchDraft(nextDraft);
+    try {
+      const result = await generateCharacterSeed(buildGenParams(nextDraft, correctionText));
+      patchDraft({
+        ...nextDraft,
+        identityReferences: { ...nextDraft.identityReferences, faceAnchor: result.faceAnchor || '', images: [{ label: 'Headshot', url: result.image, status: 'pending' }] },
+      });
+      setCorrectionText('');
+    } catch (e) {
+      setLookError(e.message || 'Generation failed');
+    } finally {
+      setApplyingCorrection(false);
+    }
+  };
+
+  const handleApproveLook = async () => {
+    patchDraft({ ...draft, status: CREATOR_STATUS.FACE_APPROVED });
+    goTo('lock');
+    // Kick off the four-shot casting pack immediately, one at a time —
+    // same pipeline as before, just triggered from the new Step 3 screen.
+    setPackGenerating(true);
+    setPackError('');
     const baseParams = {
-      ..._buildAiGenParams(),
-      seedImage: aiGenSeed.image,
-      faceAnchor: aiGenSeed.faceAnchor || '',
-      skinToneLock: aiGenSeed.skinToneLock || '',
+      ...buildGenParams(draft),
+      seedImage: images[0].url,
+      faceAnchor: draft.identityReferences.faceAnchor,
     };
-    try {
-      for (let i = 0; i < 4; i++) {
-        setAiGenStep(`Generating ${shotLabels[i]}…`);
+    let current = images.slice(0, 1);
+    for (let i = 0; i < 4; i++) {
+      try {
         const result = await generateCharacterVariationShot({ ...baseParams, shotIndex: i });
-        const img = result.image || null;
-        // Append each image as it arrives — seed stays at index 0
-        setAiGenImages(prev => {
-          const next = [...prev];
-          next[i + 1] = img;
-          return next;
-        });
+        current = [...current, { label: SHOT_LABELS[i], url: result.image || null, status: 'pending' }];
+        const snapshot = current;
+        setDraft(prev => touchDraft({ ...prev, identityReferences: { ...prev.identityReferences, images: snapshot } }));
+      } catch (e) {
+        setPackError(e.message || 'Generation failed');
+        break;
       }
-      setAiGenStep('');
-      setAiGenLocked(false); // switch to full grid view once all shots are in
+    }
+    setPackGenerating(false);
+  };
+
+  // --- Step 3: per-card regenerate / approve / primary ---
+  const handleRegenerateCard = async (index) => {
+    setRegeneratingIndex(index);
+    setPackError('');
+    try {
+      const baseParams = {
+        ...buildGenParams(draft),
+        seedImage: images[0].url,
+        faceAnchor: draft.identityReferences.faceAnchor,
+      };
+      let url;
+      if (index === 0) {
+        const result = await generateCharacterSeed(buildGenParams(draft));
+        url = result.image;
+      } else {
+        const result = await generateCharacterVariationShot({ ...baseParams, shotIndex: index - 1 });
+        url = result.image;
+      }
+      setDraft(prev => {
+        const nextImages = [...prev.identityReferences.images];
+        nextImages[index] = { ...nextImages[index], url, status: 'pending' };
+        return touchDraft({ ...prev, identityReferences: { ...prev.identityReferences, images: nextImages } });
+      });
     } catch (e) {
-      setAiGenError(e.message || 'Generation failed');
-      setAiGenStep('');
-      setAiGenLocked(false);
+      setPackError(e.message || 'Regeneration failed');
     } finally {
-      setAiGenLoading(false);
+      setRegeneratingIndex(null);
     }
   };
 
+  const handleApproveCard = (index) => {
+    setDraft(prev => {
+      const nextImages = [...prev.identityReferences.images];
+      nextImages[index] = { ...nextImages[index], status: 'approved' };
+      return touchDraft({ ...prev, identityReferences: { ...prev.identityReferences, images: nextImages } });
+    });
+  };
+
+  const handleApproveAllCards = () => {
+    setDraft(prev => ({
+      ...touchDraft(prev),
+      identityReferences: { ...prev.identityReferences, images: prev.identityReferences.images.map(i => ({ ...i, status: 'approved' })) },
+    }));
+  };
+
+  const handleSetPrimary = (index) => {
+    patchDraft({ ...draft, identityReferences: { ...draft.identityReferences, primaryReference: index } });
+  };
+
+  const allApproved = images.length === 5 && images.every(i => i.status === 'approved');
+
+  const handleContinueFromLock = () => {
+    patchDraft({ ...draft, status: CREATOR_STATUS.IDENTITY_LOCKED });
+    setLockJustApproved(true);
+  };
+
+  // --- Step 4: body ---
+  const handleRefineFullBody = async () => {
+    setRefiningBody(true);
+    setPackError('');
+    try {
+      const bodyNote = composeBodyDescription(draft);
+      const baseParams = {
+        ...buildGenParams(draft, bodyNote),
+        seedImage: images[0].url,
+        faceAnchor: draft.identityReferences.faceAnchor,
+      };
+      const result = await generateCharacterVariationShot({ ...baseParams, shotIndex: 3 }); // "Full Body" slot
+      setDraft(prev => {
+        const nextImages = [...prev.identityReferences.images];
+        nextImages[4] = { ...nextImages[4], url: result.image, status: 'approved' };
+        return touchDraft({ ...prev, identityReferences: { ...prev.identityReferences, images: nextImages } });
+      });
+    } catch (e) {
+      setPackError(e.message || 'Refinement failed');
+    } finally {
+      setRefiningBody(false);
+    }
+  };
+
+  // --- Step 5: final save ---
   const handleSaveCreator = async () => {
-    if (!aiGenImages.length) return;
-    const validImgs = aiGenImages.filter(img => img && !img.startsWith('ERROR:'));
-    if (!validImgs.length) return;
-    setAiGenSaving(true);
-    setAiGenSaveError('');
-    const compressed = await Promise.all(validImgs.slice(0, 5).map(img => compressImage(img)));
+    setSaving(true);
+    setSaveError('');
+    const validImgs = images.filter(i => i.url && !i.url.startsWith('ERROR:'));
+    if (!validImgs.length) { setSaving(false); return; }
+    const compressed = await Promise.all(validImgs.map(i => compressImage(i.url)));
+    const primaryIdx = draft.identityReferences.primaryReference ?? 0;
+    const primaryCompressed = compressed[primaryIdx] || compressed[0];
+
+    // Legacy flat shape preserved exactly (refImages/image/locked/fields) so
+    // every existing consumer (ShootBuilder, Characters, Quick Shoot) keeps
+    // working unchanged, plus the new structured identity model alongside it.
     const newChar = {
-      id: Date.now().toString(),
-      name: aiGenName || 'Creator',
-      faceAnchor: aiGenAnchor,
-      refImages: compressed,
+      id: draft.id,
+      name: draft.name || 'Creator',
+      faceAnchor: draft.identityReferences.faceAnchor,
+      refImages: [primaryCompressed, ...compressed.filter((_, i) => i !== primaryIdx)],
+      image: primaryCompressed,
       locked: true,
-      fields: { tone: aiGenSkin !== 'Unspecified' ? aiGenSkin : '', hair: aiGenHairSt !== 'Unspecified' ? aiGenHairSt : '', face: aiGenEye !== 'Unspecified' ? aiGenEye : '', body: aiGenBody !== 'Unspecified' ? aiGenBody : '', wardrobe: aiGenClothing !== 'Unspecified' ? aiGenClothing : '', personality: aiGenVision || '', niche: aiGenNiche || '' },
+      fields: {
+        tone: draft.coreIdentity.skinTone !== 'Unspecified' ? draft.coreIdentity.skinTone : '',
+        hair: draft.hairIdentity.style !== 'Unspecified' ? draft.hairIdentity.style : '',
+        face: draft.coreIdentity.eyeShape !== 'Unspecified' ? draft.coreIdentity.eyeShape : '',
+        body: draft.bodyIdentity.overallBuild !== 'Unspecified' ? draft.bodyIdentity.overallBuild : '',
+        wardrobe: draft.brandProfile.signatureClothing !== 'Unspecified' ? draft.brandProfile.signatureClothing : '',
+        personality: draft.brandProfile.energies.join(', '),
+        niche: draft.brandProfile.worlds.join(', '),
+      },
+      ...draft,
+      status: CREATOR_STATUS.IDENTITY_LOCKED,
     };
+
     try {
       const existing = JSON.parse(localStorage.getItem('ts_characters') || '[]');
       existing.push(newChar);
       localStorage.setItem('ts_characters', JSON.stringify(existing));
     } catch (e) {
-      // A storage failure here would otherwise be silent — the user's
-      // generated creator would vanish with no feedback at all. Stay put
-      // and surface it instead of navigating away as if it saved.
-      setAiGenSaving(false);
-      setAiGenSaveError(
+      setSaving(false);
+      setSaveError(
         e?.name === 'QuotaExceededError'
           ? 'Save failed: browser storage is full. Free up space (e.g. clear old Library images) and try again.'
           : `Save failed: ${e?.message || 'could not write to browser storage'}.`
@@ -280,374 +311,98 @@ export function ImageGenerator({ onNav, initialName = '', initialNiche = '', ini
       return;
     }
     saveActiveCreatorId(newChar.id);
-    setAiGenSaving(false);
+    try { localStorage.removeItem(DRAFT_KEY); } catch {}
+    setSaving(false);
     onNav?.('characters');
   };
 
+  const statusLabel = { [CREATOR_STATUS.DRAFT]: 'Draft', [CREATOR_STATUS.FACE_APPROVED]: 'Face Approved', [CREATOR_STATUS.IDENTITY_LOCKED]: 'Identity Locked' }[draft.status];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 720, margin: '0 auto' }}>
 
-      {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24 }}>
-        <div>
-          <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 10 }}>New Creator</div>
-          <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 10px' }}>New Creator</h1>
-          <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 480 }}>Describe a subject. Thee Studio generates their look and locks their identity — shoot them afterward from Characters or Thee Director.</p>
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+          <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)' }}>New Creator</div>
+          <span style={{ font: '600 0.7rem/1 var(--font-ui)', color: 'var(--text-faint)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+            {statusLabel}
+          </span>
         </div>
+        <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 14px' }}>Build with Thee Studio</h1>
+        <CreatorBuilderProgress currentStep={step} furthestStep={furthestStep} onJump={(id) => { setLockJustApproved(false); goTo(id); }} />
       </div>
 
-      {/* Two-column build layout: form left, live preview docked right */}
-      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      {step === 'base' && (
+        <BaseIdentityForm draft={draft} onChange={patchDraft} onSubmit={handleGenerateFirstLook} submitting={generatingBase} />
+      )}
 
-        {/* Build with Thee Studio — AI subject generation form */}
-        <Card style={{ flex: '1 1 460px', minWidth: 320, padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-            <div style={{
-              width: 34, height: 34, borderRadius: 'var(--radius)',
-              background: 'var(--rose-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--accent-deep)', flexShrink: 0,
-            }}>
-              <Icon name="wand-2" size={16} strokeWidth={1.75} />
-            </div>
-            <div>
-              <div style={{ font: '600 0.88rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Build with Thee Studio</div>
-              <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 3 }}>
-                Describe your subject — AI generates 5 reference photos and locks their face for identity-consistent generation
-              </div>
-            </div>
-          </div>
+      {step === 'look' && (
+        <CreatorFirstLook
+          name={draft.name}
+          imageUrl={images[0]?.url}
+          loading={generatingBase}
+          error={lookError}
+          core={draft.coreIdentity}
+          hair={draft.hairIdentity}
+          onCoreChange={(next) => patchDraft({ ...draft, coreIdentity: next })}
+          onHairChange={(next) => patchDraft({ ...draft, hairIdentity: next })}
+          correctionText={correctionText}
+          onCorrectionChange={setCorrectionText}
+          onApplyCorrection={handleApplyCorrection}
+          applyingCorrection={applyingCorrection}
+          onRegenerate={handleRegenerateLook}
+          onApprove={handleApproveLook}
+        />
+      )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Row 1: Name + Gender */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <div style={LABEL}>Creator Name</div>
-                  <input value={aiGenName} onChange={e => setAiGenName(e.target.value)} placeholder="e.g. Angel, Maya, Jade…" style={INPUT_STYLE} />
-                </div>
-                <div>
-                  <div style={LABEL}>Gender</div>
-                  <Select value={aiGenGender} onChange={handleAiGenGenderChange} options={GENDERS} />
-                </div>
-              </div>
-              {/* Row 2: Skin + Eye */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <div style={LABEL}>Skin Tone</div>
-                  <Select value={aiGenSkin} onChange={setAiGenSkin} options={SKIN_TONES} />
-                </div>
-                <div>
-                  <div style={LABEL}>Eye Detail</div>
-                  <Select value={aiGenEye} onChange={setAiGenEye} options={EYE_DETAILS} />
-                </div>
-              </div>
-              {/* Row 3: Hair Style + Hair Color */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <div style={LABEL}>Hair Style</div>
-                  <Select value={aiGenHairSt} onChange={setAiGenHairSt} options={aiGenHairOptions} />
-                </div>
-                <div>
-                  <div style={LABEL}>Hair Color</div>
-                  <Select value={aiGenHairCo} onChange={setAiGenHairCo} options={HAIR_COLORS} />
-                </div>
-              </div>
-              {/* Row 4: Special Features + Jewelry */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <div style={LABEL}>Special Features</div>
-                  <Select value={aiGenFeatures} onChange={setAiGenFeatures} options={SPECIAL_FEATURES} />
-                </div>
-                <div>
-                  <div style={LABEL}>Signature Jewelry</div>
-                  <Select value={aiGenJewelry} onChange={setAiGenJewelry} options={aiGenJewelryOptions} />
-                </div>
-              </div>
-              {/* Row 5: Body + Clothing */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <div style={LABEL}>Their Build</div>
-                  <Select value={aiGenBody} onChange={setAiGenBody} options={aiGenBodyOptions} />
-                </div>
-                <div>
-                  <div style={LABEL}>Signature Look / Clothing</div>
-                  <Select value={aiGenClothing} onChange={setAiGenClothing} options={aiGenClothingOptions} />
-                </div>
-              </div>
-              {/* Row 6: Their World (Content Niche pills) */}
-              <div>
-                <div style={LABEL}>Their World</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                  {CONTENT_NICHES.map(n => (
-                    <Pill key={n} label={n} active={aiGenNiche === n} onClick={() => setAiGenNiche(aiGenNiche === n ? '' : n)} />
-                  ))}
-                </div>
-              </div>
-              {/* Row 7: Their Energy (Style Direction pills) */}
-              <div>
-                <div style={LABEL}>Their Energy</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                  {STYLE_DIRECTIONS.map(d => (
-                    <Pill key={d} label={d} active={aiGenVision === d} onClick={() => setAiGenVision(aiGenVision === d ? '' : d)} />
-                  ))}
-                </div>
-              </div>
-            </div>
-        </Card>
+      {step === 'lock' && !lockJustApproved && (
+        <>
+          {packError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{packError}</p>}
+          <IdentityReferencePack
+            name={draft.name}
+            images={images}
+            generating={packGenerating}
+            regeneratingIndex={regeneratingIndex}
+            primaryIndex={draft.identityReferences.primaryReference}
+            allApproved={allApproved}
+            onApprove={handleApproveCard}
+            onRegenerate={handleRegenerateCard}
+            onSetPrimary={handleSetPrimary}
+            onApproveAll={handleApproveAllCards}
+            onContinue={handleContinueFromLock}
+          />
+        </>
+      )}
 
-        {/* Live preview panel — docked, updates as fields are chosen */}
-        <div style={{ flex: '0 0 320px', minWidth: 280, position: 'sticky', top: PREVIEW_TOP_OFFSET }}>
-          <Card style={{ padding: '18px 18px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-              {aiGenLocked ? 'Identity Locked' : aiGenApproval ? 'Headshot Preview' : aiGenImages.length > 0 ? `Reference Photos · ${aiGenImages.length}/5` : 'Creator Preview'}
-            </div>
+      {step === 'lock' && lockJustApproved && (
+        <CreatorLockSuccess
+          name={draft.name}
+          primaryUrl={images[draft.identityReferences.primaryReference ?? 0]?.url}
+          onContinue={() => { setLockJustApproved(false); goTo('body'); }}
+          onSkipToBrand={() => { setLockJustApproved(false); goTo('brand'); }}
+        />
+      )}
 
-            {/* Progress bar */}
-            {(aiGenLoading || aiGenImages.length > 0) && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, font: '500 0.8rem/1 var(--font-ui)' }}>
-                    {aiGenLoading && <Icon name="sparkles" size={14} strokeWidth={1.75} style={{ animation: 'spin 1.4s linear infinite' }} />}
-                    <span style={{ color: aiGenLoading ? 'var(--accent-deep)' : 'var(--text-muted)' }}>
-                      {aiGenLoading ? (aiGenStep || 'Working…') : 'Complete'}
-                    </span>
-                  </div>
-                  <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                    {Math.round(aiGenProgress)}%
-                  </span>
-                </div>
-                <div
-                  role="progressbar"
-                  aria-label="Creator generation progress"
-                  aria-valuenow={Math.round(aiGenProgress)}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  style={{ height: 6, background: 'var(--rose-deep)', borderRadius: 99, overflow: 'hidden', position: 'relative' }}
-                >
-                  <div style={{ height: '100%', width: `${aiGenProgress}%`, background: 'var(--grad-coral)', borderRadius: 99, transition: 'width 0.15s linear' }} />
-                  {/* Indeterminate shimmer while parked at a stage ceiling waiting on the backend — makes the long real-generation waits read as "working," not frozen */}
-                  {aiGenLoading && aiGenProgress > 0 && (
-                    <div style={{
-                      position: 'absolute', top: 0, left: 0, height: '100%', width: '40%',
-                      background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)',
-                      animation: 'generation-progress-sweep 1.3s ease-in-out infinite',
-                    }} />
-                  )}
-                </div>
-                {!aiGenApproval && (aiGenLoading || aiGenImages.length > 1) && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
-                    {['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'].map((label, i) => (
-                      <div key={i} style={{ textAlign: 'center', font: '500 0.6rem/1 var(--font-ui)', letterSpacing: '0.03em', textTransform: 'uppercase', color: aiGenImages[i] ? 'var(--accent-deep)' : 'var(--text-faint)', transition: 'color 0.4s ease' }}>
-                        {label}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+      {step === 'body' && (
+        <>
+          {packError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{packError}</p>}
+          <BodyIdentityForm
+            draft={draft}
+            onChange={patchDraft}
+            fullBodyUrl={images[4]?.url}
+            onRefineFullBody={handleRefineFullBody}
+            refining={refiningBody}
+            onContinue={() => goTo('brand')}
+          />
+        </>
+      )}
 
-            {/* Main preview area — trait summary before generation, real photos after */}
-            {aiGenImages.length === 0 ? (
-              <TraitSummary name={aiGenName} chips={traitChips} />
-            ) : (
-              <>
-                {aiGenAnchor && !aiGenApproval && !aiGenLocked && (
-                  <span style={{ font: 'var(--text-xs)', color: 'var(--accent-deep)' }}>● Face Lock Ready</span>
-                )}
-                {(aiGenApproval || aiGenLocked) ? (
-                  // Approval / locked view — headshot centered with optional lock animation
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                    <style>{`
-                      @keyframes ts-scan {
-                        0%   { top: 0%; opacity: 1; }
-                        100% { top: 100%; opacity: 0; }
-                      }
-                      @keyframes ts-lock-pop {
-                        0%   { transform: translate(-50%,-50%) scale(0.4); opacity: 0; }
-                        60%  { transform: translate(-50%,-50%) scale(1.15); opacity: 1; }
-                        80%  { transform: translate(-50%,-50%) scale(0.95); }
-                        100% { transform: translate(-50%,-50%) scale(1); opacity: 1; }
-                      }
-                      @keyframes ts-lock-ring {
-                        0%   { transform: translate(-50%,-50%) scale(1); opacity: 0.7; }
-                        100% { transform: translate(-50%,-50%) scale(2.2); opacity: 0; }
-                      }
-                      @keyframes ts-badge-in {
-                        0%   { opacity: 0; transform: translateY(6px) scale(0.95); }
-                        100% { opacity: 1; transform: translateY(0) scale(1); }
-                      }
-                      @keyframes ts-pulse-glow {
-                        0%, 100% { box-shadow: 0 0 0 0 rgba(220,80,80,0.35); }
-                        50%       { box-shadow: 0 0 0 8px rgba(220,80,80,0); }
-                      }
-                      @keyframes ts-corner-draw {
-                        0%   { stroke-dashoffset: 60; }
-                        100% { stroke-dashoffset: 0; }
-                      }
-                    `}</style>
-
-                    <div style={{ width: '70%', position: 'relative' }}>
-                      {/* Headshot */}
-                      <div
-                        onClick={() => !aiGenLocked && setLightboxSrc(aiGenImages[0])}
-                        style={{
-                          aspectRatio: '2/3',
-                          borderRadius: 'var(--radius-lg)',
-                          overflow: 'hidden',
-                          border: '2px solid var(--accent-deep)',
-                          cursor: aiGenLocked ? 'default' : 'zoom-in',
-                          position: 'relative',
-                          animation: aiGenLocked ? 'ts-pulse-glow 2s ease-in-out infinite' : 'none',
-                        }}
-                      >
-                        <img src={aiGenImages[0]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Headshot" />
-
-                        {/* Scan line — plays once on lock */}
-                        {aiGenLocked && (
-                          <div style={{
-                            position: 'absolute', left: 0, right: 0, height: 3,
-                            background: 'linear-gradient(90deg, transparent, var(--accent-deep), transparent)',
-                            top: 0,
-                            animation: 'ts-scan 0.9s ease-in forwards',
-                            animationDelay: '0.05s',
-                            pointerEvents: 'none',
-                          }} />
-                        )}
-
-                        {/* Corner brackets SVG overlay */}
-                        {aiGenLocked && (
-                          <svg viewBox="0 0 100 150" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-                            {[['0,0','20,0','0,0','0,20'],['80,0','100,0','100,0','100,20'],['0,130','0,150','0,150','20,150'],['80,150','100,150','100,150','100,130']].map(([a,b,c,d], idx) => (
-                              <polyline key={idx} points={`${a} ${b}`} fill="none" stroke="var(--accent-deep)" strokeWidth="3" strokeLinecap="round"
-                                style={{ strokeDasharray: 60, strokeDashoffset: 60, animation: `ts-corner-draw 0.4s ease forwards`, animationDelay: `${0.2 + idx * 0.06}s` }} />
-                            ))}
-                            {[['0,0','0,20'],['80,0','100,0'],['0,130','0,150'],['100,130','100,150']].map(([a,b], idx) => (
-                              <polyline key={`v${idx}`} points={`${a} ${b}`} fill="none" stroke="var(--accent-deep)" strokeWidth="3" strokeLinecap="round"
-                                style={{ strokeDasharray: 60, strokeDashoffset: 60, animation: `ts-corner-draw 0.4s ease forwards`, animationDelay: `${0.22 + idx * 0.06}s` }} />
-                            ))}
-                          </svg>
-                        )}
-
-                        {/* Lock icon pop */}
-                        {aiGenLocked && (
-                          <>
-                            <div style={{
-                              position: 'absolute', top: '50%', left: '50%',
-                              width: 56, height: 56, borderRadius: '50%',
-                              background: 'var(--accent-deep)',
-                              transform: 'translate(-50%,-50%)',
-                              animation: 'ts-lock-ring 0.7s ease-out forwards',
-                              animationDelay: '0.5s',
-                              opacity: 0,
-                              pointerEvents: 'none',
-                            }} />
-                            <div style={{
-                              position: 'absolute', top: '50%', left: '50%',
-                              width: 52, height: 52, borderRadius: '50%',
-                              background: 'rgba(0,0,0,0.72)',
-                              backdropFilter: 'blur(4px)',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              animation: 'ts-lock-pop 0.5s cubic-bezier(.34,1.56,.64,1) forwards',
-                              animationDelay: '0.45s',
-                              opacity: 0,
-                              pointerEvents: 'none',
-                            }}>
-                              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                <rect x="3" y="11" width="18" height="11" rx="2"/>
-                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                              </svg>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Identity locked badge */}
-                    {aiGenLocked && (
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 7,
-                        padding: '7px 14px', borderRadius: 99,
-                        background: 'var(--rose-deep)',
-                        border: '1px solid var(--accent-deep)',
-                        animation: 'ts-badge-in 0.4s ease forwards',
-                        animationDelay: '0.8s',
-                        opacity: 0,
-                      }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-deep)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="3" y="11" width="18" height="11" rx="2"/>
-                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                        </svg>
-                        <span style={{ font: '600 0.75rem/1 var(--font-ui)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent-deep)' }}>
-                          Identity Locked
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                    {['Headshot', 'Bust Up', '¾ Left', '¾ Right', 'Full Body'].map((label, i) => (
-                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div
-                          onClick={() => aiGenImages[i] && !aiGenImages[i].startsWith('ERROR:') && setLightboxSrc(aiGenImages[i])}
-                          style={{ aspectRatio: '2/3', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--rose-glass)', border: '1px solid var(--border)', cursor: aiGenImages[i] ? 'zoom-in' : 'default' }}
-                        >
-                          {aiGenImages[i] && !aiGenImages[i].startsWith('ERROR:')
-                            ? <img src={aiGenImages[i]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={label} />
-                            : aiGenLoading && <div style={{ width: '100%', height: '100%', background: 'var(--grad-portrait)', opacity: 0.4 }} />
-                          }
-                        </div>
-                        <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.03em', fontSize: '0.58rem' }}>{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-
-            {aiGenError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{aiGenError}</p>}
-            {aiGenSaveError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{aiGenSaveError}</p>}
-
-            {/* Actions */}
-            {aiGenApproval && !aiGenLoading ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ font: '600 0.85rem/1.4 var(--font-ui)', color: 'var(--text-strong)' }}>
-                  Is this {aiGenName || 'your creator'}?
-                </div>
-                <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                  Approve the headshot and we'll generate the full casting sheet. Not feeling it? Try again for a new face.
-                </div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <Button variant="primary" onClick={handleAiGenApprove}>
-                    <Icon name="check" size={14} /> That's them — generate the rest
-                  </Button>
-                  <Button variant="secondary" onClick={handleAiGenerate}>
-                    <Icon name="refresh-cw" size={14} /> Try again
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {aiGenImages.length <= 1 ? (
-                  <Button variant="primary" loading={aiGenLoading} onClick={handleAiGenerate} disabled={aiGenLoading} full>
-                    <Icon name="sparkles" size={15} style={aiGenLoading ? { animation: 'spin 1s linear infinite' } : {}} />
-                    {aiGenLoading ? (aiGenStep || 'Generating…') : 'Generate Headshot'}
-                  </Button>
-                ) : (
-                  <>
-                    <Button variant="accent" onClick={handleSaveCreator} loading={aiGenSaving} disabled={aiGenLoading || aiGenSaving}>
-                      <Icon name="user-check" size={15} /> {aiGenSaving ? 'Saving…' : 'Save Creator'}
-                    </Button>
-                    <Button variant="secondary" onClick={handleAiGenerate} disabled={aiGenLoading || aiGenSaving}>
-                      <Icon name="refresh-cw" size={14} /> Start Over
-                    </Button>
-                  </>
-                )}
-              </div>
-            )}
-          </Card>
-        </div>
-      </div>
-
-      {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
+      {step === 'brand' && (
+        <>
+          {saveError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{saveError}</p>}
+          <CreatorBrandForm draft={draft} onChange={patchDraft} onSave={handleSaveCreator} saving={saving} />
+        </>
+      )}
 
     </div>
   );

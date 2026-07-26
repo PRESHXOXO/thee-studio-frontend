@@ -13,7 +13,7 @@ const S = {
     flexDirection: 'column',
     height: 'calc(100vh - var(--topbar-h, 56px) - 64px)',
     minHeight: 500,
-    background: 'var(--surface)',
+    background: 'var(--surface-card)',
     borderRadius: 'var(--radius-xl)',
     border: '1px solid var(--border)',
     overflow: 'hidden',
@@ -24,7 +24,7 @@ const S = {
     gap: 12,
     padding: '16px 20px',
     borderBottom: '1px solid var(--border)',
-    background: 'var(--cream)',
+    background: 'var(--surface-inset)',
     flexShrink: 0,
   },
   headerAvatar: {
@@ -35,7 +35,7 @@ const S = {
     flexShrink: 0,
   },
   headerText: { flex: 1 },
-  headerTitle: { font: '600 15px/1 var(--font-ui)', color: 'var(--text)', margin: 0 },
+  headerTitle: { font: '600 15px/1 var(--font-ui)', color: 'var(--text-body)', margin: 0 },
   headerSub: { font: '400 12px/1 var(--font-ui)', color: 'var(--text-muted)', marginTop: 3 },
   messages: {
     flex: 1,
@@ -58,13 +58,13 @@ const S = {
   },
   welcomeOrb: {
     width: 72, height: 72, borderRadius: '50%',
-    background: 'linear-gradient(135deg, var(--accent) 0%, #c0392b 100%)',
+    background: 'var(--grad-coral)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     color: '#fff', font: '700 28px/1 var(--font-ui)',
-    boxShadow: '0 8px 32px rgba(var(--accent-rgb, 205,92,92), 0.3)',
+    boxShadow: 'var(--shadow-coral)',
     marginBottom: 8,
   },
-  welcomeTitle: { font: '600 20px/1.3 var(--font-display)', color: 'var(--text)', margin: 0 },
+  welcomeTitle: { font: '600 20px/1.3 var(--font-display)', color: 'var(--text-body)', margin: 0 },
   welcomeSub: { font: '400 14px/1.6 var(--font-ui)', color: 'var(--text-muted)', maxWidth: 380, margin: 0 },
   welcomeHints: {
     display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 8,
@@ -89,10 +89,10 @@ const S = {
     maxWidth: '72%',
     padding: '12px 16px',
     borderRadius: '18px 18px 18px 4px',
-    background: 'var(--cream)',
+    background: 'var(--surface-inset)',
     border: '1px solid var(--border)',
     font: '400 14px/1.6 var(--font-ui)',
-    color: 'var(--text)',
+    color: 'var(--text-body)',
     whiteSpace: 'pre-wrap',
   },
   bubbleUser: {
@@ -132,7 +132,7 @@ const S = {
     display: 'flex',
     flexDirection: 'column',
     borderTop: '1px solid var(--border)',
-    background: 'var(--cream)',
+    background: 'var(--surface-inset)',
     padding: '12px 16px',
     gap: 10,
     flexShrink: 0,
@@ -140,7 +140,7 @@ const S = {
   refPreview: {
     display: 'flex', alignItems: 'center', gap: 10,
     padding: '8px 12px',
-    background: 'var(--surface)',
+    background: 'var(--surface-inset)',
     borderRadius: 'var(--radius-lg)',
     border: '1px solid var(--border)',
   },
@@ -150,7 +150,7 @@ const S = {
   attachBtn: {
     width: 40, height: 40, borderRadius: 'var(--radius-lg)',
     border: '1px solid var(--border)',
-    background: 'var(--surface)',
+    background: 'var(--surface-inset)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'pointer', color: 'var(--text-muted)',
     transition: 'border-color 0.15s, color 0.15s',
@@ -161,9 +161,9 @@ const S = {
     padding: '10px 14px',
     borderRadius: 'var(--radius-lg)',
     border: '1px solid var(--border)',
-    background: 'var(--surface)',
+    background: 'var(--surface-inset)',
     font: '400 14px/1.5 var(--font-ui)',
-    color: 'var(--text)',
+    color: 'var(--text-body)',
     resize: 'none',
     outline: 'none',
     minHeight: 42, maxHeight: 120,
@@ -257,11 +257,23 @@ const HINTS = [
   'Black car interior editorial',
 ];
 
-export function SceneFlow() {
+function creatorImage(creator) {
+  return creator?.refImages?.[0] || creator?.image || null;
+}
+
+// campaignId / initialVision / creator thread the Director's session context
+// (pinned campaign, re-run vision, selected creator) into this tab so the
+// global banner + creator selector are honest here too — not Guided-only.
+export function SceneFlow({ campaignId = null, initialVision = '', creator = null }) {
   const [messages, setMessages] = React.useState([]); // { role, text, imageB64, imageUrl }
   const [history, setHistory]   = React.useState([]); // OpenAI message history
-  const [input, setInput]       = React.useState('');
-  const [refImage, setRefImage] = React.useState(null); // { dataUrl, name }
+  const [input, setInput]       = React.useState(initialVision || '');
+  // Pre-attach the session creator's photo as the reference so "Talk It
+  // Through" shoots the same person the rest of Director is about.
+  const [refImage, setRefImage] = React.useState(() => {
+    const img = creatorImage(creator);
+    return img ? { dataUrl: img, name: `${creator.name || 'Creator'} (creator)` } : null;
+  });
   const [thinking, setThinking] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
   const [scene, setScene]       = React.useState(null);
@@ -309,6 +321,9 @@ export function SceneFlow() {
       setHistory(newHistory);
       setThinking(false);
       setMessages(m => [...m, { role: 'assistant', text: aiReply }]);
+      // Reference image was transmitted this turn — clear it so it isn't
+      // re-sent (and re-read by the model) on every subsequent message.
+      if (refImage) setRefImage(null);
 
       if (sceneData) {
         setScene(sceneData);
@@ -345,6 +360,8 @@ export function SceneFlow() {
           saveToLibrary(`data:image/png;base64,${result.result_b64}`, {
             source: 'scene_flow',
             prompt: [sceneData.setting, sceneData.wardrobe, sceneData.location].filter(Boolean).join(' · '),
+            campaign: campaignId || undefined,
+            character: creator?.id,
           }).catch(() => {});
         }
       }

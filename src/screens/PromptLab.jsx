@@ -95,10 +95,14 @@ function PromptBlock({ prompt, onCopy, copied }) {
   );
 }
 
-export function PromptLab({ onNav }) {
+// campaignId / initialVision / creator carry the Director session context in
+// so the pinned campaign + selected creator apply to this tab too (output is
+// tagged to the campaign, and the creator's photo pre-fills the identity
+// reference), not just Guided.
+export function PromptLab({ onNav, campaignId = null, initialVision = '', creator = null }) {
   // Step 1 — describe it
-  const [rawInput, setRawInput] = React.useState('');
-  const [refImage, setRefImage] = React.useState(null); // compressed data URL
+  const [rawInput, setRawInput] = React.useState(initialVision || '');
+  const [refImage, setRefImage] = React.useState(() => creator?.refImages?.[0] || creator?.image || null); // compressed data URL
   const [target, setTarget]     = React.useState('openai');
   const fileRef = React.useRef(null);
 
@@ -224,6 +228,8 @@ export function PromptLab({ onNav }) {
           source: 'prompt_lab',
           engine: adapter.label,
           prompt: activePrompt.slice(0, 160),
+          campaign: campaignId || undefined,
+          character: creator?.id,
         }).catch(() => {});
       });
     } catch (e) {

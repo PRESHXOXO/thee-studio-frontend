@@ -91,9 +91,9 @@ function CharacterSelector({ characters, selectedId, onSelect }) {
 // (sceneFlowChat/sceneFlowGenerate), a genuinely different pipeline that
 // wasn't rewired per an explicit product call — see the Phase 3 summary.
 const MODES = [
-  { id: 'guided',   label: 'Guided',            icon: 'sliders-horizontal' },
-  { id: 'describe', label: 'Describe It',        icon: 'flask-conical' },
-  { id: 'talk',     label: 'Talk It Through',    icon: 'message-circle' },
+  { id: 'guided',   label: 'Guided',            icon: 'sliders-horizontal', help: 'Dial in a shot with structured controls, built around your creator’s locked identity.' },
+  { id: 'describe', label: 'Describe It',        icon: 'flask-conical',      help: 'Describe the image in plain words — AI engineers a cinema-grade prompt, then generates it here.' },
+  { id: 'talk',     label: 'Talk It Through',    icon: 'message-circle',     help: 'Chat it out — answer a few quick questions and Scene Flow builds the scene with you.' },
 ];
 
 export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'None', initialVision = '', initialCampaign = null, initialCreatorId = null }) {
@@ -207,6 +207,11 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
         ))}
       </div>
 
+      {/* Per-mode explainer — tells a new user why to pick this tab. */}
+      <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: -12 }}>
+        {MODES.find(m => m.id === mode)?.help}
+      </div>
+
       {mode === 'guided' && (
         gated ? (
           <Card style={{ display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center', textAlign: 'center', padding: '40px 32px' }}>
@@ -245,9 +250,22 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
         )
       )}
 
-      {mode === 'describe' && <PromptLab onNav={onNav} />}
+      {mode === 'describe' && (
+        <PromptLab
+          onNav={onNav}
+          campaignId={initialCampaign?.id ?? null}
+          initialVision={initialVision}
+          creator={selectedChar}
+        />
+      )}
 
-      {mode === 'talk' && <SceneFlow />}
+      {mode === 'talk' && (
+        <SceneFlow
+          campaignId={initialCampaign?.id ?? null}
+          initialVision={initialVision}
+          creator={selectedChar}
+        />
+      )}
 
     </div>
   );

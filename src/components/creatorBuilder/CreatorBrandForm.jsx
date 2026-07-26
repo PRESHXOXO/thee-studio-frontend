@@ -11,13 +11,13 @@ function Pill({ label, active, onClick }) {
   return (
     <button
       onClick={onClick}
+      className="ts-pill"
       style={{
         padding: '6px 14px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
         border: `1.5px solid ${active ? 'var(--accent-deep)' : 'var(--border)'}`,
         background: active ? 'var(--rose-deep)' : 'transparent',
         color: active ? 'var(--accent-deep)' : 'var(--text-muted)',
         font: '500 0.78rem/1 var(--font-ui)',
-        transition: 'all var(--t-fast)',
       }}
     >
       {label}

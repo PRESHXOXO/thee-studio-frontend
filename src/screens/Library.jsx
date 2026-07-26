@@ -440,6 +440,7 @@ export function Library() {
               <button
                 key={f.id}
                 onClick={() => setFilter(f.id)}
+                className="ts-pill"
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                   padding: '7px 14px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',

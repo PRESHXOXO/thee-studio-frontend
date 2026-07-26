@@ -494,6 +494,7 @@ export function Campaigns({ onNav }) {
               <button
                 key={tab.id}
                 onClick={() => setFilter(tab.id)}
+                className="ts-pill"
                 style={{
                   padding: '7px 14px', borderRadius: 'var(--radius-pill)',
                   border: `1px solid ${active ? 'var(--border-strong)' : 'var(--border)'}`,

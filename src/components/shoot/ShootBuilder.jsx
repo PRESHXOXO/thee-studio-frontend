@@ -23,6 +23,7 @@ function PillButton({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
+      className="ts-pill"
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '7px 13px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
@@ -30,7 +31,6 @@ function PillButton({ active, onClick, children }) {
         background: active ? 'var(--rose-deep)' : 'transparent',
         color: active ? 'var(--accent-deep)' : 'var(--text-muted)',
         font: '500 0.8125rem/1 var(--font-ui)', fontFamily: 'inherit',
-        transition: 'all var(--t-fast)',
       }}
     >
       {children}

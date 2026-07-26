@@ -49,3 +49,24 @@
   transform: translateY(4px);
   box-shadow: 0 0 0 0 var(--btn-shadow, rgba(0,0,0,0.12));
 }
+
+/* Interactive card — lifts on hover, settles on press. */
+.ts-card {
+  transition: transform 130ms cubic-bezier(0.3,0.7,0.4,1), box-shadow 130ms cubic-bezier(0.3,0.7,0.4,1), border-color 130ms ease;
+}
+.ts-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+.ts-card:active {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Tactile pill — subtle springy press, no layout shift. */
+.ts-pill {
+  transition: transform 90ms cubic-bezier(0.3,0.7,0.4,1), background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.ts-pill:not(:disabled):hover { transform: translateY(-1px); }
+.ts-pill:not(:disabled):active { transform: translateY(1px) scale(0.97); }

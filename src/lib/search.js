@@ -10,7 +10,9 @@ const SCREENS = [
   { id: 'campaigns',  label: 'Campaigns' },
   { id: 'library',    label: 'Library' },
   { id: 'history',    label: 'History' },
-  { id: 'settings',   label: 'Engine Library' },
+  { id: 'exports',    label: 'Exports' },
+  { id: 'runs',       label: 'Jobs' },
+  { id: 'settings',   label: 'Generation Settings' },
 ];
 
 function loadJSON(key) {

@@ -5,7 +5,7 @@ const createId = prefix => `${prefix}_${crypto.randomUUID?.() || `${Date.now()}_
 const empty = () => ({
   creators: [], identities: [], references: [], projects: [], shots: [],
   generations: [], assets: [], reviews: [], selections: [], clips: [],
-  exports: [], runs: [], events: [],
+  exports: [], runs: [], events: [], usage: { included: 200, used: 0 },
 });
 
 export class LocalPipelineRepository {
@@ -14,6 +14,7 @@ export class LocalPipelineRepository {
     this.key = `ts_production_v1:${userId}`;
     try { this.state = JSON.parse(localStorage.getItem(this.key) || 'null') || empty(); }
     catch { this.state = empty(); }
+    if (!this.state.usage) this.state.usage = { included: 200, used: 0 };
   }
 
   save() { localStorage.setItem(this.key, JSON.stringify(this.state)); }
@@ -84,6 +85,49 @@ export class LocalPipelineRepository {
   }
 
   async listProjects() { return [...this.state.projects].reverse(); }
+  ensureSampleWorkspace() {
+    if (!this.sampleWorkspacePromise) {
+      this.sampleWorkspacePromise = this.createSampleWorkspace();
+    }
+    return this.sampleWorkspacePromise;
+  }
+  async createSampleWorkspace() {
+    if (this.state.projects.length) return null;
+    let creator = this.state.creators[0];
+    if (!creator) {
+      creator = await this.createCreator({
+        name: 'Studio Muse',
+        handle: 'studio-muse',
+        description: 'A sample creator for exploring the production workspace.',
+      });
+      await this.saveIdentity(creator.id, {
+        identityNotes: 'Warm, confident editorial presence with natural skin texture.',
+        lockedTraits: ['consistent facial proportions', 'warm brown eyes', 'natural skin texture'],
+        doNotChangeNotes: 'Preserve identity, age, skin tone, and facial geometry.',
+      });
+    }
+    const project = await this.createProject({
+      creatorId: creator.id,
+      title: 'Welcome Campaign',
+      brief: 'A three-frame introduction to identity-locked, still-first production.',
+      defaultAspectRatio: '4:5',
+    });
+    await this.createShot(project.id, {
+      title: 'Editorial introduction',
+      shot_type: 'beauty close-up',
+      prompt_template: 'A confident editorial portrait that introduces the creator with natural polish.',
+      framing: 'Chest-up portrait, eye level, 50mm feel',
+      environment: 'Warm minimal studio with subtle depth',
+      styling_notes: 'Signature wardrobe with restrained accessories',
+      lighting_notes: 'Large soft key with gentle warm fill',
+      realism_notes: 'Natural skin texture, coherent shadows, lived-in posture',
+      motion_plan: 'Natural blink and subtle breathing',
+      negative_constraints: 'No identity drift, warped hands, plastic skin, or text',
+      aspect_ratio: '4:5',
+      position: 1,
+    });
+    return project;
+  }
   async createProject(input) {
     return this.add(this.state.projects, {
       id: createId('project'), user_id: this.userId, creator_id: input.creatorId,
@@ -127,6 +171,9 @@ export class LocalPipelineRepository {
       external_run_id: input.external_run_id || null, error_code: input.error_code || null,
       error_message: input.error_message || null, started_at: input.started_at || null,
       completed_at: input.completed_at || null, created_at: timestamp(),
+      progress: input.progress || 0, retry_of: input.retry_of || null,
+      attempt: input.attempt || 1, cancel_requested_at: null,
+      idempotency_key: input.idempotency_key || null,
     });
   }
   async updateProviderRun(id, patch) {
@@ -140,6 +187,50 @@ export class LocalPipelineRepository {
   }
   async listRunHistory() {
     return { runs: [...this.state.runs].reverse(), events: [...this.state.events].reverse() };
+  }
+  async getProviderRun(id) { return this.state.runs.find(item => item.id === id) || null; }
+  async cancelProviderRun(id) {
+    const run = await this.getProviderRun(id);
+    if (!run || !['queued', 'running'].includes(run.status)) return run;
+    Object.assign(run, { status: 'cancelled', cancel_requested_at: timestamp(), completed_at: timestamp() });
+    await this.addRunEvent(id, 'cancelled', 'Generation cancelled by the user.');
+    this.save();
+    return run;
+  }
+  async recoverInterruptedRuns(maxAgeMs = 240000) {
+    const cutoff = Date.now() - maxAgeMs;
+    const interrupted = this.state.runs.filter(run => run.status === 'running' && new Date(run.started_at || run.created_at).getTime() < cutoff);
+    for (const run of interrupted) {
+      Object.assign(run, { status: 'failed', error_code: 'interrupted', error_message: 'Generation was interrupted and can be retried.', completed_at: timestamp() });
+      await this.addRunEvent(run.id, 'recovered', 'Interrupted generation marked retryable.');
+    }
+    this.save();
+  }
+  async getUsageSummary() {
+    return { ...this.state.usage, remaining: Math.max(this.state.usage.included - this.state.usage.used, 0) };
+  }
+  async reserveLocalCredits(units) {
+    if (this.state.usage.used + units > this.state.usage.included) throw new Error('Generation credit limit reached.');
+    this.state.usage.used += units;
+    this.save();
+    return this.getUsageSummary();
+  }
+  async getShotContext(shotId) {
+    const shot = this.state.shots.find(item => item.id === shotId);
+    if (!shot) throw new Error('Shot not found.');
+    const project = this.state.projects.find(item => item.id === shot.project_id);
+    const identity = this.state.identities.find(item => item.creator_id === project?.creator_id) || null;
+    return { shot, project, identity };
+  }
+  async getStillAsset(id) {
+    const asset = this.state.assets.find(item => item.id === id);
+    if (!asset) throw new Error('Still asset not found.');
+    return asset;
+  }
+  async getClip(id) {
+    const clip = this.state.clips.find(item => item.id === id);
+    if (!clip) throw new Error('Clip not found.');
+    return clip;
   }
   async createStillGeneration(input) {
     return this.add(this.state.generations, {

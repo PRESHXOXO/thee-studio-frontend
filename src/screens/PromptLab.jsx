@@ -7,6 +7,7 @@ import { ImageLightbox } from '../components/feedback/ImageLightbox.jsx';
 import { promptLabBuild, characterGenerate, generateImage, fetchEngineChoices } from '../api/studio.js';
 import { saveToLibrary } from '../lib/library.js';
 import { compressImage } from '../lib/imageUtils.js';
+import { persistCloudDocument } from '../lib/cloudStore.js';
 import {
   TARGET_MODELS, getAdapter, resolveEngineName, aspectToImageSize,
   FORMATS, ASPECTS, LIGHTINGS, FINISHES, SURPRISE, STANDING_NEGATIVES,
@@ -29,7 +30,11 @@ function pushHistory(entry) {
   const h = loadHistory();
   h.unshift({ id: Date.now(), savedAt: new Date().toISOString(), ...entry });
   if (h.length > 30) h.splice(30);
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch {}
+  try {
+    const value = JSON.stringify(h);
+    localStorage.setItem(HISTORY_KEY, value);
+    void persistCloudDocument(HISTORY_KEY, value).catch(() => undefined);
+  } catch {}
   return h;
 }
 

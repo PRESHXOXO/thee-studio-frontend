@@ -10,7 +10,7 @@ const ProductionContext = React.createContext(null);
 
 export function ProductionProvider({ children }) {
   const auth = useAuth();
-  const value = React.useMemo(() => {
+  const runtime = React.useMemo(() => {
     if (!auth.session) return null;
     if (auth.mode === 'cloud') {
       const db = getSupabase();
@@ -28,6 +28,15 @@ export function ProductionProvider({ children }) {
       isCloud: false,
     };
   }, [auth.mode, auth.session]);
+
+  const [usage, setUsage] = React.useState({ included: 200, used: 0, remaining: 200 });
+  const refreshUsage = React.useCallback(async () => {
+    if (!runtime) return;
+    try { setUsage(await runtime.repository.getUsageSummary()); } catch {}
+  }, [runtime]);
+  React.useEffect(() => { void refreshUsage(); }, [refreshUsage]);
+
+  const value = React.useMemo(() => runtime ? { ...runtime, usage, refreshUsage } : null, [runtime, usage, refreshUsage]);
 
   return <ProductionContext.Provider value={value}>{children}</ProductionContext.Provider>;
 }

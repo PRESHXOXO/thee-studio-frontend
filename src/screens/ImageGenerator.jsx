@@ -2,6 +2,7 @@ import React from 'react';
 import { generateCharacterSeed, generateCharacterVariationShot, parseCreatorCorrection } from '../api/studio.js';
 import { compressImage } from '../lib/imageUtils.js';
 import { saveActiveCreatorId } from '../lib/activeCreator.js';
+import { persistCloudDocument } from '../lib/cloudStore.js';
 import {
   blankCreatorDraft, touchDraft, composeDescription, composeBodyDescription,
   parseCorrectionText, CREATOR_STATUS,
@@ -331,7 +332,9 @@ export function ImageGenerator({ onNav, initialName = '', initialNiche = '', ini
     try {
       const existing = JSON.parse(localStorage.getItem('ts_characters') || '[]');
       existing.push(newChar);
-      localStorage.setItem('ts_characters', JSON.stringify(existing));
+      const value = JSON.stringify(existing);
+      localStorage.setItem('ts_characters', value);
+      await persistCloudDocument('ts_characters', value);
     } catch (e) {
       setSaving(false);
       setSaveError(

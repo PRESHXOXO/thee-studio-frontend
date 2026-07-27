@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
+import { persistCloudDocument } from '../lib/cloudStore.js';
 
 const REF_KEY = 'ts_references';
 
@@ -9,7 +10,11 @@ function loadRefs() {
 }
 
 function saveRefs(refs) {
-  try { localStorage.setItem(REF_KEY, JSON.stringify(refs)); } catch {}
+  try {
+    const value = JSON.stringify(refs);
+    localStorage.setItem(REF_KEY, value);
+    void persistCloudDocument(REF_KEY, value).catch(() => undefined);
+  } catch {}
 }
 
 function RefCard({ item, selected, onSelect }) {

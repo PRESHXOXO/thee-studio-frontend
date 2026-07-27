@@ -3,6 +3,7 @@ import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { saveApiKey, saveGeminiKey, saveReplicateKey, saveFalKey, fetchApiKeyStatus } from '../api/studio.js';
+import { useProduction } from '../context/ProductionContext.jsx';
 
 // `provider` maps an engine to the backend api_key_status flag so a key set
 // server-side (in .env at boot) reads as connected even if it was never saved
@@ -187,9 +188,11 @@ function KeyField({ label, description, placeholder, localStorageKey, serverConf
 }
 
 export function Settings() {
+  const { usage } = useProduction();
   const [activeEngine, setActiveEngine] = React.useState('openai');
   const [savedTick, setSavedTick] = React.useState(0);
   const [keyStatus, setKeyStatus] = React.useState({}); // { openai, gemini, replicate, fal }
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
   const engineDef = ENGINES.find(e => e.id === activeEngine);
   const engine = engineDef ? { ...engineDef, status: resolveEngineStatus(engineDef, keyStatus) } : engineDef;
   const s = STATUS_CONFIG[engine?.status || 'idle'];
@@ -210,13 +213,43 @@ export function Settings() {
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24 }}>
         <div>
           <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 10 }}>Settings</div>
-          <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 10px' }}>Engine Library</h1>
-          <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 480 }}>Connect and tune the engines that power your studio.</p>
+          <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 10px' }}>Generation Settings</h1>
+          <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 520 }}>Manage included generation credits and advanced provider options.</p>
         </div>
       </div>
 
-      {/* API Keys */}
-      <Card style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <Card variant="rose" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+        <div>
+          <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 8 }}>Managed generation</div>
+          <div style={{ font: '600 1.25rem/1.2 var(--font-display)', color: 'var(--text-strong)' }}>
+            {usage.remaining} credits remaining
+          </div>
+          <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, margin: '7px 0 0', maxWidth: 560 }}>
+            Thee Studio securely runs the recommended generation provider for you. No API key is required for the included workflow.
+          </p>
+        </div>
+        <div style={{ minWidth: 180 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', font: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 7 }}>
+            <span>{usage.used} used</span><span>{usage.included} included</span>
+          </div>
+          <div style={{ height: 8, borderRadius: 'var(--radius-pill)', background: 'var(--white)', overflow: 'hidden' }}>
+            <div style={{ width: `${Math.min(100, (usage.used / Math.max(usage.included, 1)) * 100)}%`, height: '100%', background: 'var(--grad-coral)', borderRadius: 'inherit' }} />
+          </div>
+        </div>
+      </Card>
+
+      <div>
+        <Button variant="secondary" onClick={() => setAdvancedOpen(value => !value)}>
+          <Icon name="settings" size={15} />
+          {advancedOpen ? 'Hide advanced provider setup' : 'Advanced provider setup'}
+        </Button>
+        <p style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', margin: '8px 0 0' }}>
+          Optional: connect your own provider account for specialized engines.
+        </p>
+      </div>
+
+      {/* API keys are an advanced option; managed generation is the default. */}
+      {advancedOpen && <Card style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>API Keys</div>
 
         <KeyField
@@ -265,7 +298,7 @@ export function Settings() {
           onSaved={onKeySaved}
         />
 
-      </Card>
+      </Card>}
 
       {/* 2-column layout */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 20, alignItems: 'start' }}>
@@ -294,7 +327,7 @@ export function Settings() {
 
           <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>
             {engine?.status === 'connected' && 'This engine is connected and ready to use.'}
-            {engine?.status === 'needs-setup' && 'Add the required API key above to activate this engine.'}
+            {engine?.status === 'needs-setup' && 'Open advanced provider setup to connect this engine.'}
             {engine?.status === 'idle' && 'This engine is available but not yet active.'}
           </p>
         </Card>

@@ -56,7 +56,7 @@ test('merged Campaigns pipeline reaches reviewed hero and export', async ({ page
   await expect(page.getByText('hero still')).toBeVisible();
   await expect(page.getByText('ready')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Provider Runs' }).click();
+  await page.getByRole('button', { name: 'Jobs' }).click();
   await expect(page.getByText('generate candidates')).toBeVisible();
   await expect(page.getByText('prepare export')).toBeVisible();
 });

@@ -5,6 +5,7 @@ import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 import { PromptLab } from './PromptLab.jsx';
 import { SceneFlow } from './SceneFlow.jsx';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
+import { persistCloudDocument } from '../lib/cloudStore.js';
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', margin: 0 };
 
@@ -12,7 +13,11 @@ function loadCharacters() {
   try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
 }
 function saveCharacters(list) {
-  try { localStorage.setItem('ts_characters', JSON.stringify(list)); } catch {}
+  try {
+    const value = JSON.stringify(list);
+    localStorage.setItem('ts_characters', value);
+    void persistCloudDocument('ts_characters', value).catch(() => undefined);
+  } catch {}
 }
 function getCharacterImage(char) {
   return char?.refImages?.[0] || char?.image || null;

@@ -6,7 +6,7 @@ export class PipelineService {
     this.providers = providers;
   }
 
-  async generateStills(shot, identity, count) {
+  async generateStills(shot, identity, count, options = {}) {
     const prompt = [
       identity?.identity_notes,
       identity?.locked_traits?.join(', '),
@@ -25,12 +25,16 @@ export class PipelineService {
     const provider = this.providers.still;
     const request = {
       shotId: shot.id, prompt, negativePrompt,
-      candidateCount: count, aspectRatio: shot.aspect_ratio,
+      shotTitle: shot.title, candidateCount: count, aspectRatio: shot.aspect_ratio,
     };
+    if (this.repository.reserveLocalCredits) await this.repository.reserveLocalCredits(count * 2);
     const run = await this.repository.createProviderRun({
       provider_type: 'still', provider_key: provider.key,
       operation: 'generate_candidates', request_payload: request,
-      status: 'running', started_at: now(),
+      status: 'running', started_at: now(), progress: 5,
+      retry_of: options.retryOf || null,
+      attempt: options.attempt || 1,
+      idempotency_key: crypto.randomUUID(),
     });
     const generation = await this.repository.createStillGeneration({
       shot_id: shot.id, provider_run_id: run.id, provider_key: provider.key,
@@ -39,9 +43,16 @@ export class PipelineService {
     await this.repository.addRunEvent(run.id, 'started', `Generating ${count} still candidates.`);
     try {
       const result = await provider.generate({
+        runId: run.id,
         shot, identity, prompt, negativePrompt,
         candidateCount: count, aspectRatio: shot.aspect_ratio,
       });
+      const currentRun = await this.repository.getProviderRun?.(run.id);
+      if (currentRun?.status === 'cancelled') {
+        await this.repository.finishStillGeneration(generation.id, 'cancelled', 'Cancelled by user.');
+        return;
+      }
+      await this.repository.updateProviderRun(run.id, { progress: 75 });
       await this.repository.createStillAssets(
         generation.id,
         shot.id,
@@ -54,11 +65,16 @@ export class PipelineService {
       await this.repository.finishStillGeneration(generation.id, 'succeeded');
       await this.repository.updateProviderRun(run.id, {
         status: 'succeeded', external_run_id: result.externalRunId,
-        response_payload: result.metadata || {}, completed_at: now(),
+        response_payload: result.metadata || {}, completed_at: now(), progress: 100,
       });
       await this.repository.addRunEvent(run.id, 'completed', `${result.assets.length} still candidates ready.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Still generation failed.';
+      const currentRun = await this.repository.getProviderRun?.(run.id);
+      if (currentRun?.status === 'cancelled') {
+        await this.repository.finishStillGeneration(generation.id, 'cancelled', 'Cancelled by user.');
+        return;
+      }
       await this.repository.finishStillGeneration(generation.id, 'failed', message);
       await this.repository.updateProviderRun(run.id, {
         status: 'failed', error_message: message, completed_at: now(),
@@ -68,15 +84,19 @@ export class PipelineService {
     }
   }
 
-  async generateClip(shot, asset, guidance) {
+  async generateClip(shot, asset, guidance, options = {}) {
     const stillUrl = asset.signed_url || asset.external_url;
     if (!stillUrl) throw new Error('Hero still URL is unavailable.');
     const provider = this.providers.clip;
-    const request = { shotId: shot.id, stillAssetId: asset.id, guidance };
+    const request = { shotId: shot.id, stillAssetId: asset.id, stillUrl, guidance };
+    if (this.repository.reserveLocalCredits) await this.repository.reserveLocalCredits(guidance.durationSeconds * 2);
     const run = await this.repository.createProviderRun({
       provider_type: 'clip', provider_key: provider.key,
       operation: 'image_to_video', request_payload: request,
-      status: 'running', started_at: now(),
+      status: 'running', started_at: now(), progress: 5,
+      retry_of: options.retryOf || null,
+      attempt: options.attempt || 1,
+      idempotency_key: crypto.randomUUID(),
     });
     const clip = await this.repository.createClipGeneration({
       shotId: shot.id, assetId: asset.id, providerRunId: run.id,
@@ -85,19 +105,30 @@ export class PipelineService {
     await this.repository.addRunEvent(run.id, 'started', 'Animating selected hero still.');
     try {
       const result = await provider.generate({
-        shotId: shot.id, stillAssetId: asset.id, stillUrl, guidance,
+        runId: run.id, shotId: shot.id, stillAssetId: asset.id, stillUrl, guidance,
       });
+      const currentRun = await this.repository.getProviderRun?.(run.id);
+      if (currentRun?.status === 'cancelled') {
+        await this.repository.finishClipGeneration(clip.id, { status: 'cancelled', error_message: 'Cancelled by user.' });
+        return;
+      }
+      await this.repository.updateProviderRun(run.id, { progress: 75 });
       await this.repository.finishClipGeneration(clip.id, {
         status: 'succeeded', storage_path: result.storagePath,
         external_url: result.externalUrl, error_message: null,
       });
       await this.repository.updateProviderRun(run.id, {
         status: 'succeeded', external_run_id: result.externalRunId,
-        response_payload: result.metadata || {}, completed_at: now(),
+        response_payload: result.metadata || {}, completed_at: now(), progress: 100,
       });
       await this.repository.addRunEvent(run.id, 'completed', 'Clip ready for export.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Clip generation failed.';
+      const currentRun = await this.repository.getProviderRun?.(run.id);
+      if (currentRun?.status === 'cancelled') {
+        await this.repository.finishClipGeneration(clip.id, { status: 'cancelled', error_message: 'Cancelled by user.' });
+        return;
+      }
       await this.repository.finishClipGeneration(clip.id, { status: 'failed', error_message: message });
       await this.repository.updateProviderRun(run.id, {
         status: 'failed', error_message: message, completed_at: now(),
@@ -107,16 +138,20 @@ export class PipelineService {
     }
   }
 
-  async createExport(projectId, sourceAssetId, sourceUrl, assetType, aspectRatio) {
+  async createExport(projectId, sourceAssetId, sourceUrl, assetType, aspectRatio, options = {}) {
     const provider = this.providers.export;
     const request = {
-      projectId, sourceAssetId, assetType, aspectRatio,
+      projectId, sourceAssetId, sourceUrl, assetType, aspectRatio,
       enhance: assetType.startsWith('enhanced_'),
     };
+    if (this.repository.reserveLocalCredits) await this.repository.reserveLocalCredits(request.enhance ? 3 : 1);
     const run = await this.repository.createProviderRun({
       provider_type: 'export', provider_key: provider.key,
       operation: 'prepare_export', request_payload: request,
-      status: 'running', started_at: now(),
+      status: 'running', started_at: now(), progress: 5,
+      retry_of: options.retryOf || null,
+      attempt: options.attempt || 1,
+      idempotency_key: crypto.randomUUID(),
     });
     const job = await this.repository.createExportJob({
       projectId, sourceAssetId, providerRunId: run.id, providerKey: provider.key,
@@ -124,18 +159,29 @@ export class PipelineService {
     });
     await this.repository.addRunEvent(run.id, 'started', 'Preparing export asset.');
     try {
-      const result = await provider.create({ ...request, sourceUrl });
+      const result = await provider.create({ ...request, runId: run.id });
+      const currentRun = await this.repository.getProviderRun?.(run.id);
+      if (currentRun?.status === 'cancelled') {
+        await this.repository.finishExportJob(job.id, { status: 'failed', metadata: { cancelled: true } });
+        return;
+      }
+      await this.repository.updateProviderRun(run.id, { progress: 75 });
       await this.repository.finishExportJob(job.id, {
         status: 'ready', storage_path: result.storagePath,
         external_url: result.externalUrl, metadata: result.metadata || {},
       });
       await this.repository.updateProviderRun(run.id, {
         status: 'succeeded', external_run_id: result.externalRunId,
-        response_payload: result.metadata || {}, completed_at: now(),
+        response_payload: result.metadata || {}, completed_at: now(), progress: 100,
       });
       await this.repository.addRunEvent(run.id, 'completed', 'Export ready.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Export failed.';
+      const currentRun = await this.repository.getProviderRun?.(run.id);
+      if (currentRun?.status === 'cancelled') {
+        await this.repository.finishExportJob(job.id, { status: 'failed', metadata: { cancelled: true } });
+        return;
+      }
       await this.repository.finishExportJob(job.id, { status: 'failed', metadata: { error: message } });
       await this.repository.updateProviderRun(run.id, {
         status: 'failed', error_message: message, completed_at: now(),
@@ -143,5 +189,36 @@ export class PipelineService {
       await this.repository.addRunEvent(run.id, 'failed', message);
       throw error;
     }
+  }
+
+  async retryRun(run) {
+    const attempt = Number(run.attempt || 1) + 1;
+    if (run.provider_type === 'still') {
+      const { shot, identity } = await this.repository.getShotContext(run.request_payload.shotId);
+      return this.generateStills(shot, identity, run.request_payload.candidateCount, {
+        retryOf: run.id, attempt,
+      });
+    }
+    if (run.provider_type === 'clip') {
+      const { shot } = await this.repository.getShotContext(run.request_payload.shotId);
+      const asset = await this.repository.getStillAsset(run.request_payload.stillAssetId);
+      return this.generateClip(shot, asset, run.request_payload.guidance, {
+        retryOf: run.id, attempt,
+      });
+    }
+    if (run.provider_type === 'export') {
+      const source = run.request_payload.assetType.includes('clip')
+        ? await this.repository.getClip(run.request_payload.sourceAssetId)
+        : await this.repository.getStillAsset(run.request_payload.sourceAssetId);
+      return this.createExport(
+        run.request_payload.projectId,
+        run.request_payload.sourceAssetId,
+        source.signed_url || source.external_url,
+        run.request_payload.assetType,
+        run.request_payload.aspectRatio,
+        { retryOf: run.id, attempt },
+      );
+    }
+    throw new Error('This job type cannot be retried.');
   }
 }

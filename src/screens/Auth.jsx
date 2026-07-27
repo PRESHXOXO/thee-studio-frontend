@@ -14,6 +14,7 @@ export function Auth() {
   const [error, setError] = React.useState('');
   const [message, setMessage] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const isMisconfigured = auth.mode === 'misconfigured';
 
   React.useEffect(() => {
     if (auth.session) navigate('/studio', { replace: true });
@@ -101,14 +102,14 @@ export function Auth() {
           </p>
         </div>
 
-        <button type="button" style={{
+        <button type="button" disabled={isMisconfigured} style={{
           width: '100%', padding: '11px 16px',
           background: 'var(--white)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)', cursor: 'pointer',
+          borderRadius: 'var(--radius-md)', cursor: isMisconfigured ? 'not-allowed' : 'pointer',
           font: '500 0.9375rem/1 var(--font-ui)', color: 'var(--text-body)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
           marginBottom: 20,
-          transition: 'var(--t-fast)',
+          transition: 'var(--t-fast)', opacity: isMisconfigured ? 0.55 : 1,
         }}
           onClick={async () => {
             setError('');
@@ -134,7 +135,7 @@ export function Auth() {
         </div>
 
         <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'center', margin: '-4px 0 18px' }}>
-          {auth.mode === 'cloud'
+          {isMisconfigured ? 'Cloud account service is not configured for this deployment' : auth.mode === 'cloud'
             ? 'Secure cloud account · work syncs across devices'
             : 'Local development account · connect Supabase for cloud sync'}
         </div>
@@ -214,13 +215,13 @@ export function Auth() {
             />
           </div>
 
-          {error && (
+          {(error || isMisconfigured) && (
             <div role="alert" style={{
               margin: '-8px 0 16px', padding: '10px 12px',
               borderRadius: 'var(--radius-md)', background: 'var(--status-locked-bg)',
               color: 'var(--cherry)', font: 'var(--text-sm)', lineHeight: 1.4,
             }}>
-              {error}
+              {error || 'Thee Studio cannot sign you in until Supabase is configured. Add the public Supabase URL and anonymous key, then redeploy.'}
             </div>
           )}
           {message && (
@@ -239,9 +240,9 @@ export function Auth() {
             border: 'none', borderRadius: 'var(--radius-md)',
             font: '600 0.9375rem/1 var(--font-ui)', cursor: loading ? 'wait' : 'pointer',
             boxShadow: 'var(--shadow-coral)',
-            transition: 'var(--t-base)', opacity: loading ? 0.7 : 1,
+            transition: 'var(--t-base)', opacity: loading || isMisconfigured ? 0.55 : 1,
           }}
-            disabled={loading}
+            disabled={loading || isMisconfigured}
             onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
             onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
           >

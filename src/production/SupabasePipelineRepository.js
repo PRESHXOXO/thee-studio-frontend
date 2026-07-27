@@ -86,6 +86,50 @@ export class SupabasePipelineRepository {
     if (error) throw new Error(error.message);
     return data || [];
   }
+  ensureSampleWorkspace() {
+    if (!this.sampleWorkspacePromise) {
+      this.sampleWorkspacePromise = this.createSampleWorkspace();
+    }
+    return this.sampleWorkspacePromise;
+  }
+  async createSampleWorkspace() {
+    const [projects, creators] = await Promise.all([this.listProjects(), this.listCreators()]);
+    if (projects.length) return null;
+    let creator = creators[0];
+    if (!creator) {
+      creator = await this.createCreator({
+        name: 'Studio Muse',
+        handle: 'studio-muse',
+        description: 'A sample creator for exploring the production workspace.',
+      });
+      await this.saveIdentity(creator.id, {
+        identityNotes: 'Warm, confident editorial presence with natural skin texture.',
+        lockedTraits: ['consistent facial proportions', 'warm brown eyes', 'natural skin texture'],
+        doNotChangeNotes: 'Preserve identity, age, skin tone, and facial geometry.',
+      });
+    }
+    const project = await this.createProject({
+      creatorId: creator.id,
+      title: 'Welcome Campaign',
+      brief: 'A three-frame introduction to identity-locked, still-first production.',
+      defaultAspectRatio: '4:5',
+    });
+    await this.createShot(project.id, {
+      title: 'Editorial introduction',
+      shot_type: 'beauty close-up',
+      prompt_template: 'A confident editorial portrait that introduces the creator with natural polish.',
+      framing: 'Chest-up portrait, eye level, 50mm feel',
+      environment: 'Warm minimal studio with subtle depth',
+      styling_notes: 'Signature wardrobe with restrained accessories',
+      lighting_notes: 'Large soft key with gentle warm fill',
+      realism_notes: 'Natural skin texture, coherent shadows, lived-in posture',
+      motion_plan: 'Natural blink and subtle breathing',
+      negative_constraints: 'No identity drift, warped hands, plastic skin, or text',
+      aspect_ratio: '4:5',
+      position: 1,
+    });
+    return project;
+  }
   async createProject(input) {
     const result = await this.db.from('generation_projects').insert({
       user_id: this.userId, creator_id: input.creatorId, title: input.title,
@@ -147,6 +191,10 @@ export class SupabasePipelineRepository {
   async createProviderRun(input) {
     const result = await this.db.from('provider_runs').insert({
       ...input, user_id: this.userId, status: input.status || 'queued',
+      progress: input.progress || 0,
+      attempt: input.attempt || 1,
+      retry_of: input.retry_of || null,
+      idempotency_key: input.idempotency_key || crypto.randomUUID(),
     }).select().single();
     return one(result.data, result.error);
   }
@@ -168,6 +216,64 @@ export class SupabasePipelineRepository {
     ]);
     if (runs.error || events.error) throw new Error(runs.error?.message || events.error?.message);
     return { runs: runs.data || [], events: events.data || [] };
+  }
+  async getProviderRun(id) {
+    const { data, error } = await this.db.from('provider_runs').select('*').eq('id', id).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data || null;
+  }
+  async cancelProviderRun(id) {
+    const now = new Date().toISOString();
+    const { data, error } = await this.db.from('provider_runs').update({
+      status: 'cancelled', cancel_requested_at: now, completed_at: now,
+    }).eq('id', id).in('status', ['queued', 'running']).select().maybeSingle();
+    if (error) throw new Error(error.message);
+    if (data) await this.addRunEvent(id, 'cancelled', 'Generation cancelled by the user.');
+    return data || this.getProviderRun(id);
+  }
+  async recoverInterruptedRuns(maxAgeMs = 240000) {
+    const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+    const { data, error } = await this.db.from('provider_runs').update({
+      status: 'failed',
+      error_code: 'interrupted',
+      error_message: 'Generation was interrupted and can be retried.',
+      completed_at: new Date().toISOString(),
+    }).eq('status', 'running').lt('started_at', cutoff).select('id');
+    if (error) throw new Error(error.message);
+    await Promise.all((data || []).map(run => this.addRunEvent(run.id, 'recovered', 'Interrupted generation marked retryable.')));
+  }
+  async getUsageSummary() {
+    const period = new Date();
+    const periodStart = `${period.getUTCFullYear()}-${String(period.getUTCMonth() + 1).padStart(2, '0')}-01`;
+    const { data, error } = await this.db.from('user_usage_monthly')
+      .select('included_credits,used_credits')
+      .eq('period_start', periodStart)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const included = data?.included_credits ?? 200;
+    const used = data?.used_credits ?? 0;
+    return { included, used, remaining: Math.max(included - used, 0) };
+  }
+  async getShotContext(shotId) {
+    const shotResult = await this.db.from('generation_shots').select('*').eq('id', shotId).single();
+    const shot = one(shotResult.data, shotResult.error);
+    const projectResult = await this.db.from('generation_projects').select('*').eq('id', shot.project_id).single();
+    const project = one(projectResult.data, projectResult.error);
+    return { shot, project, identity: await this.getIdentity(project.creator_id) };
+  }
+  async getStillAsset(id) {
+    const { data, error } = await this.db.from('still_generation_assets').select('*').eq('id', id).single();
+    const asset = one(data, error);
+    if (asset.external_url || !asset.storage_path) return { ...asset, signed_url: asset.external_url || undefined };
+    const signed = await this.db.storage.from('generation-assets').createSignedUrl(asset.storage_path, 3600);
+    return { ...asset, signed_url: signed.data?.signedUrl };
+  }
+  async getClip(id) {
+    const { data, error } = await this.db.from('clip_generations').select('*').eq('id', id).single();
+    const clip = one(data, error);
+    if (clip.external_url || !clip.storage_path) return { ...clip, signed_url: clip.external_url || undefined };
+    const signed = await this.db.storage.from('generation-assets').createSignedUrl(clip.storage_path, 3600);
+    return { ...clip, signed_url: signed.data?.signedUrl };
   }
   async createStillGeneration(input) {
     const result = await this.db.from('still_generations').insert({

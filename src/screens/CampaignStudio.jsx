@@ -340,6 +340,7 @@ function CampaignList({ repository, isCloud }) {
       let studioCreators = [];
       try { studioCreators = JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch {}
       await repository.syncStudioCreators?.(studioCreators);
+      await repository.ensureSampleWorkspace?.();
       const [nextCreators, nextProjects] = await Promise.all([repository.listCreators(), repository.listProjects()]);
       setCreators(nextCreators); setProjects(nextProjects);
     } catch (caught) { setError(caught.message || 'Unable to load campaigns.'); }
@@ -389,7 +390,7 @@ function CampaignList({ repository, isCloud }) {
   );
 }
 
-function CampaignDetail({ projectId, repository, pipeline }) {
+function CampaignDetail({ projectId, repository, pipeline, refreshUsage }) {
   const navigate = useNavigate();
   const [workspace, setWorkspace] = React.useState(null);
   const [error, setError] = React.useState('');
@@ -409,7 +410,7 @@ function CampaignDetail({ projectId, repository, pipeline }) {
 
   const run = async (shot, action) => {
     setBusyShot(shot.id); setError('');
-    try { await action(); await load(); }
+    try { await action(); await load(); await refreshUsage(); }
     catch (caught) { setError(caught.message || 'Production action failed.'); }
     finally { setBusyShot(null); }
   };
@@ -473,8 +474,8 @@ function CampaignDetail({ projectId, repository, pipeline }) {
 
 export function CampaignStudio() {
   const { projectId } = useParams();
-  const { repository, pipeline, isCloud } = useProduction();
+  const { repository, pipeline, isCloud, refreshUsage } = useProduction();
   return projectId
-    ? <CampaignDetail projectId={projectId} repository={repository} pipeline={pipeline} />
+    ? <CampaignDetail projectId={projectId} repository={repository} pipeline={pipeline} refreshUsage={refreshUsage} />
     : <CampaignList repository={repository} isCloud={isCloud} />;
 }

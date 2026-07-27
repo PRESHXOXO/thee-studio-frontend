@@ -1,3 +1,5 @@
+import { persistCloudDocument } from './cloudStore.js';
+
 // Persists which creator is "active" across reloads and screens.
 // There is no backend session in this app — this is the local-only
 // equivalent: survives reload, shared by every screen that reads it.
@@ -9,8 +11,13 @@ export function loadActiveCreatorId() {
 
 export function saveActiveCreatorId(id) {
   try {
-    if (id == null) localStorage.removeItem(KEY);
-    else localStorage.setItem(KEY, String(id));
+    if (id == null) {
+      localStorage.removeItem(KEY);
+      void persistCloudDocument(KEY, null).catch(() => undefined);
+    } else {
+      localStorage.setItem(KEY, String(id));
+      void persistCloudDocument(KEY, String(id)).catch(() => undefined);
+    }
   } catch {}
 }
 

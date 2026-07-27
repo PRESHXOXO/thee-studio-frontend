@@ -7,6 +7,7 @@ import { analyzeCharacterImage, extractFaceAnchor, generateReferenceSet } from '
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
 import { compressImage } from '../lib/imageUtils.js';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
+import { persistCloudDocument } from '../lib/cloudStore.js';
 import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 
 // Starter archetypes for the empty-cast state — no fake portraits to seed
@@ -37,7 +38,9 @@ function loadCharacters() {
 }
 function saveCharacters(list) {
   try {
-    localStorage.setItem('ts_characters', JSON.stringify(list));
+    const value = JSON.stringify(list);
+    localStorage.setItem('ts_characters', value);
+    void persistCloudDocument('ts_characters', value).catch(() => undefined);
   } catch {
     throw new Error('Storage full — delete some characters and try again.');
   }

@@ -5,6 +5,7 @@ import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
 import { LibraryFocusMode } from '../components/feedback/LibraryFocusMode.jsx';
 import { loadLibrary, deleteFromLibrary, updateLibraryEntry } from '../lib/library.js';
+import { persistCloudDocument } from '../lib/cloudStore.js';
 
 const SOURCE_LABELS = {
   generator:   { label: 'New Creator', icon: 'image' },
@@ -332,6 +333,7 @@ export function Library({ initialFilter }) {
       confirmLabel: 'Clear All',
       onConfirm: () => {
         localStorage.removeItem('ts_library');
+        void persistCloudDocument('ts_library', JSON.stringify([])).catch(() => undefined);
         setLibrary([]);
         setSelected(new Set());
         setConfirm(null);

@@ -1,3 +1,5 @@
+import { persistCloudDocument } from './cloudStore.js';
+
 const KEY = 'ts_library';
 const MAX = 60;
 
@@ -7,7 +9,11 @@ export function loadLibrary() {
 
 export function deleteFromLibrary(id) {
   const list = loadLibrary().filter(e => e.id !== id);
-  try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {}
+  try {
+    const value = JSON.stringify(list);
+    localStorage.setItem(KEY, value);
+    void persistCloudDocument(KEY, value).catch(() => undefined);
+  } catch {}
 }
 
 // Review workflow: patch an entry (status, notes, etc.) in place.
@@ -17,7 +23,11 @@ export function updateLibraryEntry(id, patch) {
   const idx = list.findIndex(e => e.id === id);
   if (idx === -1) return null;
   list[idx] = { ...list[idx], ...patch, reviewedAt: new Date().toISOString() };
-  try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {}
+  try {
+    const value = JSON.stringify(list);
+    localStorage.setItem(KEY, value);
+    void persistCloudDocument(KEY, value).catch(() => undefined);
+  } catch {}
   return list[idx];
 }
 
@@ -74,12 +84,15 @@ export async function saveToLibrary(src, metadata = {}) {
   list.unshift(entry);
   if (list.length > MAX) list.splice(MAX);
 
+  let value = JSON.stringify(list);
   try {
-    localStorage.setItem(KEY, JSON.stringify(list));
+    localStorage.setItem(KEY, value);
   } catch {
     // Storage pressure — drop oldest half and retry
     list.splice(Math.floor(MAX / 2));
-    try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {}
+    value = JSON.stringify(list);
+    try { localStorage.setItem(KEY, value); } catch {}
   }
+  await persistCloudDocument(KEY, value);
   return entry;
 }

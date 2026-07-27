@@ -20,7 +20,7 @@ import { Landing } from './screens/Landing.jsx';
 import { Auth } from './screens/Auth.jsx';
 import { StudioErrorBoundary } from './components/system/StudioErrorBoundary.jsx';
 import { useAuth } from './context/AuthContext.jsx';
-import { ProductionProvider } from './context/ProductionContext.jsx';
+import { ProductionProvider, useProduction } from './context/ProductionContext.jsx';
 
 function RequireAuth({ children }) {
   const location = useLocation();
@@ -91,8 +91,8 @@ const BASE_NAV = [
   { id: 'library',    label: 'Library',         icon: 'folder-open' },
   { id: 'history',    label: 'History',         icon: 'history' },
   { id: 'exports',    label: 'Exports',         icon: 'download' },
-  { id: 'runs',       label: 'Provider Runs',   icon: 'activity' },
-  { id: 'settings',   label: 'Engine Library',  icon: 'settings' },
+  { id: 'runs',       label: 'Jobs',             icon: 'activity' },
+  { id: 'settings',   label: 'Generation Settings', icon: 'settings' },
 ];
 
 const SCREENS = {
@@ -106,8 +106,8 @@ const SCREENS = {
   library:    { label: 'Library',          component: Library },
   history:    { label: 'History',          component: History },
   exports:    { label: 'Exports',          component: ProductionExports },
-  runs:       { label: 'Provider Runs',    component: ProductionRuns },
-  settings:   { label: 'Engine Library',   component: Settings },
+  runs:       { label: 'Jobs',             component: ProductionRuns },
+  settings:   { label: 'Generation Settings', component: Settings },
 };
 
 // Poll Gradio /config to determine backend connectivity.
@@ -138,6 +138,7 @@ function StudioApp() {
   const location = useLocation();
   const { screen: screenSlug } = useParams();
   const auth = useAuth();
+  const production = useProduction();
   const authSession = auth.session;
   const [activeNav, setActiveNav]             = React.useState(() => slugToScreenId(screenSlug) || 'home');
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
@@ -227,8 +228,8 @@ function StudioApp() {
     }
   }
 
-  const statusColor = backendStatus === 'online' ? '#22c55e' : backendStatus === 'offline' ? '#ef4444' : '#f59e0b';
-  const statusLabel = backendStatus === 'online' ? 'Backend online' : backendStatus === 'offline' ? 'Backend offline' : 'Connecting…';
+  const statusColor = auth.syncError ? '#ef4444' : backendStatus === 'online' ? '#22c55e' : backendStatus === 'offline' ? '#ef4444' : '#f59e0b';
+  const statusLabel = auth.syncError || (backendStatus === 'online' ? 'Backend online' : backendStatus === 'offline' ? 'Backend offline' : 'Connecting…');
   const handleSignOut = async () => {
     await auth.signOut();
     navigate('/auth?mode=login', { replace: true });
@@ -245,12 +246,17 @@ function StudioApp() {
           userEmail={authSession?.email}
           onSignOut={handleSignOut}
           actions={
-            <div title={statusLabel} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)', border: '1px solid var(--border)', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>
-              <span style={{
-                width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0,
-                animation: backendStatus === 'online' ? 'none' : 'status-pulse 1.5s ease-in-out infinite',
-              }} />
-              {statusLabel}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div title="Managed generation credits remaining this month" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--accent-indigo-soft)', border: '1px solid var(--border)', font: '600 0.75rem/1 var(--font-ui)', color: 'var(--accent-indigo)' }}>
+                <span>✦</span>{production.usage.remaining} credits
+              </div>
+              <div title={statusLabel} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)', border: '1px solid var(--border)', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-muted)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0,
+                  animation: backendStatus === 'online' && !auth.syncError ? 'none' : 'status-pulse 1.5s ease-in-out infinite',
+                }} />
+                {auth.syncError ? 'Cloud sync issue' : statusLabel}
+              </div>
             </div>
           }
         />

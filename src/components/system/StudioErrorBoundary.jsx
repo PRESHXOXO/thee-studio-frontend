@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '../core/Button.jsx';
 import { Icon } from '../core/Icon.jsx';
+import { reportStudioError } from '../../lib/cloudStore.js';
 
 // Catches render/lifecycle errors thrown by the active studio screen so a
 // single broken screen can't blank the whole studio shell. The sidebar and
@@ -18,6 +19,11 @@ export class StudioErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('Studio screen crashed:', error, info?.componentStack);
+    void reportStudioError(error, {
+      code: 'react_error_boundary',
+      componentStack: info?.componentStack?.slice(0, 4000),
+      screen: this.props.resetKey,
+    });
   }
 
   componentDidUpdate(prevProps) {

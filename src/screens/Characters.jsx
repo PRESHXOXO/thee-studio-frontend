@@ -13,10 +13,10 @@ import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 // with, so these hand off to New Creator with niche/energy pre-filled
 // instead of dropping the user into a blank roster.
 const CAST_ARCHETYPES = [
-  { icon: 'sparkles',  name: 'Beauty Editorial', niche: 'Beauty & Glam',       vision: 'Editorial Luxury' },
-  { icon: 'dumbbell',  name: 'Fitness Coach',     niche: 'Fitness & Wellness', vision: 'Clean & Minimal' },
-  { icon: 'plane',     name: 'Travel Lifestyle',  niche: 'Lifestyle & Travel', vision: 'Natural & Earthy' },
-  { icon: 'shirt',     name: 'Street Style',      niche: 'Fashion & Style',    vision: 'Street & Urban' },
+  { icon: 'sparkles',  name: 'Beauty Editorial', niche: 'Beauty & Glam',       vision: 'Editorial Luxury', description: 'A polished beauty creator — flawless glam, editorial lighting, luxury cosmetics energy.' },
+  { icon: 'dumbbell',  name: 'Fitness Coach',     niche: 'Fitness & Wellness', vision: 'Clean & Minimal',  description: 'An athletic wellness creator — toned, energetic, clean activewear and bright natural light.' },
+  { icon: 'plane',     name: 'Travel Lifestyle',  niche: 'Lifestyle & Travel', vision: 'Natural & Earthy', description: 'A jet-set lifestyle creator — sun-kissed, effortless, golden-hour destinations and earthy tones.' },
+  { icon: 'shirt',     name: 'Street Style',      niche: 'Fashion & Style',    vision: 'Street & Urban',   description: 'A streetwear fashion creator — bold, urban, confident poses with an editorial street edge.' },
 ];
 
 const FIELD_DEFS = [
@@ -817,7 +817,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
             {CAST_ARCHETYPES.map(a => (
               <button
                 key={a.name}
-                onClick={() => onNav && onNav('images', { name: '', niche: a.niche, vision: a.vision })}
+                onClick={() => onNav && onNav('images', { name: '', niche: a.niche, vision: a.vision, description: a.description })}
                 style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10,
                   padding: '18px 16px', borderRadius: 'var(--radius-lg)', border: '1.5px dashed var(--border-strong)',

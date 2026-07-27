@@ -58,8 +58,8 @@ function buildGenParams(draft, extraNote = '') {
 // Lock -> Style. Replaces the old single-page form; the underlying
 // generation calls (generateCharacterSeed / generateCharacterVariationShot)
 // are unchanged so nothing that worked before stops working.
-export function ImageGenerator({ onNav, initialName = '', initialNiche = '', initialVision = '' }) {
-  const hasArchetypeHandoff = !!(initialName || initialNiche || initialVision);
+export function ImageGenerator({ onNav, initialName = '', initialNiche = '', initialVision = '', initialDescription = '' }) {
+  const hasArchetypeHandoff = !!(initialName || initialNiche || initialVision || initialDescription);
 
   const [draft, setDraft] = React.useState(() => {
     if (!hasArchetypeHandoff) {
@@ -70,6 +70,9 @@ export function ImageGenerator({ onNav, initialName = '', initialNiche = '', ini
     if (initialName) fresh.name = initialName;
     if (initialNiche) fresh.brandProfile.worlds = [initialNiche];
     if (initialVision) fresh.brandProfile.energies = [initialVision];
+    // Prefill the Base step's free-text description so an archetype pick lands
+    // visibly on step 1, not only on the (later, hidden) Brand step.
+    if (initialDescription) fresh.coreIdentity.naturalLanguageDescription = initialDescription;
     return fresh;
   });
 

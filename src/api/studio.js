@@ -17,6 +17,15 @@ const OPENAI_REPLACEMENTS = [
   [/\bboudoir[\w\s-]*inspired\b/gi,          'studio-style editorial'],
   [/\bboudoir\b/gi,                          'studio editorial'],
   [/\bintimate\b/gi,                         'close and personal'],
+  [/\bbathroom mirror\b/gi,                  'dressing-room mirror'],
+  [/\bbedroom\b/gi,                          'private suite'],
+  [/\bprovocative\b/gi,                      'bold editorial'],
+  [/\bskin-tight\b/gi,                       'fitted'],
+  [/\bcleavage\b/gi,                         'neckline'],
+  [/\bbralette\b/gi,                         'fitted top'],
+  [/\bbikini\b/gi,                           'swimwear'],
+  [/\bno nudity\b/gi,                        'fully clothed'],
+  [/\bnon-sexual(?:ized)?\b/gi,              'wholesome'],
   // Skin language that triggers output moderation
   [/visible pores[^.)]*/gi,                  'realistic skin detail'],
   [/natural skin imperfections/gi,           'authentic natural features'],
@@ -72,10 +81,31 @@ async function readSSE(response) {
   throw new Error('Stream ended without completion');
 }
 
+// Hard ceiling on any single generation call. gpt-image-2 at high quality is
+// genuinely slow (tens of seconds), so this is generous — but without it a
+// hung/overloaded backend leaves the UI spinning forever with no feedback.
+// On expiry the fetch aborts and callers surface a real error instead.
+const ENDPOINT_TIMEOUT_MS = 150000;
+
+async function timedFetch(url, opts = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ENDPOINT_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      throw new Error(`Timed out after ${Math.round(ENDPOINT_TIMEOUT_MS / 1000)}s — the generation backend didn’t respond. It may be overloaded; try again.`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Calls a named Gradio endpoint, handling both Gradio 4.x (/run/) and 5.x (/call/) formats.
 async function callNamedEndpoint(apiName, data) {
   // Try Gradio 4.x format first
-  const res = await fetch(`${BASE}/run/${apiName}`, {
+  const res = await timedFetch(`${BASE}/run/${apiName}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ data, session_hash: SESSION_HASH }),
@@ -90,7 +120,7 @@ async function callNamedEndpoint(apiName, data) {
 
   // If /run/ returned 4xx/5xx, try Gradio 5.x /call/ format
   if (res.status >= 400) {
-    const callRes = await fetch(`${BASE}/call/${apiName}`, {
+    const callRes = await timedFetch(`${BASE}/call/${apiName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data }),
@@ -101,7 +131,7 @@ async function callNamedEndpoint(apiName, data) {
       throw new Error(`HTTP ${callRes.status}: ${detail.slice(0, 300)}`);
     }
     const { event_id } = await callRes.json();
-    const pollRes = await fetch(`${BASE}/call/${apiName}/${event_id}`);
+    const pollRes = await timedFetch(`${BASE}/call/${apiName}/${event_id}`);
     if (!pollRes.ok) throw new Error(`HTTP ${pollRes.status}`);
     return await readSSE(pollRes);
   }

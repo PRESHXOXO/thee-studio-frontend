@@ -179,9 +179,9 @@ export function StudioHome({ onNav }) {
         <div>
           <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Production Pipeline</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--grid-gap-card)' }}>
-            <PipelineCard icon="eye" count={pipeline.unreviewed} label="Needs review" tone={{ color: 'var(--cobalt)', bg: 'var(--cobalt-soft)', hex: '#4D9FFF' }} onClick={() => onNav && onNav('library')} />
-            <PipelineCard icon="wrench" count={pipeline.needs_fix} label="Needs fix" tone={{ color: 'var(--status-warn)', bg: 'var(--status-warn-bg)', hex: '#FFB238' }} onClick={() => onNav && onNav('library')} />
-            <PipelineCard icon="check-circle" count={pipeline.approved} label="Approved — publish-ready" tone={{ color: 'var(--status-ready)', bg: 'var(--status-ready-bg)', hex: '#2DD4A8' }} onClick={() => onNav && onNav('library')} />
+            <PipelineCard icon="eye" count={pipeline.unreviewed} label="Needs review" tone={{ color: 'var(--cobalt)', bg: 'var(--cobalt-soft)', hex: '#4D9FFF' }} onClick={() => onNav && onNav('library', { filter: 'unreviewed' })} />
+            <PipelineCard icon="wrench" count={pipeline.needs_fix} label="Needs fix" tone={{ color: 'var(--status-warn)', bg: 'var(--status-warn-bg)', hex: '#FFB238' }} onClick={() => onNav && onNav('library', { filter: 'needs_fix' })} />
+            <PipelineCard icon="check-circle" count={pipeline.approved} label="Approved — publish-ready" tone={{ color: 'var(--status-ready)', bg: 'var(--status-ready-bg)', hex: '#2DD4A8' }} onClick={() => onNav && onNav('library', { filter: 'approved' })} />
           </div>
         </div>
       )}

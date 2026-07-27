@@ -131,6 +131,7 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote, selected, onTog
           title={selected ? 'Deselect' : 'Select'}
           style={{
             position: 'absolute', top: 10, left: 10, width: 24, height: 24, borderRadius: 7,
+            zIndex: 2,
             display: (hovered || selected) ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center',
             background: selected ? 'var(--accent-deep)' : 'rgba(10,10,13,0.72)',
             border: `1.5px solid ${selected ? 'var(--accent-deep)' : 'rgba(255,255,255,0.4)'}`,
@@ -150,10 +151,11 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote, selected, onTog
             so it's not a misclick away from Download/Edit; it still routes
             through the confirm dialog. */}
         {hovered && (
-          <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6 }}>
+          <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 2, display: 'flex', gap: 6 }}>
             <button
               onClick={(e) => { e.stopPropagation(); onOpenFocusMode(entry.id); }}
               title="Review full-screen"
+              aria-label="Review full-screen"
               style={{
                 width: 26, height: 26, borderRadius: 7,
                 background: 'rgba(10,10,13,0.72)', border: '1px solid rgba(255,255,255,0.14)',
@@ -165,6 +167,7 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote, selected, onTog
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
               title="Delete"
+              aria-label="Delete image"
               style={{
                 width: 26, height: 26, borderRadius: 7,
                 background: 'rgba(220,38,38,0.9)', border: '1px solid rgba(255,255,255,0.2)',
@@ -180,6 +183,7 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote, selected, onTog
         {hovered && (
           <div style={{
             position: 'absolute', inset: 0,
+            zIndex: 1,
             background: 'linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 45%)',
             display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: 10, gap: 8,
           }}>
@@ -272,10 +276,15 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote, selected, onTog
   );
 }
 
-export function Library() {
+export function Library({ initialFilter }) {
   const [library, setLibrary] = React.useState(loadLibrary);
   const [confirm, setConfirm] = React.useState(null);
-  const [filter, setFilter] = React.useState('all');
+  const [filter, setFilter] = React.useState(initialFilter || 'all');
+
+  // Applied when arriving from a Studio stat-card shortcut (Needs review, etc.).
+  React.useEffect(() => {
+    if (initialFilter) setFilter(initialFilter);
+  }, [initialFilter]);
   const [selected, setSelected] = React.useState(() => new Set());
   const [focusedId, setFocusedId] = React.useState(null);
   const [focusModeId, setFocusModeId] = React.useState(null);

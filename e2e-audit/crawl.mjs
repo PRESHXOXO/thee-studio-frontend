@@ -25,6 +25,15 @@ const report = [];
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
+// App is auth-gated now (RequireAuth on /studio). Seed a local test session
+// before any navigation so the crawler lands in the app, not /auth.
+await page.addInitScript(() => {
+  localStorage.setItem('ts_auth_session', JSON.stringify({
+    id: 'crawl-test', name: 'Crawler', email: 'crawl@test.local',
+    signedInAt: new Date().toISOString(), provider: 'local-test',
+  }));
+});
+
 let consoleErrors = [];
 let pageErrors = [];
 let failedRequests = [];

@@ -105,10 +105,14 @@ export function History({ onNav }) {
   }, []);
 
   const handleRerun = (entry) => {
+    // entry.character may be a numeric (Cast-saved) or string (wizard-saved)
+    // id — pass it through as-is so the creator is actually pre-selected in
+    // Thee Director. Dropping string ids left Guided on its "pick a creator"
+    // gate, which hid the pre-filled prompt and read as a blank form.
     onNav?.('director', {
       vision: entry.prompt || '',
       scene: entry.scene || 'None',
-      creatorId: typeof entry.character === 'number' ? entry.character : null,
+      creatorId: entry.character ?? null,
     });
   };
 

@@ -62,6 +62,7 @@ test('full 5-step wizard generates, locks, and Save Creator persists everywhere'
   page.on('pageerror', error => console.error(`PAGE ERROR: ${error.stack || error.message}`));
   const getVariationCalls = await mockGeneration(page, { delayMs: 200 });
   await page.addInitScript(pixel => {
+    localStorage.setItem('ts_auth_session', JSON.stringify({ id: 't', name: 'T', email: 't@test.local', signedInAt: new Date().toISOString(), provider: 'local-test' }));
     localStorage.setItem('ts_characters', JSON.stringify([{
       id: 'seeded', name: 'Existing Creator', image: pixel, refImages: [pixel], fields: {},
     }]));
@@ -110,6 +111,7 @@ test('full 5-step wizard generates, locks, and Save Creator persists everywhere'
 test('storage failure at final save stays in Builder and shows a recoverable error', async ({ page }) => {
   const getVariationCalls = await mockGeneration(page, { delayMs: 10 });
   await page.addInitScript(pixel => {
+    localStorage.setItem('ts_auth_session', JSON.stringify({ id: 't', name: 'T', email: 't@test.local', signedInAt: new Date().toISOString(), provider: 'local-test' }));
     localStorage.setItem('ts_characters', JSON.stringify([{
       id: 'seeded', name: 'Existing Creator', image: pixel, refImages: [pixel], fields: {},
     }]));
@@ -141,4 +143,46 @@ test('storage failure at final save stays in Builder and shows a recoverable err
 
   await expect(page.getByText(/Save failed: browser storage is full/)).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ts_characters') || '[]'))).toHaveLength(1);
+});
+
+// Bug #3 — deep links / refresh must resolve app screens, not fall back to Landing.
+test('direct navigation and bare slugs resolve app screens', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('ts_auth_session', JSON.stringify({ id: 't', name: 'T', email: 't@test.local', signedInAt: new Date().toISOString(), provider: 'local-test' }));
+  });
+
+  await page.goto('http://localhost:3000/studio/cast');
+  await expect(page.getByRole('heading', { name: 'Cast', exact: true })).toBeVisible();
+
+  // Bare friendly slug redirects into the shell.
+  await page.goto('http://localhost:3000/cast');
+  await expect(page).toHaveURL(/\/studio\/cast$/);
+  await expect(page.getByRole('heading', { name: 'Cast', exact: true })).toBeVisible();
+
+  // Unknown path still shows the marketing landing page.
+  await page.goto('http://localhost:3000/nonsense-xyz');
+  await expect(page.getByRole('button', { name: /Start free/i }).first()).toBeVisible();
+});
+
+// Bug #6 — search indexes full prompt text + scene + creator, not just labels.
+test('search surfaces content buried in library prompts', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('ts_auth_session', JSON.stringify({ id: 't', name: 'T', email: 't@test.local', signedInAt: new Date().toISOString(), provider: 'local-test' }));
+    localStorage.setItem('ts_characters', JSON.stringify([{ id: 42, name: 'Nova' }]));
+    localStorage.setItem('ts_library', JSON.stringify([{
+      id: 'a', url: 'x', savedAt: new Date().toISOString(), source: 'quick_shoot', scene: 'Penthouse', character: 42,
+      prompt: 'Nova lounging in a Marrakech riad courtyard at golden hour with intricate tilework',
+    }]));
+  });
+  await page.goto('http://localhost:3000/studio/home');
+
+  const results = await page.evaluate(async () => {
+    const m = await import('/src/lib/search.js');
+    return {
+      deepWord: m.searchIndex('tilework').length,   // past the 60-char label slice
+      sceneVal: m.searchIndex('penthouse').length,  // scene field, not in label
+    };
+  });
+  expect(results.deepWord).toBeGreaterThan(0);
+  expect(results.sceneVal).toBeGreaterThan(0);
 });

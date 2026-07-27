@@ -41,11 +41,20 @@ export function buildSearchIndex() {
     sublabel: 'Reference', icon: 'images', navId: 'references', navData: undefined,
   }));
 
-  loadJSON('ts_library').forEach(entry => items.push({
-    type: 'Library', id: `lib_${entry.id}`,
-    label: entry.prompt ? entry.prompt.slice(0, 60) : `${entry.source || 'Shot'} · ${entry.scene || 'shot'}`,
-    sublabel: 'Library shot', icon: 'folder-open', navId: 'library', navData: undefined,
-  }));
+  const charNames = new Map(loadJSON('ts_characters').map(c => [c.id, c.name]));
+  loadJSON('ts_library').forEach(entry => {
+    const creator = charNames.get(entry.character);
+    items.push({
+      type: 'Library', id: `lib_${entry.id}`,
+      label: entry.prompt ? entry.prompt.slice(0, 60) : `${entry.source || 'Shot'} · ${entry.scene || 'shot'}`,
+      sublabel: creator ? `Library shot · ${creator}` : 'Library shot',
+      icon: 'folder-open', navId: 'library', navData: undefined,
+      // Full searchable text — the whole prompt (not just the 60-char label),
+      // plus scene, source, and creator — so a location or word buried in the
+      // prompt body still surfaces the shot.
+      haystack: [entry.prompt, entry.scene, entry.source, creator].filter(Boolean).join(' '),
+    });
+  });
 
   return items;
 }
@@ -54,6 +63,10 @@ export function searchIndex(query) {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   return buildSearchIndex()
-    .filter(item => item.label.toLowerCase().includes(q) || item.sublabel.toLowerCase().includes(q))
+    .filter(item =>
+      item.label.toLowerCase().includes(q) ||
+      item.sublabel.toLowerCase().includes(q) ||
+      (item.haystack && item.haystack.toLowerCase().includes(q))
+    )
     .slice(0, 20);
 }

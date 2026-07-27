@@ -104,11 +104,15 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
   // "Re-run" is a deliberate choice of who this session is about.
   const [selectedCharId, setSelectedCharId] = React.useState(() => {
     const chars = loadCharacters();
-    if (initialCampaign?.creatorId != null && chars.some(c => c.id === initialCampaign.creatorId)) {
-      return initialCampaign.creatorId;
+    // Loose (String) comparison — creator ids are numbers for Cast-saved and
+    // strings for wizard-saved; a strict === would miss the match and drop
+    // the pre-selection (leaving the "pick a creator" gate up on re-run).
+    const match = (id) => chars.find(c => String(c.id) === String(id));
+    if (initialCampaign?.creatorId != null && match(initialCampaign.creatorId)) {
+      return match(initialCampaign.creatorId).id;
     }
-    if (initialCreatorId != null && chars.some(c => c.id === initialCreatorId)) {
-      return initialCreatorId;
+    if (initialCreatorId != null && match(initialCreatorId)) {
+      return match(initialCreatorId).id;
     }
     return resolveActiveCreator(chars)?.id ?? null;
   });
@@ -187,10 +191,12 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
       )}
 
       {/* Input mode toggle */}
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div role="tablist" aria-label="Director input method" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {MODES.map(m => (
           <button
             key={m.id}
+            role="tab"
+            aria-selected={mode === m.id}
             onClick={() => setMode(m.id)}
             style={{
               display: 'flex', alignItems: 'center', gap: 7,
@@ -212,16 +218,23 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
         {MODES.find(m => m.id === mode)?.help}
       </div>
 
-      {mode === 'guided' && (
-        gated ? (
+      {/* Creator is session context, not a Guided-only setting. Keeping it
+          visible makes all three input methods honest about who is on set. */}
+      {characters.length > 0 && (
+        <Card style={{ padding: '16px 20px' }}>
+          <CharacterSelector characters={characters} selectedId={selectedCharId} onSelect={selectCreator} />
+        </Card>
+      )}
+
+      {/* Keep each mode mounted while hidden so a user can compare approaches
+          without losing a form, conversation, or generated result. */}
+      <div role="tabpanel" hidden={mode !== 'guided'} style={{ display: mode === 'guided' ? 'block' : 'none' }}>
+        {gated ? (
           <Card style={{ display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center', textAlign: 'center', padding: '40px 32px' }}>
             <Icon name="user-round-search" size={30} strokeWidth={1.25} style={{ color: 'var(--text-faint)' }} />
             <div>
               <div style={{ font: '600 1.0625rem/1.3 var(--font-display)', color: 'var(--text-strong)', marginBottom: 6 }}>Pick a creator to start shooting</div>
-              <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>Guided mode builds every shot around a saved creator's locked identity.</div>
-            </div>
-            <div style={{ width: '100%', maxWidth: 560 }}>
-              <CharacterSelector characters={characters} selectedId={selectedCharId} onSelect={selectCreator} />
+              <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>Choose a creator above, or build a one-off subject without changing your cast.</div>
             </div>
             <button
               onClick={() => setBuildWithoutCreator(true)}
@@ -231,41 +244,34 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
             </button>
           </Card>
         ) : (
-          <>
-            {characters.length > 0 && (
-              <Card style={{ padding: '16px 20px' }}>
-                <CharacterSelector characters={characters} selectedId={selectedCharId} onSelect={selectCreator} />
-              </Card>
-            )}
-            <ShootBuilder
-              layout="split"
-              creator={selectedChar}
-              allowNoCreator
-              initialScene={initialScene}
-              initialNotes={initialVision}
-              onSaveAsCreator={selectedChar ? handleSaveAsAnchorForActive : undefined}
-              campaignId={initialCampaign?.id ?? null}
-            />
-          </>
-        )
-      )}
+          <ShootBuilder
+            layout="split"
+            creator={selectedChar}
+            allowNoCreator
+            initialScene={initialScene}
+            initialNotes={initialVision}
+            onSaveAsCreator={selectedChar ? handleSaveAsAnchorForActive : undefined}
+            campaignId={initialCampaign?.id ?? null}
+          />
+        )}
+      </div>
 
-      {mode === 'describe' && (
+      <div role="tabpanel" hidden={mode !== 'describe'} style={{ display: mode === 'describe' ? 'block' : 'none' }}>
         <PromptLab
           onNav={onNav}
           campaignId={initialCampaign?.id ?? null}
           initialVision={initialVision}
           creator={selectedChar}
         />
-      )}
+      </div>
 
-      {mode === 'talk' && (
+      <div role="tabpanel" hidden={mode !== 'talk'} style={{ display: mode === 'talk' ? 'block' : 'none' }}>
         <SceneFlow
           campaignId={initialCampaign?.id ?? null}
           initialVision={initialVision}
           creator={selectedChar}
         />
-      )}
+      </div>
 
     </div>
   );

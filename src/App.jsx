@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Navigate, Routes, Route, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Sidebar } from './components/navigation/Sidebar.jsx';
 import { Topbar } from './components/navigation/Topbar.jsx';
 import { StudioHome } from './screens/StudioHome.jsx';
@@ -17,6 +17,48 @@ import { resolveActiveCreator } from './lib/activeCreator.js';
 import { Landing } from './screens/Landing.jsx';
 import { Auth } from './screens/Auth.jsx';
 import { StudioErrorBoundary } from './components/system/StudioErrorBoundary.jsx';
+import { clearAuthSession, loadAuthSession } from './lib/auth.js';
+
+function RequireAuth({ children }) {
+  const location = useLocation();
+  if (!loadAuthSession()) {
+    return <Navigate to="/auth?mode=login" replace state={{ from: location.pathname + location.search }} />;
+  }
+  return children;
+}
+
+// URL slug -> internal screen id. Accepts both the friendly label form used in
+// the UI (cast, new-creator, engine-library) and the raw nav id, so direct
+// navigation and refresh resolve to the right screen instead of the landing
+// page. Screens are state-switched (no per-screen route existed before), so
+// these slugs are what makes them deep-linkable.
+const SLUG_TO_ID = {
+  home: 'home', studio: 'home',
+  cast: 'characters', characters: 'characters',
+  'new-creator': 'images', images: 'images',
+  director: 'director', 'thee-director': 'director',
+  scenes: 'scenes',
+  references: 'references',
+  campaigns: 'campaigns',
+  library: 'library',
+  history: 'history',
+  settings: 'settings', 'engine-library': 'settings',
+};
+
+function slugToScreenId(slug) {
+  if (!slug) return 'home';
+  return SLUG_TO_ID[String(slug).toLowerCase()] || null;
+}
+
+// Fallback for unknown paths: a bare app slug (e.g. /cast) redirects into the
+// studio shell; anything genuinely unknown falls through to the landing page.
+function UnknownRoute() {
+  const location = useLocation();
+  const seg = location.pathname.split('/').filter(Boolean)[0];
+  const id = slugToScreenId(seg);
+  if (id) return <Navigate to={`/studio/${seg}`} replace />;
+  return <Landing />;
+}
 
 // Prompt Lab and Scene Flow are no longer top-level nav destinations — both
 // are now input modes ("Describe It" / "Talk It Through") on the unified
@@ -78,11 +120,15 @@ function useBackendStatus() {
   return status;
 }
 
-export default function App() {
-  const [activeNav, setActiveNav]             = React.useState('home');
+function StudioApp() {
+  const navigate = useNavigate();
+  const { screen: screenSlug } = useParams();
+  const authSession = loadAuthSession();
+  const [activeNav, setActiveNav]             = React.useState(() => slugToScreenId(screenSlug) || 'home');
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
   const [pendingDirector,  setPendingDirector]  = React.useState(null);
   const [pendingImages,    setPendingImages]    = React.useState(null);
+  const [pendingLibraryFilter, setPendingLibraryFilter] = React.useState(null);
   const [activeCharacter,  setActiveCharacter]  = React.useState(() => {
     try {
       const chars = JSON.parse(localStorage.getItem('ts_characters') || '[]');
@@ -103,12 +149,25 @@ export default function App() {
     else if (id === 'characters' && data) setPendingCharacter(data);
     if (id === 'director'   && data) setPendingDirector(data);
     if (id === 'images'     && data) setPendingImages(data);
+    // Library stat-card shortcuts pass { filter } so the target filter is
+    // applied on arrival instead of always landing on "All".
+    setPendingLibraryFilter(id === 'library' && data?.filter ? data.filter : null);
     if (id !== 'characters' || data !== 'import') setPendingImportRequest(false);
     if (id !== 'characters' || !data || data === 'import') setPendingCharacter(null);
     if (id !== 'director'  || !data) setPendingDirector(null);
     if (id !== 'images'    || !data) setPendingImages(null);
     setActiveNav(id);
-  }, []);
+    // Keep the URL in sync so deep-links, refresh, and back/forward work.
+    navigate(`/studio/${id}`, { replace: false });
+  }, [navigate]);
+
+  // Back/forward or a hand-typed /studio/<slug> changes the param — mirror it
+  // into activeNav so the rendered screen follows the URL.
+  React.useEffect(() => {
+    const id = slugToScreenId(screenSlug);
+    if (id && id !== activeNav) setActiveNav(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenSlug]);
 
   const navItems = React.useMemo(() => BASE_NAV.map(item =>
     item.id === 'library' && libCount > 0 ? { ...item, badge: String(libCount) } : item
@@ -121,10 +180,12 @@ export default function App() {
   if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
   if (activeNav === 'characters' && pendingImportRequest) screenProps.initialImportRequest = true;
   if (activeNav === 'characters') screenProps.onCharacterChange = setActiveCharacter;
+  if (activeNav === 'library' && pendingLibraryFilter) screenProps.initialFilter = pendingLibraryFilter;
   if (activeNav === 'images'     && pendingImages) {
-    screenProps.initialName   = pendingImages.name   || '';
-    screenProps.initialNiche  = pendingImages.niche   || '';
-    screenProps.initialVision = pendingImages.vision  || '';
+    screenProps.initialName        = pendingImages.name        || '';
+    screenProps.initialNiche       = pendingImages.niche       || '';
+    screenProps.initialVision      = pendingImages.vision      || '';
+    screenProps.initialDescription = pendingImages.description || '';
   }
   // Same setter as Characters' onCharacterChange — Director can change the
   // active creator too, and the sidebar chip needs to reflect it without
@@ -150,41 +211,54 @@ export default function App() {
 
   const statusColor = backendStatus === 'online' ? '#22c55e' : backendStatus === 'offline' ? '#ef4444' : '#f59e0b';
   const statusLabel = backendStatus === 'online' ? 'Backend online' : backendStatus === 'offline' ? 'Backend offline' : 'Connecting…';
+  const handleSignOut = () => {
+    clearAuthSession();
+    navigate('/auth?mode=login', { replace: true });
+  };
 
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>
+      <Sidebar items={navItems} active={activeNav} onNavigate={id => handleNav(id)} activeCharacter={activeCharacter} />
+      <div style={{ marginLeft: 'var(--sidebar-w, 248px)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <Topbar
+          context={screenLabel}
+          onNav={handleNav}
+          user={authSession?.name || 'Thee Studio'}
+          userEmail={authSession?.email}
+          onSignOut={handleSignOut}
+          actions={
+            <div title={statusLabel} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)', border: '1px solid var(--border)', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0,
+                animation: backendStatus === 'online' ? 'none' : 'status-pulse 1.5s ease-in-out infinite',
+              }} />
+              {statusLabel}
+            </div>
+          }
+        />
+        <main
+          key={activeNav}
+          style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1, animation: 'screen-in 0.18s ease-out both' }}
+        >
+          <StudioErrorBoundary resetKey={activeNav} onReset={() => handleNav('home')}>
+            <Screen {...screenProps} />
+          </StudioErrorBoundary>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/auth" element={<Auth />} />
-      <Route path="/studio/*" element={
-        <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>
-          <Sidebar items={navItems} active={activeNav} onNavigate={id => handleNav(id)} activeCharacter={activeCharacter} />
-          <div style={{ marginLeft: 'var(--sidebar-w, 248px)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-            <Topbar
-              context={screenLabel}
-              onNav={handleNav}
-              actions={
-                <div title={statusLabel} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)', border: '1px solid var(--border)', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>
-                  <span style={{
-                    width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0,
-                    animation: backendStatus === 'online' ? 'none' : 'status-pulse 1.5s ease-in-out infinite',
-                  }} />
-                  {statusLabel}
-                </div>
-              }
-            />
-            <main
-              key={activeNav}
-              style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1, animation: 'screen-in 0.18s ease-out both' }}
-            >
-              <StudioErrorBoundary resetKey={activeNav} onReset={() => handleNav('home')}>
-                <Screen {...screenProps} />
-              </StudioErrorBoundary>
-            </main>
-          </div>
-        </div>
-      } />
-      {/* Fallback — redirect old root to landing */}
-      <Route path="*" element={<Landing />} />
+      <Route path="/studio" element={<RequireAuth><StudioApp /></RequireAuth>} />
+      <Route path="/studio/:screen" element={<RequireAuth><StudioApp /></RequireAuth>} />
+      {/* Unknown paths: a bare app slug (/cast) redirects into the shell;
+          anything else falls through to the landing page. */}
+      <Route path="*" element={<UnknownRoute />} />
     </Routes>
   );
 }

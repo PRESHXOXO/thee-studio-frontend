@@ -1,16 +1,42 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { createTestAccount, loadAuthSession, signInTestAccount } from '../lib/auth.js';
 
 export function Auth() {
   const navigate = useNavigate();
-  const [mode, setMode] = React.useState('signup'); // 'signup' | 'login'
+  const location = useLocation();
+  const initialMode = new URLSearchParams(location.search).get('mode') === 'login' ? 'login' : 'signup';
+  const [mode, setMode] = React.useState(initialMode); // 'signup' | 'login'
+  const [name, setName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [error, setError] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
 
-  const handleSubmit = (e) => {
+  React.useEffect(() => {
+    if (loadAuthSession()) navigate('/studio', { replace: true });
+  }, [navigate]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Auth not wired up yet — go straight to studio
-    navigate('/studio');
+    if (loading) return;
+    setLoading(true);
+    setError('');
+    try {
+      if (mode === 'signup') await createTestAccount({ name, email, password });
+      else await signInTestAccount({ email, password });
+      navigate(location.state?.from || '/studio', { replace: true });
+    } catch (err) {
+      setError(err.message || 'Authentication failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchMode = () => {
+    setMode(current => current === 'signup' ? 'login' : 'signup');
+    setError('');
+    setPassword('');
   };
 
   return (
@@ -62,8 +88,9 @@ export function Auth() {
           </p>
         </div>
 
-        {/* Google button — placeholder */}
-        <button style={{
+        {/* Google OAuth needs a configured provider; email/password below is
+            the local test-account path for this frontend-only workspace. */}
+        <button type="button" style={{
           width: '100%', padding: '11px 16px',
           background: 'var(--white)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-md)', cursor: 'pointer',
@@ -72,6 +99,7 @@ export function Auth() {
           marginBottom: 20,
           transition: 'var(--t-fast)',
         }}
+          onClick={() => setError('Google sign-in is not configured yet. Use email and password for a local test account.')}
           onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-strong)'}
           onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
         >
@@ -90,16 +118,48 @@ export function Auth() {
           <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
         </div>
 
+        <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'center', margin: '-4px 0 18px' }}>
+          Local test account · stored only in this browser
+        </div>
+
         <form onSubmit={handleSubmit}>
+          {mode === 'signup' && (
+            <div style={{ marginBottom: 16 }}>
+              <label htmlFor="auth-name" style={{ display: 'block', font: '500 0.8125rem/1 var(--font-ui)', color: 'var(--text-body)', marginBottom: 6 }}>
+                Name
+              </label>
+              <input
+                id="auth-name"
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Your name"
+                autoComplete="name"
+                required
+                style={{
+                  width: '100%', padding: '10px 14px', boxSizing: 'border-box',
+                  background: 'var(--white)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  font: 'var(--text-base)', color: 'var(--text-body)',
+                  outline: 'none', transition: 'var(--t-fast)',
+                }}
+                onFocus={e => e.target.style.boxShadow = 'var(--focus-ring)'}
+                onBlur={e => e.target.style.boxShadow = 'none'}
+              />
+            </div>
+          )}
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', font: '500 0.8125rem/1 var(--font-ui)', color: 'var(--text-body)', marginBottom: 6 }}>
+            <label htmlFor="auth-email" style={{ display: 'block', font: '500 0.8125rem/1 var(--font-ui)', color: 'var(--text-body)', marginBottom: 6 }}>
               Email
             </label>
             <input
+              id="auth-email"
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="you@example.com"
+              autoComplete="email"
+              required
               style={{
                 width: '100%', padding: '10px 14px', boxSizing: 'border-box',
                 background: 'var(--white)', border: '1px solid var(--border)',
@@ -113,14 +173,18 @@ export function Auth() {
           </div>
 
           <div style={{ marginBottom: 24 }}>
-            <label style={{ display: 'block', font: '500 0.8125rem/1 var(--font-ui)', color: 'var(--text-body)', marginBottom: 6 }}>
+            <label htmlFor="auth-password" style={{ display: 'block', font: '500 0.8125rem/1 var(--font-ui)', color: 'var(--text-body)', marginBottom: 6 }}>
               Password
             </label>
             <input
+              id="auth-password"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              minLength={8}
+              required
               style={{
                 width: '100%', padding: '10px 14px', boxSizing: 'border-box',
                 background: 'var(--white)', border: '1px solid var(--border)',
@@ -133,25 +197,37 @@ export function Auth() {
             />
           </div>
 
+          {error && (
+            <div role="alert" style={{
+              margin: '-8px 0 16px', padding: '10px 12px',
+              borderRadius: 'var(--radius-md)', background: 'var(--status-locked-bg)',
+              color: 'var(--cherry)', font: 'var(--text-sm)', lineHeight: 1.4,
+            }}>
+              {error}
+            </div>
+          )}
+
           <button type="submit" style={{
             width: '100%', padding: '12px',
             background: 'var(--grad-coral)', color: '#fff',
             border: 'none', borderRadius: 'var(--radius-md)',
-            font: '600 0.9375rem/1 var(--font-ui)', cursor: 'pointer',
+            font: '600 0.9375rem/1 var(--font-ui)', cursor: loading ? 'wait' : 'pointer',
             boxShadow: 'var(--shadow-coral)',
-            transition: 'var(--t-base)',
+            transition: 'var(--t-base)', opacity: loading ? 0.7 : 1,
           }}
+            disabled={loading}
             onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
             onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
           >
-            {mode === 'signup' ? 'Create account' : 'Sign in'}
+            {loading ? (mode === 'signup' ? 'Creating account…' : 'Signing in…') : (mode === 'signup' ? 'Create account' : 'Sign in')}
           </button>
         </form>
 
         <p style={{ textAlign: 'center', font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 24 }}>
           {mode === 'signup' ? 'Already have an account? ' : "Don't have an account? "}
           <button
-            onClick={() => setMode(m => m === 'signup' ? 'login' : 'signup')}
+            type="button"
+            onClick={switchMode}
             style={{ background: 'none', border: 'none', color: 'var(--coral)', fontWeight: 600, cursor: 'pointer', font: 'var(--text-sm)' }}
           >
             {mode === 'signup' ? 'Sign in' : 'Sign up'}

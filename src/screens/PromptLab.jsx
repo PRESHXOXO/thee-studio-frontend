@@ -99,26 +99,28 @@ function PromptBlock({ prompt, onCopy, copied }) {
 // so the pinned campaign + selected creator apply to this tab too (output is
 // tagged to the campaign, and the creator's photo pre-fills the identity
 // reference), not just Guided.
-export function PromptLab({ onNav, campaignId = null, initialVision = '', creator = null }) {
+export function PromptLab({ onNav, campaignId = null, initialVision = '', initialSettings = null, creator = null }) {
+  const restored = initialSettings?.workflow === 'describe' ? initialSettings : {};
   // Step 1 — describe it
-  const [rawInput, setRawInput] = React.useState(initialVision || '');
+  const [rawInput, setRawInput] = React.useState(restored.rawInput || initialVision || '');
   const [refImage, setRefImage] = React.useState(() => creator?.refImages?.[0] || creator?.image || null); // compressed data URL
-  const [target, setTarget]     = React.useState('openai');
+  const [target, setTarget]     = React.useState(restored.target || 'openai');
   const fileRef = React.useRef(null);
+  const creatorIdRef = React.useRef(creator?.id ?? null);
 
   // Step 2 — refine choices
-  const [format, setFormat]     = React.useState(SURPRISE);
-  const [aspect, setAspect]     = React.useState(SURPRISE);
-  const [lighting, setLighting] = React.useState(SURPRISE);
-  const [mood, setMood]         = React.useState(SURPRISE);
-  const [finish, setFinish]     = React.useState(SURPRISE);
+  const [format, setFormat]     = React.useState(restored.format || SURPRISE);
+  const [aspect, setAspect]     = React.useState(restored.aspect || SURPRISE);
+  const [lighting, setLighting] = React.useState(restored.lighting || SURPRISE);
+  const [mood, setMood]         = React.useState(restored.mood || SURPRISE);
+  const [finish, setFinish]     = React.useState(restored.finish || SURPRISE);
 
   // Engine result
   const [building, setBuilding] = React.useState(false);
-  const [result, setResult]     = React.useState(null); // engine JSON
+  const [result, setResult]     = React.useState(restored.result || null); // engine JSON
   const [refusal, setRefusal]   = React.useState('');
   const [error, setError]       = React.useState('');
-  const [activePrompt, setActivePrompt] = React.useState(''); // main or a chosen variant
+  const [activePrompt, setActivePrompt] = React.useState(restored.activePrompt || restored.result?.prompt || ''); // main or a chosen variant
   const [whyOpen, setWhyOpen]   = React.useState(false);
   const [copied, setCopied]     = React.useState(false);
 
@@ -138,6 +140,18 @@ export function PromptLab({ onNav, campaignId = null, initialVision = '', creato
     fetchEngineChoices().then(choices => { if (choices?.length) setEngineChoices(choices); });
   }, []);
 
+  React.useEffect(() => {
+    const nextCreatorId = creator?.id ?? null;
+    if (creatorIdRef.current === nextCreatorId) return;
+    creatorIdRef.current = nextCreatorId;
+    setRefImage(creator?.refImages?.[0] || creator?.image || null);
+    setResult(null);
+    setActivePrompt('');
+    setGenImages([]);
+    setError('');
+    setGenError('');
+  }, [creator?.id, creator]);
+
   const handleUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -156,6 +170,20 @@ export function PromptLab({ onNav, campaignId = null, initialVision = '', creato
     lighting: lighting === SURPRISE ? '' : lighting,
     mood:     mood     === SURPRISE ? '' : mood,
     finish:   finish   === SURPRISE ? '' : finish,
+  });
+
+  const snapshotSettings = () => ({
+    version: 1,
+    workflow: 'describe',
+    rawInput,
+    target,
+    format,
+    aspect,
+    lighting,
+    mood,
+    finish,
+    activePrompt,
+    result,
   });
 
   const handleBuild = async () => {
@@ -227,9 +255,10 @@ export function PromptLab({ onNav, campaignId = null, initialVision = '', creato
         saveToLibrary(url, {
           source: 'prompt_lab',
           engine: adapter.label,
-          prompt: activePrompt.slice(0, 160),
+          prompt: activePrompt,
           campaign: campaignId || undefined,
           character: creator?.id,
+          settings: snapshotSettings(),
         }).catch(() => {});
       });
     } catch (e) {

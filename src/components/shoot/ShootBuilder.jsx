@@ -23,6 +23,7 @@ function PillButton({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
+      aria-pressed={active}
       className="ts-pill"
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
@@ -50,34 +51,45 @@ function getAllImages(char) {
 // inside the unified Director screen's Guided tab (may run without a
 // creator via the raw-attribute escape hatch, when allowNoCreator is true;
 // layout="split" for a docked-controls + persistent-canvas arrangement).
-export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onSaveAsCreator, initialScene = 'None', initialNotes = '', campaignId = null, layout = 'stacked' }) {
-  const [identityMode, setIdentityMode] = React.useState('lifestyle'); // 'portrait' | 'lifestyle'
-  const [quickAngle, setQuickAngle]     = React.useState('front-facing');
-  const [scene, setScene]               = React.useState(initialScene);
-  const [outfit, setOutfit]             = React.useState('default');
-  const [mood, setMood]                 = React.useState('Clean');
-  const [lighting, setLighting]         = React.useState('Natural');
-  const [notes, setNotes]               = React.useState(initialNotes);
-  const [engine, setEngine]             = React.useState('openai_image');
-  const [batchSize, setBatchSize]       = React.useState(1);
-  const [activeRef, setActiveRef]       = React.useState(0);
+export function ShootBuilder({
+  creator,
+  allowNoCreator = false,
+  onGenerated,
+  onSaveAsCreator,
+  initialScene = 'None',
+  initialNotes = '',
+  initialSettings = null,
+  campaignId = null,
+  layout = 'stacked',
+}) {
+  const restored = initialSettings?.workflow === 'guided' ? initialSettings : {};
+  const [identityMode, setIdentityMode] = React.useState(restored.identityMode || 'lifestyle'); // 'portrait' | 'lifestyle'
+  const [quickAngle, setQuickAngle]     = React.useState(restored.quickAngle || 'front-facing');
+  const [scene, setScene]               = React.useState(restored.scene || initialScene);
+  const [outfit, setOutfit]             = React.useState(restored.outfit || 'default');
+  const [mood, setMood]                 = React.useState(restored.mood || 'Clean');
+  const [lighting, setLighting]         = React.useState(restored.lighting || 'Natural');
+  const [notes, setNotes]               = React.useState(restored.notes ?? initialNotes);
+  const [engine, setEngine]             = React.useState(restored.engine || 'openai_image');
+  const [batchSize, setBatchSize]       = React.useState(restored.batchSize || 1);
+  const [activeRef, setActiveRef]       = React.useState(restored.activeRef || 0);
 
   // Outfit photo upload — analyzed description overrides the outfit pill.
   const [outfitPhotoUrl, setOutfitPhotoUrl] = React.useState('');
-  const [outfitPhotoDesc, setOutfitPhotoDesc] = React.useState('');
+  const [outfitPhotoDesc, setOutfitPhotoDesc] = React.useState(restored.outfitPhotoDesc || '');
   const [outfitPhotoAnalyzing, setOutfitPhotoAnalyzing] = React.useState(false);
   const outfitFileRef = React.useRef(null);
 
   // Raw-attribute escape hatch (no creator) — only rendered when allowNoCreator.
-  const [rawGender, setRawGender]     = React.useState('Unspecified');
-  const [rawPhysique, setRawPhysique] = React.useState('Unspecified');
-  const [rawSkinTone, setRawSkinTone] = React.useState('Unspecified');
-  const [rawHairStyle, setRawHairStyle] = React.useState('Unspecified');
-  const [rawHairColor, setRawHairColor] = React.useState('Unspecified');
-  const [rawEyeDetail, setRawEyeDetail] = React.useState('Unspecified');
-  const [rawJewelry, setRawJewelry]   = React.useState('None');
-  const [rawClothing, setRawClothing] = React.useState('Unspecified');
-  const [rawFeatures, setRawFeatures] = React.useState('None');
+  const [rawGender, setRawGender]     = React.useState(restored.rawGender || 'Unspecified');
+  const [rawPhysique, setRawPhysique] = React.useState(restored.rawPhysique || 'Unspecified');
+  const [rawSkinTone, setRawSkinTone] = React.useState(restored.rawSkinTone || 'Unspecified');
+  const [rawHairStyle, setRawHairStyle] = React.useState(restored.rawHairStyle || 'Unspecified');
+  const [rawHairColor, setRawHairColor] = React.useState(restored.rawHairColor || 'Unspecified');
+  const [rawEyeDetail, setRawEyeDetail] = React.useState(restored.rawEyeDetail || 'Unspecified');
+  const [rawJewelry, setRawJewelry]   = React.useState(restored.rawJewelry || 'None');
+  const [rawClothing, setRawClothing] = React.useState(restored.rawClothing || 'Unspecified');
+  const [rawFeatures, setRawFeatures] = React.useState(restored.rawFeatures || 'None');
 
   const [generating, setGenerating] = React.useState(false);
   const [genImages, setGenImages]   = React.useState([]);
@@ -87,8 +99,14 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
 
   const allImages = getAllImages(creator);
 
-  // Reset per-shot state when the creator changes.
+  const creatorIdRef = React.useRef(creator?.id ?? null);
+
+  // Reset per-shot media when the user changes creator after mount. Do not
+  // wipe a History re-run's restored reference index on the initial render.
   React.useEffect(() => {
+    const nextCreatorId = creator?.id ?? null;
+    if (creatorIdRef.current === nextCreatorId) return;
+    creatorIdRef.current = nextCreatorId;
     setActiveRef(0); setGenImages([]); setGenError('');
     setOutfitPhotoUrl(''); setOutfitPhotoDesc('');
   }, [creator?.id]);
@@ -136,6 +154,31 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
   // trailing paragraph respectively, additive only, template untouched.
   const composedMood = [mood, lighting !== 'Natural' && `${lighting} lighting`].filter(Boolean).join(' — ');
 
+  const snapshotSettings = () => ({
+    version: 1,
+    workflow: 'guided',
+    identityMode,
+    quickAngle,
+    scene,
+    outfit,
+    mood,
+    lighting,
+    notes,
+    engine,
+    batchSize,
+    activeRef,
+    outfitPhotoDesc,
+    rawGender,
+    rawPhysique,
+    rawSkinTone,
+    rawHairStyle,
+    rawHairColor,
+    rawEyeDetail,
+    rawJewelry,
+    rawClothing,
+    rawFeatures,
+  });
+
   const handleGenerate = async () => {
     setGenerating(true);
     setGenImages([]);
@@ -181,8 +224,10 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
           images = result.images || [];
         }
         images.forEach(url => saveToLibrary(url, {
-          source: 'quick_shoot', character: creator.id, engine, scene: sceneName || undefined, mood: composedMood, mode: identityMode,
+          source: 'quick_shoot', character: creator.id, engine, scene: sceneName || undefined,
+          prompt: positivePrompt, mood: composedMood, mode: identityMode,
           campaign: campaignId || undefined,
+          settings: snapshotSettings(),
         }).catch(() => {}));
       } else {
         if (!allowNoCreator) throw new Error('No creator selected.');
@@ -206,7 +251,9 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
         images = result.images || [];
         images.forEach(url => saveToLibrary(url, {
           source: 'director', engine: 'OpenAI Image', scene: scene !== 'None' ? scene : undefined,
+          prompt: positivePrompt,
           campaign: campaignId || undefined,
+          settings: snapshotSettings(),
         }).catch(() => {}));
       }
 
@@ -248,6 +295,8 @@ export function ShootBuilder({ creator, allowNoCreator = false, onGenerated, onS
               <button
                 key={i}
                 onClick={() => setActiveRef(i)}
+                aria-pressed={activeRef === i}
+                aria-label={`Use reference ${i + 1}`}
                 style={{
                   width: 52, height: 69, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', padding: 0,
                   border: `2px solid ${activeRef === i ? 'var(--accent-deep)' : 'var(--border)'}`,

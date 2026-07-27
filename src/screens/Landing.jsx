@@ -347,7 +347,8 @@ function Footer() {
 
 export function Landing() {
   const navigate = useNavigate();
-  const goToAuth = () => navigate('/auth');
+  const goToSignup = () => navigate('/auth?mode=signup');
+  const goToLogin = () => navigate('/auth?mode=login');
 
   return (
     <div style={{ fontFamily: 'var(--font-ui)' }}>
@@ -370,8 +371,8 @@ export function Landing() {
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <a href="#features" style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', textDecoration: 'none', fontWeight: 500 }}>Features</a>
           <a href="#pricing" style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', textDecoration: 'none', fontWeight: 500 }}>Pricing</a>
-          <button onClick={goToAuth} style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}>Log in</button>
-          <button onClick={goToAuth} style={{
+          <button onClick={goToLogin} style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}>Log in</button>
+          <button onClick={goToSignup} style={{
             background: 'var(--grad-coral)', color: '#fff', border: 'none',
             borderRadius: 'var(--radius-md)', padding: '8px 18px',
             font: '600 0.875rem/1 var(--font-ui)', cursor: 'pointer',
@@ -382,9 +383,9 @@ export function Landing() {
       </nav>
 
       <div style={{ paddingTop: 64 }}>
-        <HeroSection onCTA={goToAuth} />
+        <HeroSection onCTA={goToSignup} />
         <FeaturesSection />
-        <PricingSection onCTA={goToAuth} />
+        <PricingSection onCTA={goToSignup} />
         <Footer />
       </div>
     </div>

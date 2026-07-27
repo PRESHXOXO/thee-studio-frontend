@@ -21,7 +21,7 @@ const SOURCE_LABELS = {
 function loadCharacterNames() {
   try {
     const chars = JSON.parse(localStorage.getItem('ts_characters') || '[]');
-    return new Map(chars.map(c => [c.id, c.name]));
+    return new Map(chars.map(c => [String(c.id), c.name]));
   } catch { return new Map(); }
 }
 
@@ -113,6 +113,13 @@ export function History({ onNav }) {
       vision: entry.prompt || '',
       scene: entry.scene || 'None',
       creatorId: entry.character ?? null,
+      campaignId: entry.campaign ?? null,
+      mode: entry.settings?.workflow || (
+        entry.source === 'prompt_lab' ? 'describe'
+          : entry.source === 'scene_flow' ? 'talk'
+            : 'guided'
+      ),
+      settings: entry.settings || null,
     });
   };
 
@@ -145,7 +152,7 @@ export function History({ onNav }) {
             <HistoryCard
               key={entry.id}
               entry={entry}
-              creatorName={typeof entry.character === 'number' ? characterNames.get(entry.character) : null}
+              creatorName={characterNames.get(String(entry.character)) || null}
               onRerun={handleRerun}
               onOpenImage={setLightboxSrc}
             />

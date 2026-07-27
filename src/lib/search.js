@@ -41,9 +41,10 @@ export function buildSearchIndex() {
     sublabel: 'Reference', icon: 'images', navId: 'references', navData: undefined,
   }));
 
-  const charNames = new Map(loadJSON('ts_characters').map(c => [c.id, c.name]));
+  const charNames = new Map(loadJSON('ts_characters').map(c => [String(c.id), c.name]));
   loadJSON('ts_library').forEach(entry => {
-    const creator = charNames.get(entry.character);
+    const creator = charNames.get(String(entry.character));
+    const settings = entry.settings || {};
     items.push({
       type: 'Library', id: `lib_${entry.id}`,
       label: entry.prompt ? entry.prompt.slice(0, 60) : `${entry.source || 'Shot'} · ${entry.scene || 'shot'}`,
@@ -52,7 +53,23 @@ export function buildSearchIndex() {
       // Full searchable text — the whole prompt (not just the 60-char label),
       // plus scene, source, and creator — so a location or word buried in the
       // prompt body still surfaces the shot.
-      haystack: [entry.prompt, entry.scene, entry.source, creator].filter(Boolean).join(' '),
+      haystack: [
+        entry.prompt,
+        entry.scene,
+        entry.source,
+        entry.engine,
+        entry.mood,
+        creator,
+        settings.rawInput,
+        settings.notes,
+        settings.lighting,
+        settings.outfit,
+        settings.outputType,
+        settings.scene?.setting,
+        settings.scene?.location,
+        settings.scene?.wardrobe,
+        settings.scene?.vibe,
+      ].filter(Boolean).join(' '),
     });
   });
 

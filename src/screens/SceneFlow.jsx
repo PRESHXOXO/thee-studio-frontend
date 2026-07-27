@@ -1,5 +1,5 @@
 import React from 'react';
-import { sceneFlowChat, sceneFlowGenerate } from '../api/studio.js';
+import { sanitizeForOpenAI, sceneFlowChat, sceneFlowGenerate } from '../api/studio.js';
 import { Icon } from '../components/core/Icon.jsx';
 import { saveToLibrary } from '../lib/library.js';
 
@@ -146,6 +146,25 @@ const S = {
   },
   refThumb: { width: 40, height: 40, borderRadius: 8, objectFit: 'cover' },
   refLabel: { flex: 1, font: '400 13px/1 var(--font-ui)', color: 'var(--text-muted)' },
+  outputRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+  },
+  outputLabel: {
+    font: '600 11px/1 var(--font-ui)', letterSpacing: '0.08em',
+    textTransform: 'uppercase', color: 'var(--text-muted)',
+  },
+  outputGroup: {
+    display: 'inline-flex', gap: 4, padding: 3,
+    borderRadius: 'var(--radius-pill)', border: '1px solid var(--border)',
+    background: 'var(--surface-card)',
+  },
+  outputButton: {
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    padding: '6px 11px', borderRadius: 'var(--radius-pill)',
+    border: 'none', background: 'transparent',
+    color: 'var(--text-muted)', font: '600 12px/1 var(--font-ui)',
+    cursor: 'pointer', transition: 'all var(--t-fast)',
+  },
   inputRow: { display: 'flex', gap: 8, alignItems: 'flex-end' },
   attachBtn: {
     width: 40, height: 40, borderRadius: 'var(--radius-lg)',
@@ -213,8 +232,10 @@ function ThinkingDots() {
   );
 }
 
-function Bubble({ role, text, imageB64, imageUrl, isThinking }) {
+function Bubble({ role, text, imageB64, imageUrl, contentType = 'photo', isThinking }) {
   const isUser = role === 'user';
+  const mediaSrc = imageB64 ? `data:image/png;base64,${imageB64}` : imageUrl;
+  const isVideo = contentType === 'video';
   return (
     <div style={{ ...S.bubbleRow, ...(isUser ? S.bubbleRowUser : {}) }}>
       <div style={{ ...S.bubbleAvatar, ...(isUser ? S.bubbleAvatarUser : {}) }}>
@@ -222,18 +243,20 @@ function Bubble({ role, text, imageB64, imageUrl, isThinking }) {
       </div>
       <div style={{ ...S.bubble, ...(isUser ? S.bubbleUser : {}) }}>
         {isThinking ? <ThinkingDots /> : cleanReply(text)}
-        {(imageB64 || imageUrl) && (
+        {mediaSrc && (
           <div style={S.resultCard}>
-            <img
-              src={imageB64 ? `data:image/png;base64,${imageB64}` : imageUrl}
-              alt="Generated"
-              style={S.resultCardImg}
-            />
+            {isVideo ? (
+              <video src={mediaSrc} controls playsInline style={S.resultCardImg}>
+                Your browser does not support video playback.
+              </video>
+            ) : (
+              <img src={mediaSrc} alt="Generated" style={S.resultCardImg} />
+            )}
             <div style={S.resultCardFooter}>
-              <span>Scene generated</span>
+              <span>{isVideo ? 'Video generated' : 'Scene generated'}</span>
               <a
-                href={imageB64 ? `data:image/png;base64,${imageB64}` : imageUrl}
-                download="scene.png"
+                href={mediaSrc}
+                download={isVideo ? 'scene.mp4' : 'scene.png'}
                 style={{ color: 'var(--accent)', textDecoration: 'none' }}
               >
                 Save ↓
@@ -261,27 +284,161 @@ function creatorImage(creator) {
   return creator?.refImages?.[0] || creator?.image || null;
 }
 
+function creatorReference(creator) {
+  const img = creatorImage(creator);
+  return img ? {
+    dataUrl: img,
+    name: `${creator.name || 'Creator'} (creator)`,
+    pending: true,
+  } : null;
+}
+
+function isContentPolicyError(value) {
+  const text = typeof value === 'string'
+    ? value
+    : value?.message || value?.error || value?.status || JSON.stringify(value || {});
+  return /content policy|safety system|safety filter|moderation|blocked.*policy|policy.*blocked|image generation blocked/i.test(text);
+}
+
+function sanitizeSceneForPolicyRetry(sceneData) {
+  const rawText = JSON.stringify(sceneData || {});
+  // Retry false positives only. Never rewrite age-sensitive or clearly
+  // explicit requests into different content to get around moderation.
+  const retrySafetyText = rawText
+    .replace(/\b(no|not|without)\s+(nudity|sexual content|explicit content)\b/gi, '')
+    .replace(/\bnon[- ]sexual(?:ized)?\b/gi, '');
+  if (/\b(child|kid|minor|teen(?:ager)?|underage|schoolgirl|schoolboy|nude|nudity|erotic|porn(?:ographic)?|genitals?|sexual act|graphic violence)\b/i.test(retrySafetyText)) {
+    return null;
+  }
+
+  const sanitizeValue = value => {
+    if (typeof value === 'string') return sanitizeForOpenAI(value);
+    if (Array.isArray(value)) return value.map(sanitizeValue);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, sanitizeValue(child)]));
+    }
+    return value;
+  };
+
+  const sanitized = sanitizeValue(sceneData);
+  const prompt = sanitized.full_prompt
+    || [sanitized.setting, sanitized.wardrobe, sanitized.location, sanitized.vibe].filter(Boolean).join('. ');
+  sanitized.full_prompt = sanitizeForOpenAI(
+    `All depicted people are adults age 25 or older. Family-safe, fully clothed editorial lifestyle photography. ${prompt}`
+  );
+  return sanitized;
+}
+
+function buildLivedInScenePrompt(sceneData, outputType, hasIdentityReference) {
+  const originalPrompt = sceneData.full_prompt
+    || [sceneData.setting, sceneData.wardrobe, sceneData.location, sceneData.vibe].filter(Boolean).join('. ');
+  const sceneText = [
+    originalPrompt,
+    sceneData.setting,
+    sceneData.location,
+    sceneData.vibe,
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  const promptSections = [
+    originalPrompt,
+    [
+      'ENVIRONMENTAL INTEGRATION:',
+      'Render the subject and location together as one coherent exposure captured by the same camera at the same moment.',
+      'Match lens perspective, subject scale, horizon, white balance, exposure, grain, focus falloff, and depth of field across subject and environment.',
+      'Environmental light must wrap onto skin, hair, and clothing with believable color spill; all directional shadows and reflections must agree with the room lighting.',
+      'Use natural contact shadows wherever hands, clothing, or the subject meet nearby surfaces, plus subtle foreground overlap or occlusion to create real spatial depth.',
+    ].join(' '),
+    [
+      'LIVED-IN MOMENT:',
+      'Place the subject mid-action and physically engaged with the location instead of presenting a centered studio pose.',
+      'Give the environment signs of immediate use and a clear relationship to what the subject is doing.',
+      'Keep posture, gaze, hand placement, and framing observational and naturally imperfect, like a real moment already happening in this space.',
+    ].join(' '),
+  ];
+
+  if (hasIdentityReference) {
+    promptSections.push([
+      'IDENTITY REFERENCE USAGE:',
+      'Use the uploaded image only to preserve facial identity and stable appearance.',
+      'Re-render the person inside this scene from the scene camera viewpoint.',
+      'Create new pose, crop, expression, lighting, wardrobe behavior, and perspective appropriate to the location; do not inherit the reference image composition or studio lighting.',
+    ].join(' '));
+  }
+
+  if (/\b(mirror|vanity|bathroom|dressing room|grwm|selfie)\b/.test(sceneText)) {
+    promptSections.push([
+      'MIRROR AND CAMERA LOGIC:',
+      'Construct a physically coherent true mirror reflection from one camera viewpoint.',
+      'Phone, hand, gaze, mirror crop, reflected room geometry, and left-right orientation must agree.',
+      'Anchor the subject at the vanity with the counter or nearby objects contributing foreground depth, believable reflections, and contact shadows.',
+      'Use environmental framing that keeps enough of the room visible to establish place rather than turning the result into a cutout-style beauty close-up.',
+    ].join(' '));
+  } else if (/\b(car|vehicle|driver|passenger|interior)\b/.test(sceneText)) {
+    promptSections.push([
+      'VEHICLE INTEGRATION:',
+      'Seat compression, door and dashboard occlusion, window reflections, cabin color spill, and hand contact with interior surfaces must make the subject physically occupy the vehicle.',
+    ].join(' '));
+  } else if (/\b(rooftop|terrace|balcony|outdoor|street)\b/.test(sceneText)) {
+    promptSections.push([
+      'OUTDOOR INTEGRATION:',
+      'Wind, ambient sky color, surface bounce, atmospheric depth, and grounded foot or hand contact must affect subject and location consistently.',
+    ].join(' '));
+  } else if (/\b(kitchen|restaurant|cafe|table|counter)\b/.test(sceneText)) {
+    promptSections.push([
+      'ACTIVITY INTEGRATION:',
+      'Use believable hand contact with the counter, table, glassware, food, or nearby objects and let foreground items overlap the subject naturally.',
+    ].join(' '));
+  }
+
+  if (outputType === 'video') {
+    promptSections.push(
+      'MOTION CONTINUITY: Use one continuous, motivated action with stable identity, consistent lighting, coherent reflections, and persistent spatial relationships throughout the shot.'
+    );
+  }
+
+  return {
+    ...sceneData,
+    full_prompt: promptSections.filter(Boolean).join('\n\n'),
+  };
+}
+
 // campaignId / initialVision / creator thread the Director's session context
 // (pinned campaign, re-run vision, selected creator) into this tab so the
 // global banner + creator selector are honest here too — not Guided-only.
-export function SceneFlow({ campaignId = null, initialVision = '', creator = null }) {
+export function SceneFlow({ campaignId = null, initialVision = '', initialSettings = null, creator = null }) {
+  const restored = initialSettings?.workflow === 'talk' ? initialSettings : {};
   const [messages, setMessages] = React.useState([]); // { role, text, imageB64, imageUrl }
   const [history, setHistory]   = React.useState([]); // OpenAI message history
-  const [input, setInput]       = React.useState(initialVision || '');
+  const [input, setInput]       = React.useState(restored.input || initialVision || '');
   // Pre-attach the session creator's photo as the reference so "Talk It
   // Through" shoots the same person the rest of Director is about.
-  const [refImage, setRefImage] = React.useState(() => {
-    const img = creatorImage(creator);
-    return img ? { dataUrl: img, name: `${creator.name || 'Creator'} (creator)` } : null;
-  });
+  const [refImage, setRefImage] = React.useState(() => creatorReference(creator));
   const [thinking, setThinking] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
-  const [scene, setScene]       = React.useState(null);
+  const [scene, setScene]       = React.useState(restored.scene || null);
   const [sessionStarted, setSessionStarted] = React.useState(false);
+  const [outputType, setOutputType] = React.useState(restored.outputType || 'photo');
 
   const fileRef   = React.useRef(null);
   const bottomRef = React.useRef(null);
   const textRef   = React.useRef(null);
+  const creatorIdRef = React.useRef(creator?.id ?? null);
+
+  // A creator switch changes the identity of the entire conversation. Start a
+  // clean Scene Flow session with the new creator instead of mixing identities.
+  React.useEffect(() => {
+    const nextCreatorId = creator?.id ?? null;
+    if (creatorIdRef.current === nextCreatorId) return;
+    creatorIdRef.current = nextCreatorId;
+    setMessages([]);
+    setHistory([]);
+    setInput(initialVision || '');
+    setRefImage(creatorReference(creator));
+    setThinking(false);
+    setGenerating(false);
+    setScene(null);
+    setSessionStarted(false);
+  }, [creator?.id, creator, initialVision]);
 
   // Auto-scroll
   React.useEffect(() => {
@@ -290,15 +447,29 @@ export function SceneFlow({ campaignId = null, initialVision = '', creator = nul
 
   async function send(text) {
     const msg = (text || input).trim();
-    if (!msg && !refImage && !sessionStarted) return;
+    const referenceToSend = refImage?.pending ? refImage.dataUrl : '';
+    const generationReference = refImage?.dataUrl || '';
+    if (!msg && !referenceToSend) return;
     if (thinking || generating) return;
 
-    const userText = msg || (refImage ? '(Reference image attached)' : '');
+    const userText = msg || '(Reference image attached)';
+    // A reference-only turn previously sent an empty userMessage. The model
+    // received image data but no instruction, so it could return no reply and
+    // appear asleep until the user sent another message.
+    const backendMessage = msg || (
+      referenceToSend
+        ? 'I attached a reference image. Analyze it, acknowledge it, and begin the scene-building interview with your first question.'
+        : ''
+    );
+    const outputInstruction = outputType === 'video'
+      ? 'Requested output format: video. Build this scene specifically for video.'
+      : 'Requested output format: still photo. Do not choose video.';
+    const instructedBackendMessage = `${backendMessage}\n\n${outputInstruction}`;
     if (userText) {
       setMessages(m => [...m, { role: 'user', text: userText }]);
     }
-    if (refImage && !sessionStarted) {
-      setMessages(m => [...m, { role: 'user', text: '', imageB64: refImage.dataUrl.split(',')[1] }]);
+    if (referenceToSend) {
+      setMessages(m => [...m, { role: 'user', text: '', imageUrl: refImage.dataUrl }]);
     }
     setInput('');
     setThinking(true);
@@ -307,27 +478,37 @@ export function SceneFlow({ campaignId = null, initialVision = '', creator = nul
     try {
       const result = await sceneFlowChat({
         messagesJson: JSON.stringify(history),
-        userMessage: msg,
-        refImageB64: refImage?.dataUrl || '',
+        userMessage: instructedBackendMessage,
+        refImageB64: referenceToSend,
       });
 
-      const rawReply = result.reply || '';
+      const rawReply = (result.reply || '').trim();
       const aiReply = rawReply.includes('insufficient_quota') || rawReply.includes('exceeded your current quota')
         ? "⚠️ OpenAI credits are empty — add billing at platform.openai.com to activate me."
-        : rawReply;
-      const newHistory = result.history || [];
+        : rawReply || (
+          referenceToSend
+            ? 'Reference received. What kind of scene would you like to create with it?'
+            : 'I missed that. Tell me what kind of scene you want to create.'
+        );
+      const newHistory = result.history?.length ? result.history : [
+        ...history,
+        { role: 'user', content: instructedBackendMessage },
+        { role: 'assistant', content: aiReply },
+      ];
       const sceneData = result.scene && Object.keys(result.scene).length ? result.scene : null;
 
       setHistory(newHistory);
       setThinking(false);
       setMessages(m => [...m, { role: 'assistant', text: aiReply }]);
-      // Reference image was transmitted this turn — clear it so it isn't
-      // re-sent (and re-read by the model) on every subsequent message.
-      if (refImage) setRefImage(null);
+      // Keep the active reference for the eventual generation request, but
+      // mark it delivered so chat does not re-read the image every turn.
+      if (referenceToSend) {
+        setRefImage(current => current ? { ...current, pending: false } : current);
+      }
 
       if (sceneData) {
         setScene(sceneData);
-        await runGeneration(sceneData);
+        await runGeneration(sceneData, generationReference);
       }
     } catch (err) {
       setThinking(false);
@@ -335,33 +516,83 @@ export function SceneFlow({ campaignId = null, initialVision = '', creator = nul
     }
   }
 
-  async function runGeneration(sceneData) {
+  async function runGeneration(sceneData, referenceImage = '') {
     setGenerating(true);
-    const genMsg = `Generating your ${sceneData.content_type === 'video' ? 'video' : 'image'} now — give me a moment... ✨`;
+    const requestedScene = buildLivedInScenePrompt(
+      { ...sceneData, content_type: outputType },
+      outputType,
+      !!referenceImage
+    );
+    const genMsg = `Generating your ${outputType === 'video' ? 'video' : 'image'} now — give me a moment... ✨`;
     setMessages(m => [...m, { role: 'assistant', text: genMsg }]);
 
     try {
-      const result = await sceneFlowGenerate({
-        sceneJson: JSON.stringify(sceneData),
-        refImageB64: refImage?.dataUrl || '',
+      const generate = data => sceneFlowGenerate({
+        sceneJson: JSON.stringify(data),
+        refImageB64: referenceImage,
       });
+      let generationScene = requestedScene;
+      let result;
+      let policyRetryAttempted = false;
+
+      try {
+        result = await generate(generationScene);
+      } catch (err) {
+        if (!isContentPolicyError(err)) throw err;
+        result = { error: err.message };
+      }
+
+      if (isContentPolicyError(result)) {
+        const sanitizedScene = sanitizeSceneForPolicyRetry(requestedScene);
+        if (sanitizedScene) {
+          policyRetryAttempted = true;
+          generationScene = sanitizedScene;
+          setMessages(m => [...m, {
+            role: 'assistant',
+            text: 'The provider flagged safe wording. Retrying once with policy-safe phrasing…',
+          }]);
+          try {
+            result = await generate(generationScene);
+          } catch (err) {
+            if (!isContentPolicyError(err)) throw err;
+            result = { error: err.message };
+          }
+        }
+      }
 
       if (result.error) {
-        setMessages(m => [...m, { role: 'assistant', text: `⚠️ ${result.error}` }]);
+        const errorText = isContentPolicyError(result)
+          ? policyRetryAttempted
+            ? `The provider still blocked this request after the safe-language retry. The reference image itself may be triggering moderation. Detail: ${result.error}`
+            : result.error
+          : result.error;
+        setMessages(m => [...m, { role: 'assistant', text: `⚠️ ${errorText}` }]);
       } else {
         setMessages(m => [...m, {
           role: 'assistant',
           text: 'Your scene is ready. ✨',
           imageB64: result.result_b64 || null,
           imageUrl: result.result_url || null,
+          contentType: result.content_type || outputType,
         }]);
         // Feed the result into the review pipeline (Library → Media Review)
-        if (result.result_b64) {
+        if (outputType === 'photo' && result.result_b64) {
+          const originalScenePrompt = sceneData.full_prompt
+            || [sceneData.setting, sceneData.wardrobe, sceneData.location, sceneData.vibe].filter(Boolean).join(' · ');
           saveToLibrary(`data:image/png;base64,${result.result_b64}`, {
             source: 'scene_flow',
-            prompt: [sceneData.setting, sceneData.wardrobe, sceneData.location].filter(Boolean).join(' · '),
+            prompt: generationScene.full_prompt
+              || [generationScene.setting, generationScene.wardrobe, generationScene.location, generationScene.vibe].filter(Boolean).join(' · '),
             campaign: campaignId || undefined,
             character: creator?.id,
+            mediaType: 'photo',
+            settings: {
+              version: 1,
+              workflow: 'talk',
+              input: originalScenePrompt,
+              outputType,
+              scene: sceneData,
+            },
           }).catch(() => {});
         }
       }
@@ -374,8 +605,8 @@ export function SceneFlow({ campaignId = null, initialVision = '', creator = nul
   function reset() {
     setMessages([]);
     setHistory([]);
-    setInput('');
-    setRefImage(null);
+    setInput(initialVision || '');
+    setRefImage(creatorReference(creator));
     setScene(null);
     setThinking(false);
     setGenerating(false);
@@ -386,7 +617,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', creator = nul
     const file = e.target.files?.[0];
     if (!file) return;
     const dataUrl = await readFileAsDataURL(file);
-    setRefImage({ dataUrl, name: file.name });
+    setRefImage({ dataUrl, name: file.name, pending: true });
     e.target.value = '';
   }
 
@@ -398,6 +629,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', creator = nul
   }
 
   const isEmpty = messages.length === 0;
+  const canSend = !!input.trim() || !!refImage?.pending;
 
   return (
     <>
@@ -414,7 +646,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', creator = nul
           <div style={S.headerAvatar}>S</div>
           <div style={S.headerText}>
             <p style={S.headerTitle}>Scene Flow</p>
-            <p style={S.headerSub}>AI Scene Director · Upload a reference, answer 4 questions, get your scene</p>
+            <p style={S.headerSub}>AI Scene Director · Add a reference, answer up to 4 questions, get your scene</p>
           </div>
           {sessionStarted && (
             <button
@@ -437,7 +669,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', creator = nul
             <div style={S.welcomeOrb}>S</div>
             <p style={S.welcomeTitle}>Ready to build your scene.</p>
             <p style={S.welcomeSub}>
-              Upload a reference photo, then answer 4 quick questions.
+              Add an optional reference photo, then answer up to 4 quick questions.
               I'll package everything into a prompt and generate your image or video.
             </p>
             <div style={S.welcomeHints}>
@@ -461,6 +693,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', creator = nul
                 text={m.text}
                 imageB64={m.imageB64}
                 imageUrl={m.imageUrl}
+                contentType={m.contentType}
               />
             ))}
             {thinking && (
@@ -487,6 +720,37 @@ export function SceneFlow({ campaignId = null, initialVision = '', creator = nul
               </button>
             </div>
           )}
+          <div style={S.outputRow}>
+            <span style={S.outputLabel}>Output format</span>
+            <div role="radiogroup" aria-label="Scene output format" style={S.outputGroup}>
+              {[
+                { id: 'photo', label: 'Photo', icon: 'image' },
+                { id: 'video', label: 'Video', icon: 'video' },
+              ].map(option => {
+                const active = outputType === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    disabled={thinking || generating}
+                    onClick={() => setOutputType(option.id)}
+                    style={{
+                      ...S.outputButton,
+                      background: active ? 'var(--accent)' : 'transparent',
+                      color: active ? '#fff' : 'var(--text-muted)',
+                      cursor: thinking || generating ? 'not-allowed' : 'pointer',
+                      opacity: thinking || generating ? 0.6 : 1,
+                    }}
+                  >
+                    <Icon name={option.icon} size={13} />
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div style={S.inputRow}>
             <input
               ref={fileRef}
@@ -513,9 +777,9 @@ export function SceneFlow({ campaignId = null, initialVision = '', creator = nul
               disabled={thinking || generating}
             />
             <button
-              style={{ ...S.sendBtn, opacity: (thinking || generating || (!input.trim() && !refImage)) ? 0.4 : 1 }}
+              style={{ ...S.sendBtn, opacity: (thinking || generating || !canSend) ? 0.4 : 1 }}
               onClick={() => send()}
-              disabled={thinking || generating}
+              disabled={thinking || generating || !canSend}
               title="Send"
             >
               <Icon name="arrow-up" size={16} />

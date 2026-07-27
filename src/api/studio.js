@@ -85,16 +85,16 @@ async function readSSE(response) {
 // genuinely slow (tens of seconds), so this is generous — but without it a
 // hung/overloaded backend leaves the UI spinning forever with no feedback.
 // On expiry the fetch aborts and callers surface a real error instead.
-const ENDPOINT_TIMEOUT_MS = 150000;
+const ENDPOINT_TIMEOUT_MS = 180000;
 
-async function timedFetch(url, opts = {}) {
+export async function withEndpointTimeout(task, timeoutMs = ENDPOINT_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ENDPOINT_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...opts, signal: controller.signal });
+    return await task(controller.signal);
   } catch (e) {
-    if (e.name === 'AbortError') {
-      throw new Error(`Timed out after ${Math.round(ENDPOINT_TIMEOUT_MS / 1000)}s — the generation backend didn’t respond. It may be overloaded; try again.`);
+    if (controller.signal.aborted || e.name === 'AbortError') {
+      throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s — the generation backend didn’t respond. It may be overloaded; try again.`);
     }
     throw e;
   } finally {
@@ -104,26 +104,31 @@ async function timedFetch(url, opts = {}) {
 
 // Calls a named Gradio endpoint, handling both Gradio 4.x (/run/) and 5.x (/call/) formats.
 async function callNamedEndpoint(apiName, data) {
-  // Try Gradio 4.x format first
-  const res = await timedFetch(`${BASE}/run/${apiName}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data, session_hash: SESSION_HASH }),
-  });
+  // One deadline covers the request, response parsing, Gradio fallback, and
+  // the complete SSE stream. Keeping the controller alive until readSSE()
+  // resolves is important: fetch() itself resolves as soon as headers arrive.
+  return withEndpointTimeout(async signal => {
+    // Try Gradio 4.x format first
+    const res = await fetch(`${BASE}/run/${apiName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data, session_hash: SESSION_HASH }),
+      signal,
+    });
 
-  if (res.ok) {
-    const contentType = res.headers.get('content-type') || '';
-    return contentType.includes('text/event-stream')
-      ? await readSSE(res)
-      : (await res.json()).data;
-  }
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      return contentType.includes('text/event-stream')
+        ? await readSSE(res)
+        : (await res.json()).data;
+    }
 
-  // If /run/ returned 4xx/5xx, try Gradio 5.x /call/ format
-  if (res.status >= 400) {
-    const callRes = await timedFetch(`${BASE}/call/${apiName}`, {
+    // If /run/ returned 4xx/5xx, try Gradio 5.x /call/ format.
+    const callRes = await fetch(`${BASE}/call/${apiName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data }),
+      signal,
     });
     if (!callRes.ok) {
       let detail = '';
@@ -131,14 +136,12 @@ async function callNamedEndpoint(apiName, data) {
       throw new Error(`HTTP ${callRes.status}: ${detail.slice(0, 300)}`);
     }
     const { event_id } = await callRes.json();
-    const pollRes = await timedFetch(`${BASE}/call/${apiName}/${event_id}`);
+    if (!event_id) throw new Error('Generation backend did not return an event id.');
+
+    const pollRes = await fetch(`${BASE}/call/${apiName}/${event_id}`, { signal });
     if (!pollRes.ok) throw new Error(`HTTP ${pollRes.status}`);
     return await readSSE(pollRes);
-  }
-
-  let detail = '';
-  try { detail = await res.text(); } catch {}
-  throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
+  });
 }
 
 // Engine names that identify this dropdown by content when label matching fails.

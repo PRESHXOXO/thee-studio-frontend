@@ -283,7 +283,7 @@ export function Library({ initialFilter }) {
 
   // Applied when arriving from a Studio stat-card shortcut (Needs review, etc.).
   React.useEffect(() => {
-    if (initialFilter) setFilter(initialFilter);
+    setFilter(FILTERS.some(item => item.id === initialFilter) ? initialFilter : 'all');
   }, [initialFilter]);
   const [selected, setSelected] = React.useState(() => new Set());
   const [focusedId, setFocusedId] = React.useState(null);

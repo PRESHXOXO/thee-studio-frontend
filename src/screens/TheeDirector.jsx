@@ -96,8 +96,19 @@ const MODES = [
   { id: 'talk',     label: 'Talk It Through',    icon: 'message-circle',     help: 'Chat it out — answer a few quick questions and Scene Flow builds the scene with you.' },
 ];
 
-export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'None', initialVision = '', initialCampaign = null, initialCreatorId = null }) {
-  const [mode, setMode] = React.useState('guided');
+export function TheeDirector({
+  onNav,
+  onActiveCreatorChange,
+  initialScene = 'None',
+  initialVision = '',
+  initialCampaign = null,
+  initialCreatorId = null,
+  initialMode = 'guided',
+  initialSettings = null,
+}) {
+  const [mode, setMode] = React.useState(
+    MODES.some(item => item.id === initialMode) ? initialMode : 'guided'
+  );
   const [characters, setCharacters] = React.useState(loadCharacters);
   // A campaign's (or a re-run/fork handoff's) assigned creator takes priority
   // over "whatever was last active" — arriving via "Open in Director" or
@@ -250,6 +261,7 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
             allowNoCreator
             initialScene={initialScene}
             initialNotes={initialVision}
+            initialSettings={initialSettings}
             onSaveAsCreator={selectedChar ? handleSaveAsAnchorForActive : undefined}
             campaignId={initialCampaign?.id ?? null}
           />
@@ -261,6 +273,7 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
           onNav={onNav}
           campaignId={initialCampaign?.id ?? null}
           initialVision={initialVision}
+          initialSettings={initialSettings}
           creator={selectedChar}
         />
       </div>
@@ -269,6 +282,7 @@ export function TheeDirector({ onNav, onActiveCreatorChange, initialScene = 'Non
         <SceneFlow
           campaignId={initialCampaign?.id ?? null}
           initialVision={initialVision}
+          initialSettings={initialSettings}
           creator={selectedChar}
         />
       </div>

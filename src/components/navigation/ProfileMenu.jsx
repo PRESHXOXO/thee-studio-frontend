@@ -2,10 +2,7 @@ import React from 'react';
 import { Avatar } from '../core/Avatar.jsx';
 import { Icon } from '../core/Icon.jsx';
 
-// No real auth session exists yet (Auth.jsx doesn't store a token/session),
-// so this menu stays to what's real: display name + a link to Settings.
-// No Sign Out — faking one would mean touching auth surface.
-export function ProfileMenu({ user = 'Thee Studio', userSrc, onNav }) {
+export function ProfileMenu({ user = 'Thee Studio', userEmail, userSrc, onNav, onSignOut }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
 
@@ -35,6 +32,11 @@ export function ProfileMenu({ user = 'Thee Studio', userSrc, onNav }) {
         }}>
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ font: '600 0.85rem/1.2 var(--font-ui)', color: 'var(--text-strong)' }}>{user}</div>
+            {userEmail && (
+              <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {userEmail}
+              </div>
+            )}
           </div>
           <button
             onClick={() => { onNav?.('settings'); setOpen(false); }}
@@ -46,6 +48,18 @@ export function ProfileMenu({ user = 'Thee Studio', userSrc, onNav }) {
           >
             <Icon name="settings" size={14} strokeWidth={1.75} /> Settings
           </button>
+          {onSignOut && (
+            <button
+              onClick={() => { setOpen(false); onSignOut(); }}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
+                background: 'none', border: 'none', borderTop: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left',
+                font: '500 0.8125rem/1 var(--font-ui)', color: 'var(--cherry)', fontFamily: 'inherit',
+              }}
+            >
+              <Icon name="log-out" size={14} strokeWidth={1.75} /> Sign out
+            </button>
+          )}
         </div>
       )}
     </div>

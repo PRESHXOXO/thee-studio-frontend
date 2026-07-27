@@ -122,13 +122,13 @@ function useBackendStatus() {
 
 function StudioApp() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { screen: screenSlug } = useParams();
   const authSession = loadAuthSession();
   const [activeNav, setActiveNav]             = React.useState(() => slugToScreenId(screenSlug) || 'home');
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
   const [pendingDirector,  setPendingDirector]  = React.useState(null);
   const [pendingImages,    setPendingImages]    = React.useState(null);
-  const [pendingLibraryFilter, setPendingLibraryFilter] = React.useState(null);
   const [activeCharacter,  setActiveCharacter]  = React.useState(() => {
     try {
       const chars = JSON.parse(localStorage.getItem('ts_characters') || '[]');
@@ -149,16 +149,16 @@ function StudioApp() {
     else if (id === 'characters' && data) setPendingCharacter(data);
     if (id === 'director'   && data) setPendingDirector(data);
     if (id === 'images'     && data) setPendingImages(data);
-    // Library stat-card shortcuts pass { filter } so the target filter is
-    // applied on arrival instead of always landing on "All".
-    setPendingLibraryFilter(id === 'library' && data?.filter ? data.filter : null);
     if (id !== 'characters' || data !== 'import') setPendingImportRequest(false);
     if (id !== 'characters' || !data || data === 'import') setPendingCharacter(null);
     if (id !== 'director'  || !data) setPendingDirector(null);
     if (id !== 'images'    || !data) setPendingImages(null);
     setActiveNav(id);
     // Keep the URL in sync so deep-links, refresh, and back/forward work.
-    navigate(`/studio/${id}`, { replace: false });
+    const query = id === 'library' && data?.filter
+      ? `?filter=${encodeURIComponent(data.filter)}`
+      : '';
+    navigate(`/studio/${id}${query}`, { replace: false });
   }, [navigate]);
 
   // Back/forward or a hand-typed /studio/<slug> changes the param — mirror it
@@ -180,7 +180,9 @@ function StudioApp() {
   if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
   if (activeNav === 'characters' && pendingImportRequest) screenProps.initialImportRequest = true;
   if (activeNav === 'characters') screenProps.onCharacterChange = setActiveCharacter;
-  if (activeNav === 'library' && pendingLibraryFilter) screenProps.initialFilter = pendingLibraryFilter;
+  if (activeNav === 'library') {
+    screenProps.initialFilter = new URLSearchParams(location.search).get('filter') || 'all';
+  }
   if (activeNav === 'images'     && pendingImages) {
     screenProps.initialName        = pendingImages.name        || '';
     screenProps.initialNiche       = pendingImages.niche       || '';
@@ -194,6 +196,8 @@ function StudioApp() {
   if (activeNav === 'director'   && pendingDirector) {
     screenProps.initialScene  = pendingDirector.scene  || 'None';
     screenProps.initialVision = pendingDirector.vision || '';
+    screenProps.initialMode = pendingDirector.mode || pendingDirector.settings?.workflow || 'guided';
+    screenProps.initialSettings = pendingDirector.settings || null;
     if (pendingDirector.campaignId) {
       screenProps.initialCampaign = {
         id: pendingDirector.campaignId,

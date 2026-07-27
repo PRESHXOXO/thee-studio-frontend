@@ -8,7 +8,9 @@ import { ImageGenerator } from './screens/ImageGenerator.jsx';
 import { Characters } from './screens/Characters.jsx';
 import { Scenes } from './screens/Scenes.jsx';
 import { References } from './screens/References.jsx';
-import { Campaigns } from './screens/Campaigns.jsx';
+import { CampaignStudio } from './screens/CampaignStudio.jsx';
+import { ProductionExports } from './screens/ProductionExports.jsx';
+import { ProductionRuns } from './screens/ProductionRuns.jsx';
 import { Library } from './screens/Library.jsx';
 import { History } from './screens/History.jsx';
 import { Settings } from './screens/Settings.jsx';
@@ -17,11 +19,16 @@ import { resolveActiveCreator } from './lib/activeCreator.js';
 import { Landing } from './screens/Landing.jsx';
 import { Auth } from './screens/Auth.jsx';
 import { StudioErrorBoundary } from './components/system/StudioErrorBoundary.jsx';
-import { clearAuthSession, loadAuthSession } from './lib/auth.js';
+import { useAuth } from './context/AuthContext.jsx';
+import { ProductionProvider } from './context/ProductionContext.jsx';
 
 function RequireAuth({ children }) {
   const location = useLocation();
-  if (!loadAuthSession()) {
+  const auth = useAuth();
+  if (auth.loading) {
+    return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', font: 'var(--text-base)', color: 'var(--text-muted)' }}>Opening your studio…</div>;
+  }
+  if (!auth.session) {
     return <Navigate to="/auth?mode=login" replace state={{ from: location.pathname + location.search }} />;
   }
   return children;
@@ -42,6 +49,8 @@ const SLUG_TO_ID = {
   campaigns: 'campaigns',
   library: 'library',
   history: 'history',
+  exports: 'exports',
+  runs: 'runs', 'provider-runs': 'runs',
   settings: 'settings', 'engine-library': 'settings',
 };
 
@@ -81,6 +90,8 @@ const BASE_NAV = [
   { id: 'campaigns',  label: 'Campaigns',       icon: 'megaphone' },
   { id: 'library',    label: 'Library',         icon: 'folder-open' },
   { id: 'history',    label: 'History',         icon: 'history' },
+  { id: 'exports',    label: 'Exports',         icon: 'download' },
+  { id: 'runs',       label: 'Provider Runs',   icon: 'activity' },
   { id: 'settings',   label: 'Engine Library',  icon: 'settings' },
 ];
 
@@ -91,9 +102,11 @@ const SCREENS = {
   characters: { label: 'Cast',             component: Characters },
   scenes:     { label: 'Scenes',           component: Scenes },
   references: { label: 'References',       component: References },
-  campaigns:  { label: 'Campaigns',        component: Campaigns },
+  campaigns:  { label: 'Campaigns',        component: CampaignStudio },
   library:    { label: 'Library',          component: Library },
   history:    { label: 'History',          component: History },
+  exports:    { label: 'Exports',          component: ProductionExports },
+  runs:       { label: 'Provider Runs',    component: ProductionRuns },
   settings:   { label: 'Engine Library',   component: Settings },
 };
 
@@ -124,7 +137,8 @@ function StudioApp() {
   const navigate = useNavigate();
   const location = useLocation();
   const { screen: screenSlug } = useParams();
-  const authSession = loadAuthSession();
+  const auth = useAuth();
+  const authSession = auth.session;
   const [activeNav, setActiveNav]             = React.useState(() => slugToScreenId(screenSlug) || 'home');
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
   const [pendingDirector,  setPendingDirector]  = React.useState(null);
@@ -215,8 +229,8 @@ function StudioApp() {
 
   const statusColor = backendStatus === 'online' ? '#22c55e' : backendStatus === 'offline' ? '#ef4444' : '#f59e0b';
   const statusLabel = backendStatus === 'online' ? 'Backend online' : backendStatus === 'offline' ? 'Backend offline' : 'Connecting…';
-  const handleSignOut = () => {
-    clearAuthSession();
+  const handleSignOut = async () => {
+    await auth.signOut();
     navigate('/auth?mode=login', { replace: true });
   };
 
@@ -241,7 +255,7 @@ function StudioApp() {
           }
         />
         <main
-          key={activeNav}
+          key={`${activeNav}:${location.pathname}`}
           style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1, animation: 'screen-in 0.18s ease-out both' }}
         >
           <StudioErrorBoundary resetKey={activeNav} onReset={() => handleNav('home')}>
@@ -254,12 +268,20 @@ function StudioApp() {
 }
 
 export default function App() {
+  const protectedStudio = (
+    <RequireAuth>
+      <ProductionProvider>
+        <StudioApp />
+      </ProductionProvider>
+    </RequireAuth>
+  );
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/auth" element={<Auth />} />
-      <Route path="/studio" element={<RequireAuth><StudioApp /></RequireAuth>} />
-      <Route path="/studio/:screen" element={<RequireAuth><StudioApp /></RequireAuth>} />
+      <Route path="/studio" element={protectedStudio} />
+      <Route path="/studio/:screen" element={protectedStudio} />
+      <Route path="/studio/:screen/:projectId" element={protectedStudio} />
       {/* Unknown paths: a bare app slug (/cast) redirects into the shell;
           anything else falls through to the landing page. */}
       <Route path="*" element={<UnknownRoute />} />

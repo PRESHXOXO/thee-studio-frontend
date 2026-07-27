@@ -1,30 +1,42 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { createTestAccount, loadAuthSession, signInTestAccount } from '../lib/auth.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
 export function Auth() {
   const navigate = useNavigate();
   const location = useLocation();
+  const auth = useAuth();
   const initialMode = new URLSearchParams(location.search).get('mode') === 'login' ? 'login' : 'signup';
   const [mode, setMode] = React.useState(initialMode); // 'signup' | 'login'
   const [name, setName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [error, setError] = React.useState('');
+  const [message, setMessage] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
-    if (loadAuthSession()) navigate('/studio', { replace: true });
-  }, [navigate]);
+    if (auth.session) navigate('/studio', { replace: true });
+  }, [auth.session, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
     setLoading(true);
     setError('');
+    setMessage('');
     try {
-      if (mode === 'signup') await createTestAccount({ name, email, password });
-      else await signInTestAccount({ email, password });
+      if (mode === 'signup') {
+        const result = await auth.signUp({ name, email, password });
+        if (result.confirmationRequired) {
+          setMessage('Check your email to confirm your account, then sign in.');
+          setMode('login');
+          setPassword('');
+          return;
+        }
+      } else {
+        await auth.signIn({ email, password });
+      }
       navigate(location.state?.from || '/studio', { replace: true });
     } catch (err) {
       setError(err.message || 'Authentication failed.');
@@ -36,6 +48,7 @@ export function Auth() {
   const switchMode = () => {
     setMode(current => current === 'signup' ? 'login' : 'signup');
     setError('');
+    setMessage('');
     setPassword('');
   };
 
@@ -88,8 +101,6 @@ export function Auth() {
           </p>
         </div>
 
-        {/* Google OAuth needs a configured provider; email/password below is
-            the local test-account path for this frontend-only workspace. */}
         <button type="button" style={{
           width: '100%', padding: '11px 16px',
           background: 'var(--white)', border: '1px solid var(--border)',
@@ -99,7 +110,11 @@ export function Auth() {
           marginBottom: 20,
           transition: 'var(--t-fast)',
         }}
-          onClick={() => setError('Google sign-in is not configured yet. Use email and password for a local test account.')}
+          onClick={async () => {
+            setError('');
+            try { await auth.signInWithGoogle(); }
+            catch (err) { setError(err.message || 'Google sign-in failed.'); }
+          }}
           onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-strong)'}
           onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
         >
@@ -119,7 +134,9 @@ export function Auth() {
         </div>
 
         <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'center', margin: '-4px 0 18px' }}>
-          Local test account · stored only in this browser
+          {auth.mode === 'cloud'
+            ? 'Secure cloud account · work syncs across devices'
+            : 'Local development account · connect Supabase for cloud sync'}
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -204,6 +221,15 @@ export function Auth() {
               color: 'var(--cherry)', font: 'var(--text-sm)', lineHeight: 1.4,
             }}>
               {error}
+            </div>
+          )}
+          {message && (
+            <div role="status" style={{
+              margin: '-8px 0 16px', padding: '10px 12px',
+              borderRadius: 'var(--radius-md)', background: 'var(--status-ready-bg)',
+              color: 'var(--status-ready)', font: 'var(--text-sm)', lineHeight: 1.4,
+            }}>
+              {message}
             </div>
           )}
 

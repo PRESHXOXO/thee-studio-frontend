@@ -5,14 +5,16 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test e2e-audit --workers=1"
   },
   "dependencies": {
     "@gradio/client": "^1.0.0",
+    "@supabase/supabase-js": "^2.52.0",
     "lucide-react": "^0.460.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.18.0"
+    "react-router-dom": "7.18.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

@@ -340,6 +340,9 @@ function CampaignList({ repository, isCloud }) {
       let studioCreators = [];
       try { studioCreators = JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch {}
       await repository.syncStudioCreators?.(studioCreators);
+      let creatorMemories = {};
+      try { creatorMemories = JSON.parse(localStorage.getItem('ts_creator_memory_v1') || '{}'); } catch {}
+      await repository.syncCreatorMemories?.(creatorMemories);
       await repository.ensureSampleWorkspace?.();
       const [nextCreators, nextProjects] = await Promise.all([repository.listCreators(), repository.listProjects()]);
       setCreators(nextCreators); setProjects(nextProjects);
@@ -446,7 +449,7 @@ function CampaignDetail({ projectId, repository, pipeline, refreshUsage }) {
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', font: 'var(--text-sm)', color: 'var(--text-muted)', padding: '0 4px' }}><span><strong style={{ color: 'var(--text-strong)' }}>{workspace.shots.length}</strong> shots</span><span><strong style={{ color: 'var(--text-strong)' }}>{workspace.assets.length}</strong> candidates</span><span><strong style={{ color: 'var(--text-strong)' }}>{reviewed}</strong> reviewed</span><span><strong style={{ color: 'var(--text-strong)' }}>{workspace.selections.length}</strong> heroes</span></div>
       {workspace.shots.length ? workspace.shots.map(shot => (
         <ShotCard key={shot.id} shot={shot} workspace={workspace} busy={busyShot === shot.id}
-          onGenerate={(target, count) => run(target, () => pipeline.generateStills(target, workspace.identity, count))}
+          onGenerate={(target, count) => run(target, () => pipeline.generateStills(target, workspace.identity, count, { memory: workspace.memory }))}
           onReview={setReviewAsset}
           onMotion={(target, asset) => setMotion({ shot: target, asset })}
           onExport={exportAsset}

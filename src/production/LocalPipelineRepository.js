@@ -5,7 +5,7 @@ const createId = prefix => `${prefix}_${crypto.randomUUID?.() || `${Date.now()}_
 const empty = () => ({
   creators: [], identities: [], references: [], projects: [], shots: [],
   generations: [], assets: [], reviews: [], selections: [], clips: [],
-  exports: [], runs: [], events: [], usage: { included: 200, used: 0 },
+  exports: [], runs: [], events: [], memories: [], usage: { included: 200, used: 0 },
 });
 
 export class LocalPipelineRepository {
@@ -15,6 +15,7 @@ export class LocalPipelineRepository {
     try { this.state = JSON.parse(localStorage.getItem(this.key) || 'null') || empty(); }
     catch { this.state = empty(); }
     if (!this.state.usage) this.state.usage = { included: 200, used: 0 };
+    if (!this.state.memories) this.state.memories = [];
   }
 
   save() { localStorage.setItem(this.key, JSON.stringify(this.state)); }
@@ -42,6 +43,13 @@ export class LocalPipelineRepository {
     }
   }
 
+  async syncCreatorMemories(memoryStore = {}) {
+    for (const [studioSourceId, memory] of Object.entries(memoryStore || {})) {
+      const creator = this.state.creators.find(item => String(item.studio_source_id) === String(studioSourceId));
+      if (creator) await this.saveMemory(creator.id, memory);
+    }
+  }
+
   async listCreators() { return [...this.state.creators].reverse(); }
   async createCreator(input) {
     return this.add(this.state.creators, {
@@ -63,6 +71,24 @@ export class LocalPipelineRepository {
       created_at: old?.created_at || timestamp(), updated_at: timestamp(),
     };
     this.state.identities = this.state.identities.filter(item => item.creator_id !== creatorId).concat(value);
+    this.save();
+    return value;
+  }
+  async getMemory(creatorId) {
+    return this.state.memories.find(item => item.creator_id === creatorId) || null;
+  }
+  async saveMemory(creatorId, memory) {
+    const old = await this.getMemory(creatorId);
+    const value = {
+      id: old?.id || createId('memory'), user_id: this.userId, creator_id: creatorId,
+      version: memory.version || 1,
+      preferences: memory.preferences || {},
+      learned_signals: memory.learned || memory.learned_signals || {},
+      feedback_counts: memory.feedback || memory.feedback_counts || {},
+      version_history: memory.history || memory.version_history || [],
+      created_at: old?.created_at || timestamp(), updated_at: timestamp(),
+    };
+    this.state.memories = this.state.memories.filter(item => item.creator_id !== creatorId).concat(value);
     this.save();
     return value;
   }
@@ -148,6 +174,7 @@ export class LocalPipelineRepository {
     return {
       project, creator,
       identity: this.state.identities.find(item => item.creator_id === creator.id) || null,
+      memory: this.state.memories.find(item => item.creator_id === creator.id) || null,
       shots,
       generations: this.state.generations.filter(item => shotIds.has(item.shot_id)),
       assets,
@@ -220,7 +247,8 @@ export class LocalPipelineRepository {
     if (!shot) throw new Error('Shot not found.');
     const project = this.state.projects.find(item => item.id === shot.project_id);
     const identity = this.state.identities.find(item => item.creator_id === project?.creator_id) || null;
-    return { shot, project, identity };
+    const memory = this.state.memories.find(item => item.creator_id === project?.creator_id) || null;
+    return { shot, project, identity, memory };
   }
   async getStillAsset(id) {
     const asset = this.state.assets.find(item => item.id === id);

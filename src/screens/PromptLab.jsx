@@ -8,6 +8,7 @@ import { promptLabBuild, characterGenerate, generateImage, fetchEngineChoices } 
 import { saveToLibrary } from '../lib/library.js';
 import { compressImage } from '../lib/imageUtils.js';
 import { persistCloudDocument } from '../lib/cloudStore.js';
+import { creatorMemoryPrompt, getCreatorMemory } from '../lib/creatorMemory.js';
 import {
   TARGET_MODELS, getAdapter, resolveEngineName, aspectToImageSize,
   FORMATS, ASPECTS, LIGHTINGS, FINISHES, SURPRISE, STANDING_NEGATIVES,
@@ -231,10 +232,13 @@ export function PromptLab({ onNav, campaignId = null, initialVision = '', initia
     setGenError('');
     try {
       let images = [];
+      const memory = creator ? getCreatorMemory(creator.id) : null;
+      const memoryBlock = creatorMemoryPrompt(memory);
+      const generationPrompt = memoryBlock ? `${activePrompt}\n\n${memoryBlock}` : activePrompt;
       if (refImage) {
         const res = await characterGenerate({
           engineId: adapter.generation.engineId,
-          positivePrompt: activePrompt,
+          positivePrompt: generationPrompt,
           negativePrompt: STANDING_NEGATIVES,
           characterImage: refImage,
           imageSize: aspectToImageSize(aspect === SURPRISE ? '9:16' : aspect),
@@ -248,7 +252,7 @@ export function PromptLab({ onNav, campaignId = null, initialVision = '', initia
         }
         const res = await generateImage({
           engine: engineName,
-          positivePrompt: activePrompt,
+          positivePrompt: generationPrompt,
           negativePrompt: STANDING_NEGATIVES,
           imageSize: aspectToImageSize(aspect === SURPRISE ? '9:16' : aspect),
           quality: 'High',
@@ -260,10 +264,11 @@ export function PromptLab({ onNav, campaignId = null, initialVision = '', initia
         saveToLibrary(url, {
           source: 'prompt_lab',
           engine: adapter.label,
-          prompt: activePrompt,
+          prompt: generationPrompt,
           campaign: campaignId || undefined,
           character: creator?.id,
           settings: snapshotSettings(),
+          memoryVersion: memory?.version,
         }).catch(() => {});
       });
     } catch (e) {

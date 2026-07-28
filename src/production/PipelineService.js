@@ -1,3 +1,5 @@
+import { creatorMemoryPrompt } from '../lib/creatorMemory.js';
+
 const now = () => new Date().toISOString();
 
 export class PipelineService {
@@ -7,9 +9,17 @@ export class PipelineService {
   }
 
   async generateStills(shot, identity, count, options = {}) {
+    const memory = options.memory;
+    const memoryBlock = creatorMemoryPrompt(memory ? {
+      ...memory,
+      learned: memory.learned || memory.learned_signals,
+      feedback: memory.feedback || memory.feedback_counts,
+      history: memory.history || memory.version_history,
+    } : null);
     const prompt = [
       identity?.identity_notes,
       identity?.locked_traits?.join(', '),
+      memoryBlock,
       shot.prompt_template,
       shot.framing,
       shot.environment,
@@ -26,6 +36,7 @@ export class PipelineService {
     const request = {
       shotId: shot.id, prompt, negativePrompt,
       shotTitle: shot.title, candidateCount: count, aspectRatio: shot.aspect_ratio,
+      memoryVersion: memory?.version || null,
     };
     if (this.repository.reserveLocalCredits) await this.repository.reserveLocalCredits(count * 2);
     const run = await this.repository.createProviderRun({
@@ -194,9 +205,9 @@ export class PipelineService {
   async retryRun(run) {
     const attempt = Number(run.attempt || 1) + 1;
     if (run.provider_type === 'still') {
-      const { shot, identity } = await this.repository.getShotContext(run.request_payload.shotId);
+      const { shot, identity, memory } = await this.repository.getShotContext(run.request_payload.shotId);
       return this.generateStills(shot, identity, run.request_payload.candidateCount, {
-        retryOf: run.id, attempt,
+        retryOf: run.id, attempt, memory,
       });
     }
     if (run.provider_type === 'clip') {

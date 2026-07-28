@@ -5,6 +5,7 @@ const SCREENS = [
   { id: 'images',     label: 'New Creator' },
   { id: 'director',   label: 'Thee Director' },
   { id: 'characters', label: 'Cast' },
+  { id: 'memory',     label: 'Creator Memory' },
   { id: 'scenes',      label: 'Scenes' },
   { id: 'references', label: 'References' },
   { id: 'campaigns',  label: 'Campaigns' },
@@ -44,6 +45,25 @@ export function buildSearchIndex() {
   }));
 
   const charNames = new Map(loadJSON('ts_characters').map(c => [String(c.id), c.name]));
+  const memories = loadJSON('ts_creator_memory_v1');
+  Object.entries(memories && !Array.isArray(memories) ? memories : {}).forEach(([creatorId, memory]) => {
+    const creator = charNames.get(String(creatorId)) || 'Creator';
+    items.push({
+      type: 'Memory',
+      id: `memory_${creatorId}`,
+      label: `${creator} Brand DNA`,
+      sublabel: `Creator Memory · version ${memory.version || 1}`,
+      icon: 'brain',
+      navId: 'memory',
+      navData: undefined,
+      haystack: [
+        ...Object.values(memory.preferences || {}),
+        ...(memory.learned?.favoriteScenes || []).map(item => item.value),
+        ...(memory.learned?.favoriteMoods || []).map(item => item.value),
+        ...(memory.learned?.avoidScenes || []).map(item => item.value),
+      ].filter(Boolean).join(' '),
+    });
+  });
   loadJSON('ts_library').forEach(entry => {
     const creator = charNames.get(String(entry.character));
     const settings = entry.settings || {};

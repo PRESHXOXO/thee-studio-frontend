@@ -3,7 +3,7 @@ import { Icon } from '../core/Icon.jsx';
 
 // Full-screen, distraction-free review — one image at a time, same
 // approve/needs-fix/reject vocabulary as the grid, arrow keys to move.
-export function LibraryFocusMode({ entries, index, onIndexChange, onSetStatus, onClose }) {
+export function LibraryFocusMode({ entries, index, onIndexChange, onSetStatus, onDownload, onClose }) {
   const entry = entries[index];
 
   React.useEffect(() => {
@@ -84,6 +84,17 @@ export function LibraryFocusMode({ entries, index, onIndexChange, onSetStatus, o
       />
 
       <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
+        <button
+          onClick={() => onDownload(entry)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 'var(--radius-pill)',
+            cursor: 'pointer', font: '600 0.85rem/1 var(--font-ui)', fontFamily: 'inherit',
+            background: 'rgba(255,255,255,0.95)', color: '#101014',
+            border: '1px solid rgba(255,255,255,0.2)',
+          }}
+        >
+          <Icon name="download" size={14} /> Download Original
+        </button>
         {actions.map(a => {
           const active = entry.status === a.status;
           return (

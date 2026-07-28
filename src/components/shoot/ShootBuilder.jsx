@@ -9,6 +9,7 @@ import { characterGenerate, generateImage, describeOutfitImage } from '../../api
 import { buildCharacterPrompt } from '../../lib/characterPrompt.js';
 import { saveToLibrary } from '../../lib/library.js';
 import { compressImage } from '../../lib/imageUtils.js';
+import { creatorMemoryPrompt, getCreatorMemory } from '../../lib/creatorMemory.js';
 import {
   SHOOT_ENGINES, PORTRAIT_ANGLES, BATCH_OPTIONS, SHOOT_MOODS, SHOOT_LIGHTINGS, SHOOT_OUTFITS,
 } from '../../lib/shootOptions.js';
@@ -196,6 +197,9 @@ export function ShootBuilder({
         const outfitOrAngle = identityMode === 'portrait' ? quickAngle : outfitOverride;
         const sceneName = scene === 'None' ? '' : scene;
         let positivePrompt = buildCharacterPrompt(creator, sceneName, composedMood, !!creator.locked, outfitOrAngle, identityMode);
+        const memory = getCreatorMemory(creator.id);
+        const memoryBlock = creatorMemoryPrompt(memory);
+        if (memoryBlock) positivePrompt += `\n\n${memoryBlock}`;
         if (notes.trim()) positivePrompt += `\n\nDIRECTOR'S NOTES:\n${notes.trim()}`;
 
         if (allImages.length) {
@@ -228,6 +232,7 @@ export function ShootBuilder({
           prompt: positivePrompt, mood: composedMood, mode: identityMode,
           campaign: campaignId || undefined,
           settings: snapshotSettings(),
+          memoryVersion: memory.version,
         }).catch(() => {}));
       } else {
         if (!allowNoCreator) throw new Error('No creator selected.');

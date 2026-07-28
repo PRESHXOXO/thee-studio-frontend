@@ -7,6 +7,7 @@ const BASE = 'http://localhost:3000/studio';
 const SCREENS = [
   { id: 'home', label: 'Studio' },
   { id: 'characters', label: 'Cast' },
+  { id: 'memory', label: 'Creator Memory' },
   { id: 'images', label: 'New Creator' },
   { id: 'director', label: 'Thee Director' },
   { id: 'scenes', label: 'Scenes' },

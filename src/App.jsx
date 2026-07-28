@@ -14,6 +14,7 @@ import { ProductionRuns } from './screens/ProductionRuns.jsx';
 import { Library } from './screens/Library.jsx';
 import { History } from './screens/History.jsx';
 import { Settings } from './screens/Settings.jsx';
+import { CreatorMemory } from './screens/CreatorMemory.jsx';
 import { loadLibrary } from './lib/library.js';
 import { resolveActiveCreator } from './lib/activeCreator.js';
 import { Landing } from './screens/Landing.jsx';
@@ -42,6 +43,7 @@ function RequireAuth({ children }) {
 const SLUG_TO_ID = {
   home: 'home', studio: 'home',
   cast: 'characters', characters: 'characters',
+  memory: 'memory', 'creator-memory': 'memory',
   'new-creator': 'images', images: 'images',
   director: 'director', 'thee-director': 'director',
   scenes: 'scenes',
@@ -82,6 +84,7 @@ const BASE_NAV = [
   { section: 'Create' },
   { id: 'home',       label: 'Studio',          icon: 'layout-dashboard' },
   { id: 'characters', label: 'Cast',            icon: 'sparkles' },
+  { id: 'memory',     label: 'Creator Memory',  icon: 'brain' },
   { id: 'images',     label: 'New Creator',     icon: 'image' },
   { id: 'director',   label: 'Thee Director',   icon: 'clapperboard' },
   { id: 'scenes',     label: 'Scenes',          icon: 'mountain-snow' },
@@ -100,6 +103,7 @@ const SCREENS = {
   director:   { label: 'Thee Director',    component: TheeDirector },
   images:     { label: 'New Creator',      component: ImageGenerator },
   characters: { label: 'Cast',             component: Characters },
+  memory:     { label: 'Creator Memory',   component: CreatorMemory },
   scenes:     { label: 'Scenes',           component: Scenes },
   references: { label: 'References',       component: References },
   campaigns:  { label: 'Campaigns',        component: CampaignStudio },

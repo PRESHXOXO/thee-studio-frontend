@@ -5,6 +5,7 @@ const SYNCED_KEYS = [
   'ts_promptlab',
   'ts_campaigns',
   'ts_active_character_id',
+  'ts_creator_memory_v1',
 ];
 
 let runtime = null;
@@ -63,6 +64,46 @@ export function persistCloudDocument(key, value) {
 
 export function removeCloudDocument(key) {
   return persistCloudDocument(key, null);
+}
+
+export async function persistCloudAsset(assetId, blob) {
+  if (!runtime) return null;
+  const extension = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+  }[blob.type] || 'bin';
+  const path = `${runtime.userId}/library/${assetId}.${extension}`;
+  const { error } = await runtime.db.storage.from('studio-assets').upload(path, blob, {
+    contentType: blob.type || 'application/octet-stream',
+    upsert: true,
+    cacheControl: '31536000',
+  });
+  if (error) {
+    const failure = new Error(`Could not save the full-resolution asset: ${error.message}`);
+    announceSync('thee:cloud-sync-error', { message: failure.message, assetId });
+    void reportStudioError(failure, { assetId, operation: 'cloud_asset_write' });
+    throw failure;
+  }
+  announceSync('thee:cloud-sync-ok', { assetId });
+  return path;
+}
+
+export async function downloadCloudAsset(path) {
+  if (!runtime || !path) return null;
+  const { data, error } = await runtime.db.storage.from('studio-assets').download(path);
+  if (error) throw new Error(`Could not retrieve the full-resolution asset: ${error.message}`);
+  return data || null;
+}
+
+export async function removeCloudAsset(path) {
+  if (!runtime || !path) return;
+  const { error } = await runtime.db.storage.from('studio-assets').remove([path]);
+  if (error) {
+    void reportStudioError(error, { path, operation: 'cloud_asset_delete' });
+  }
 }
 
 export function resetCloudStore() {

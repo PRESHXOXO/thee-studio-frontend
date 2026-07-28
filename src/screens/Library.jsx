@@ -6,6 +6,8 @@ import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
 import { LibraryFocusMode } from '../components/feedback/LibraryFocusMode.jsx';
 import { loadLibrary, deleteFromLibrary, updateLibraryEntry } from '../lib/library.js';
 import { persistCloudDocument } from '../lib/cloudStore.js';
+import { deleteLibraryOriginal, downloadLibraryOriginal } from '../lib/libraryAssets.js';
+import { learnCreatorMemory } from '../lib/creatorMemory.js';
 
 const SOURCE_LABELS = {
   generator:   { label: 'New Creator', icon: 'image' },
@@ -89,7 +91,7 @@ function ReviewActions({ entry, onSetStatus }) {
   );
 }
 
-function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote, selected, onToggleSelect, focused, onFocusCard, onOpenFocusMode }) {
+function LibraryCard({ entry, onDelete, onDownload, onSetStatus, onSaveNote, selected, onToggleSelect, focused, onFocusCard, onOpenFocusMode }) {
   const [hovered, setHovered] = React.useState(false);
   const [noteOpen, setNoteOpen] = React.useState(false);
   const [note, setNote] = React.useState(entry.note || '');
@@ -190,16 +192,14 @@ function LibraryCard({ entry, onDelete, onSetStatus, onSaveNote, selected, onTog
           }}>
             <ReviewActions entry={{ ...entry, status }} onSetStatus={onSetStatus} />
             <div style={{ display: 'flex', gap: 6 }}>
-              <a href={entry.url} download={`thee-studio-${entry.id}.jpg`} style={{ flex: 1, textDecoration: 'none' }} onClick={e => e.stopPropagation()}>
-                <button style={{
-                  width: '100%', padding: '7px 0', borderRadius: 'var(--radius-md)',
-                  background: 'rgba(255,255,255,0.92)', border: 'none', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  font: '500 0.75rem/1 var(--font-ui)', color: '#101014',
-                }}>
-                  <Icon name="download" size={12} /> Download
-                </button>
-              </a>
+              <button onClick={(event) => { event.stopPropagation(); onDownload(entry); }} style={{
+                flex: 1, width: '100%', padding: '7px 0', borderRadius: 'var(--radius-md)',
+                background: 'rgba(255,255,255,0.92)', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                font: '500 0.75rem/1 var(--font-ui)', color: '#101014',
+              }}>
+                <Icon name="download" size={12} /> Download Original
+              </button>
               <button
                 title="Add note"
                 onClick={(e) => { e.stopPropagation(); setNoteOpen(o => !o); }}
@@ -281,6 +281,7 @@ export function Library({ initialFilter }) {
   const [library, setLibrary] = React.useState(loadLibrary);
   const [confirm, setConfirm] = React.useState(null);
   const [filter, setFilter] = React.useState(initialFilter || 'all');
+  const [downloadError, setDownloadError] = React.useState('');
 
   // Applied when arriving from a Studio stat-card shortcut (Needs review, etc.).
   React.useEffect(() => {
@@ -326,12 +327,23 @@ export function Library({ initialFilter }) {
     });
   };
 
+  const handleDownload = async entry => {
+    setDownloadError('');
+    try {
+      await downloadLibraryOriginal(entry);
+    } catch (error) {
+      setDownloadError(error.message || 'The original image could not be downloaded.');
+    }
+  };
+
   const handleClearAll = () => {
     setConfirm({
       title: 'Clear Entire Library?',
       message: 'All saved images will be permanently removed. This cannot be undone.',
       confirmLabel: 'Clear All',
       onConfirm: () => {
+        new Set(library.map(entry => entry.character).filter(Boolean)).forEach(creatorId => learnCreatorMemory(creatorId, []));
+        library.forEach(entry => void deleteLibraryOriginal(entry));
         localStorage.removeItem('ts_library');
         void persistCloudDocument('ts_library', JSON.stringify([])).catch(() => undefined);
         setLibrary([]);
@@ -441,6 +453,12 @@ export function Library({ initialFilter }) {
         </div>
       </div>
 
+      {downloadError && (
+        <div role="alert" style={{ padding: '10px 13px', borderRadius: 'var(--radius-md)', background: 'var(--status-locked-bg)', color: 'var(--cherry)', font: 'var(--text-sm)' }}>
+          {downloadError}
+        </div>
+      )}
+
       {/* Review filter bar */}
       {library.length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -519,6 +537,7 @@ export function Library({ initialFilter }) {
               key={entry.id}
               entry={entry}
               onDelete={handleDelete}
+              onDownload={handleDownload}
               onSetStatus={handleSetStatus}
               onSaveNote={handleSaveNote}
               selected={selected.has(entry.id)}
@@ -546,6 +565,7 @@ export function Library({ initialFilter }) {
           index={focusModeIndex}
           onIndexChange={(i) => { setFocusModeId(visible[i].id); setFocusedId(visible[i].id); }}
           onSetStatus={handleSetStatus}
+          onDownload={handleDownload}
           onClose={() => setFocusModeId(null)}
         />
       )}

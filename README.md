@@ -32,19 +32,26 @@ Cloud mode activates:
 - managed monthly generation credits with an idempotent usage ledger
 - persistent generation jobs with progress, cancellation, retry, and recovery
 - client and provider error telemetry
+- versioned Creator Memory that learns Brand DNA from review decisions
+- full-resolution Library originals separated from fast review thumbnails
 
 The schema and Edge Functions remain in the backend repository:
 
 ```text
 sienna-studio-private/supabase/migrations/202607170001_crisp_creator_clip_pipeline.sql
 sienna-studio-private/supabase/migrations/202607270001_p0_release_foundation.sql
+sienna-studio-private/supabase/migrations/202607280001_creator_memory.sql
 sienna-studio-private/supabase/functions/
 ```
 
-Apply both migrations in filename order and deploy the three `crisp-*` Edge
+Apply all migrations in filename order and deploy the three `crisp-*` Edge
 Functions before enabling cloud mode. Configure provider secrets on the server;
 customers use managed credits by default. Personal provider keys remain under
 Generation Settings → Advanced provider setup.
+
+Creator Memory stores explicit Brand DNA plus learned approval/rejection
+signals. Director, Scene Flow, and Campaign prompts consume the same versioned
+memory, making output consistency improve as a customer reviews more work.
 
 The first Campaigns visit creates a safe, editable sample workspace when the
 account has no campaign data. This gives a new account a useful path to explore

@@ -15,17 +15,30 @@ export class SupabasePipelineRepository {
   async syncStudioCreators(studioCreators = []) {
     const existing = await this.listCreators();
     for (const source of studioCreators) {
-      let creator = existing.find(item => item.name.trim().toLowerCase() === source.name?.trim().toLowerCase());
+      let creator = existing.find(item => String(item.studio_source_id) === String(source.id))
+        || existing.find(item => item.name.trim().toLowerCase() === source.name?.trim().toLowerCase());
       if (!creator) {
         creator = await this.createCreator({
           name: source.name,
           handle: source.handle,
           description: source.description || source.niche,
+          studioSourceId: source.id,
         });
         existing.push(creator);
+      } else if (!creator.studio_source_id) {
+        const result = await this.db.from('creators').update({ studio_source_id: String(source.id) }).eq('id', creator.id).select().single();
+        creator = one(result.data, result.error);
       }
       const identity = await this.getIdentity(creator.id);
       if (!identity) await this.saveIdentity(creator.id, creatorIdentityFromStudio(source));
+    }
+  }
+
+  async syncCreatorMemories(memoryStore = {}) {
+    const creators = await this.listCreators();
+    for (const [studioSourceId, memory] of Object.entries(memoryStore || {})) {
+      const creator = creators.find(item => String(item.studio_source_id) === String(studioSourceId));
+      if (creator) await this.saveMemory(creator.id, memory);
     }
   }
 
@@ -37,7 +50,7 @@ export class SupabasePipelineRepository {
   async createCreator(input) {
     const result = await this.db.from('creators').insert({
       user_id: this.userId, name: input.name, handle: input.handle || null,
-      description: input.description || null,
+      description: input.description || null, studio_source_id: input.studioSourceId != null ? String(input.studioSourceId) : null,
     }).select().single();
     return one(result.data, result.error);
   }
@@ -53,6 +66,23 @@ export class SupabasePipelineRepository {
       locked_traits: input.lockedTraits || [],
       do_not_change_notes: input.doNotChangeNotes || '',
       realism_orientation: input.realismOrientation || 'luxury_high_realism',
+    }, { onConflict: 'creator_id' }).select().single();
+    return one(result.data, result.error);
+  }
+  async getMemory(creatorId) {
+    const { data, error } = await this.db.from('creator_memory_profiles').select('*').eq('creator_id', creatorId).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data || null;
+  }
+  async saveMemory(creatorId, memory) {
+    const result = await this.db.from('creator_memory_profiles').upsert({
+      user_id: this.userId,
+      creator_id: creatorId,
+      version: memory.version || 1,
+      preferences: memory.preferences || {},
+      learned_signals: memory.learned || memory.learned_signals || {},
+      feedback_counts: memory.feedback || memory.feedback_counts || {},
+      version_history: memory.history || memory.version_history || [],
     }, { onConflict: 'creator_id' }).select().single();
     return one(result.data, result.error);
   }
@@ -150,7 +180,7 @@ export class SupabasePipelineRepository {
     const shots = shotsResult.data || [];
     const shotIds = shots.map(shot => shot.id);
     if (!shotIds.length) return {
-      project, creator, identity: identityResult.data || null, shots,
+      project, creator, identity: identityResult.data || null, memory: await this.getMemory(creator.id), shots,
       generations: [], assets: [], reviews: [], selections: [], clips: [],
     };
     const [generationsResult, assetsResult, selectionsResult, clipsResult] = await Promise.all([
@@ -173,7 +203,7 @@ export class SupabasePipelineRepository {
       return { ...asset, signed_url: signed.data?.signedUrl };
     };
     return {
-      project, creator, identity: identityResult.data || null, shots,
+      project, creator, identity: identityResult.data || null, memory: await this.getMemory(creator.id), shots,
       generations: generationsResult.data || [],
       assets: await Promise.all(assets.map(asset => resolve(asset, 'generation-assets'))),
       reviews: reviewsResult.data || [],
@@ -259,7 +289,12 @@ export class SupabasePipelineRepository {
     const shot = one(shotResult.data, shotResult.error);
     const projectResult = await this.db.from('generation_projects').select('*').eq('id', shot.project_id).single();
     const project = one(projectResult.data, projectResult.error);
-    return { shot, project, identity: await this.getIdentity(project.creator_id) };
+    return {
+      shot,
+      project,
+      identity: await this.getIdentity(project.creator_id),
+      memory: await this.getMemory(project.creator_id),
+    };
   }
   async getStillAsset(id) {
     const { data, error } = await this.db.from('still_generation_assets').select('*').eq('id', id).single();

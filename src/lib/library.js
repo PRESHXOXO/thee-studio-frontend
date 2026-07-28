@@ -1,4 +1,6 @@
 import { persistCloudDocument } from './cloudStore.js';
+import { deleteLibraryOriginal, saveLibraryOriginal } from './libraryAssets.js';
+import { learnCreatorMemory } from './creatorMemory.js';
 
 const KEY = 'ts_library';
 const MAX = 60;
@@ -8,12 +10,16 @@ export function loadLibrary() {
 }
 
 export function deleteFromLibrary(id) {
-  const list = loadLibrary().filter(e => e.id !== id);
+  const current = loadLibrary();
+  const removed = current.find(entry => entry.id === id);
+  const list = current.filter(entry => entry.id !== id);
+  if (removed) void deleteLibraryOriginal(removed);
   try {
     const value = JSON.stringify(list);
     localStorage.setItem(KEY, value);
     void persistCloudDocument(KEY, value).catch(() => undefined);
   } catch {}
+  if (removed?.character) learnCreatorMemory(removed.character, list);
 }
 
 // Review workflow: patch an entry (status, notes, etc.) in place.
@@ -28,6 +34,7 @@ export function updateLibraryEntry(id, patch) {
     localStorage.setItem(KEY, value);
     void persistCloudDocument(KEY, value).catch(() => undefined);
   } catch {}
+  if (list[idx].character) learnCreatorMemory(list[idx].character, list);
   return list[idx];
 }
 
@@ -67,32 +74,39 @@ export async function compressForLibrary(src, maxPx = 640, quality = 0.82) {
 
 export async function saveToLibrary(src, metadata = {}) {
   metadata = { source: '', engine: '', prompt: '', character: '', ...metadata };
-  let url;
-  try {
-    url = await compressForLibrary(src);
-  } catch {
-    url = src; // fallback: store as-is
-  }
-
+  const id = `lib_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const [url, original] = await Promise.all([
+    compressForLibrary(src).catch(() => src),
+    saveLibraryOriginal(id, src).catch(() => ({
+      originalAssetId: id,
+      originalUrl: src.startsWith('data:') ? undefined : src,
+    })),
+  ]);
   const list = loadLibrary();
   const entry = {
-    id: `lib_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    id,
     url,
     savedAt: new Date().toISOString(),
+    ...original,
     ...metadata,
   };
   list.unshift(entry);
-  if (list.length > MAX) list.splice(MAX);
+  if (list.length > MAX) {
+    const pruned = list.splice(MAX);
+    pruned.forEach(item => void deleteLibraryOriginal(item));
+  }
 
   let value = JSON.stringify(list);
   try {
     localStorage.setItem(KEY, value);
   } catch {
     // Storage pressure — drop oldest half and retry
-    list.splice(Math.floor(MAX / 2));
+    const pruned = list.splice(Math.floor(MAX / 2));
+    pruned.forEach(item => void deleteLibraryOriginal(item));
     value = JSON.stringify(list);
     try { localStorage.setItem(KEY, value); } catch {}
   }
   await persistCloudDocument(KEY, value);
+  if (entry.character) learnCreatorMemory(entry.character, list);
   return entry;
 }

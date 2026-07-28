@@ -2,6 +2,7 @@ import React from 'react';
 import { sanitizeForOpenAI, sceneFlowChat, sceneFlowGenerate } from '../api/studio.js';
 import { Icon } from '../components/core/Icon.jsx';
 import { saveToLibrary } from '../lib/library.js';
+import { creatorMemoryPrompt, getCreatorMemory } from '../lib/creatorMemory.js';
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -523,6 +524,9 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
       outputType,
       !!referenceImage
     );
+    const memory = creator ? getCreatorMemory(creator.id) : null;
+    const memoryBlock = creatorMemoryPrompt(memory);
+    if (memoryBlock) requestedScene.full_prompt += `\n\n${memoryBlock}`;
     const genMsg = `Generating your ${outputType === 'video' ? 'video' : 'image'} now — give me a moment... ✨`;
     setMessages(m => [...m, { role: 'assistant', text: genMsg }]);
 
@@ -593,6 +597,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
               outputType,
               scene: sceneData,
             },
+            memoryVersion: memory?.version,
           }).catch(() => {});
         }
       }

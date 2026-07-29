@@ -48,7 +48,7 @@ test('reference-only send wakes Scene Flow with a real instruction', async ({ pa
   await page.getByTitle('Send').click();
 
   await expect(page.getByText('Reference received. What kind of scene would you like to create with it?')).toBeVisible();
-  await expect(page.getByPlaceholder('Type your answer...')).toBeEnabled();
-  expect(chatPayload.data[1]).toMatch(/Analyze it.*first question/);
+  await expect(page.getByPlaceholder(/Message Scene Flow/)).toBeEnabled();
+  expect(chatPayload.data[1]).toMatch(/identity details.*what I want to create/);
   expect(chatPayload.data[2]).toMatch(/^data:image\/png;base64,/);
 });

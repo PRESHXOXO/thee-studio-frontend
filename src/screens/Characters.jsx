@@ -5,7 +5,7 @@ import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
 import { analyzeCharacterImage, extractFaceAnchor, generateReferenceSet } from '../api/studio.js';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
-import { compressImage } from '../lib/imageUtils.js';
+import { compressImage, normalizeImageForVision } from '../lib/imageUtils.js';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
 import { persistCloudDocument } from '../lib/cloudStore.js';
 import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
@@ -108,7 +108,7 @@ function RefImageSlot({ src, active, onClick, onDelete, onUpload, index }) {
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           style={{ display: 'none' }}
           onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }}
         />
@@ -312,10 +312,11 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     setAnalyzing(true);
     setAnalyzeError('');
     try {
+      const visionImage = await normalizeImageForVision(imageDataUrl);
       // Run both in parallel — general fields + precise face anchor
       const [result, faceAnchor] = await Promise.all([
-        analyzeCharacterImage(imageDataUrl),
-        extractFaceAnchor(imageDataUrl).catch(e => { console.warn('Face anchor extraction failed:', e); return ''; }),
+        analyzeCharacterImage(visionImage),
+        extractFaceAnchor(visionImage).catch(e => { console.warn('Face anchor extraction failed:', e); return ''; }),
       ]);
       setEditing(ed => ({
         ...(ed || currentEditing),
@@ -331,7 +332,12 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
         },
       }));
     } catch (e) {
-      setAnalyzeError(e.message || 'Analysis failed');
+      const message = e.message || 'Analysis failed';
+      setAnalyzeError(
+        /invalid mime|invalid_image_format|only image types/i.test(message)
+          ? 'Could not read this photo. Use a JPG, PNG, or WebP image.'
+          : message
+      );
     } finally {
       setAnalyzing(false);
     }
@@ -639,7 +645,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
             <span style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>Up to 5 images · JPG or PNG</span>
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               multiple
               style={{ display: 'none' }}
               onChange={e => { handleImportFiles(e.target.files); e.target.value = ''; }}
@@ -678,7 +684,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
                 </div>
               )}
             </div>
-            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePrimaryUpload} />
+            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handlePrimaryUpload} />
 
             {/* Additional reference photo slots (editing mode or view mode when refs exist) */}
             {(editing || displayImages.length > 1) && (

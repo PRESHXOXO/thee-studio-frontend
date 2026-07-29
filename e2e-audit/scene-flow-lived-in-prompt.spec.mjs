@@ -68,8 +68,81 @@ test('Scene Flow enriches mirror scenes with lived-in spatial prompting', async 
   const scene = JSON.parse(generationPayload.data[0]);
   expect(scene.full_prompt).toContain('one coherent exposure');
   expect(scene.full_prompt).toContain('natural contact shadows');
+  expect(scene.full_prompt).toContain('believable body weight');
+  expect(scene.full_prompt).toContain('Avoid cutout edges');
+  expect(scene.full_prompt).toContain('avoid accidental dead space');
   expect(scene.full_prompt).toContain('IDENTITY REFERENCE USAGE');
+  expect(scene.full_prompt).toContain('Preserve exact fixed facial geometry');
+  expect(scene.full_prompt).toContain('not a similar-looking model');
   expect(scene.full_prompt).toContain('true mirror reflection');
   expect(scene.full_prompt).toContain('do not inherit the reference image composition');
   expect(generationPayload.data[1]).toBe(PIXEL);
+});
+
+test('Scene Flow gives vehicle scenes grounded body and framing direction', async ({ page }) => {
+  let generationPayload;
+
+  await page.addInitScript(pixel => {
+    localStorage.setItem('ts_auth_session', JSON.stringify({
+      id: 'vehicle-prompt-tester',
+      name: 'Vehicle Prompt Tester',
+      email: 'vehicle@example.test',
+    }));
+    localStorage.setItem('ts_characters', JSON.stringify([{
+      id: 'maya',
+      name: 'Maya',
+      image: pixel,
+      refImages: [pixel],
+      locked: true,
+      fields: {},
+    }]));
+    localStorage.setItem('ts_active_character_id', 'maya');
+  }, PIXEL);
+
+  await page.route('**/config', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ components: [] }),
+  }));
+  await page.route('**/gradio_api/run/scene_flow_chat', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      data: [JSON.stringify({
+        reply: "Got it, I'm building your scene now.",
+        history: [],
+        scene: {
+          setting: 'rear seat of a black car',
+          location: 'Manhattan',
+          vibe: 'candid city arrival',
+          wardrobe: 'navy university hoodie',
+          content_type: 'photo',
+          full_prompt: 'Maya checks her phone while riding through Manhattan.',
+        },
+      })],
+    }),
+  }));
+  await page.route('**/gradio_api/run/scene_flow_generate', route => {
+    generationPayload = route.request().postDataJSON();
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [JSON.stringify({ result_b64: PIXEL.split(',')[1], content_type: 'photo', status: 'done' })],
+      }),
+    });
+  });
+
+  await page.goto('http://127.0.0.1:3000/studio/director');
+  await page.getByRole('tab', { name: 'Talk It Through' }).click();
+  await page.getByPlaceholder(/Describe the vibe/).fill('Candid Manhattan car ride.');
+  await page.getByTitle('Send').click();
+  await expect(page.getByText('Your scene is ready.')).toBeVisible();
+
+  const scene = JSON.parse(generationPayload.data[0]);
+  expect(scene.full_prompt).toContain('believable passenger viewpoint');
+  expect(scene.full_prompt).toContain('minimal unused ceiling');
+  expect(scene.full_prompt).toContain('realistic pelvis and shoulder support');
+  expect(scene.full_prompt).toContain('never let an arm float');
+  expect(scene.full_prompt).toContain('directional window light');
 });

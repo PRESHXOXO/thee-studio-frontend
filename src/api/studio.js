@@ -372,7 +372,7 @@ export async function generateImage({
 export async function sceneFlowChat({ messagesJson = '[]', userMessage = '', refImageB64 = '' } = {}) {
   const raw = await callNamedEndpoint('scene_flow_chat', [messagesJson, userMessage, refImageB64]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
-  return parsed; // { reply, scene, history }
+  return parsed; // { reply, scene, generate, history }
 }
 
 export async function sceneFlowGenerate({ sceneJson = '{}', refImageB64 = '' } = {}) {

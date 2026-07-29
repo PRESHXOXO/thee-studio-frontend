@@ -138,6 +138,27 @@ const S = {
     gap: 10,
     flexShrink: 0,
   },
+  draftBar: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '10px 12px',
+    borderRadius: 'var(--radius-lg)',
+    border: '1px solid var(--peach)',
+    background: 'var(--accent-soft)',
+  },
+  draftText: {
+    flex: 1, minWidth: 0,
+    font: '400 12px/1.4 var(--font-ui)',
+    color: 'var(--text-muted)',
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  generateBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    padding: '8px 12px',
+    borderRadius: 'var(--radius-pill)',
+    border: 'none', background: 'var(--accent)', color: '#fff',
+    font: '600 12px/1 var(--font-ui)',
+    cursor: 'pointer', flexShrink: 0,
+  },
   refPreview: {
     display: 'flex', alignItems: 'center', gap: 10,
     padding: '8px 12px',
@@ -216,7 +237,9 @@ function readFileAsDataURL(file) {
 
 // Strip SCENE_READY:... from display text
 function cleanReply(text) {
-  return text.replace(/SCENE_READY:\s*\{.*?\}/gs, '').trim();
+  return text
+    .replace(/(?:SCENE_DRAFT|GENERATE_SCENE|SCENE_READY):[\s\S]*$/, '')
+    .trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -275,10 +298,10 @@ function Bubble({ role, text, imageB64, imageUrl, contentType = 'photo', isThink
 // ---------------------------------------------------------------------------
 
 const HINTS = [
-  'Rooftop penthouse at sunset',
-  'Luxury hotel bathroom mirror',
-  'Vanity GRWM setup',
-  'Black car interior editorial',
+  'Help me brainstorm a scene',
+  'Make this feel more candid',
+  'Build a luxury campaign concept',
+  'What would you improve?',
 ];
 
 function creatorImage(creator) {
@@ -346,23 +369,34 @@ function buildLivedInScenePrompt(sceneData, outputType, hasIdentityReference) {
       'ENVIRONMENTAL INTEGRATION:',
       'Render the subject and location together as one coherent exposure captured by the same camera at the same moment.',
       'Match lens perspective, subject scale, horizon, white balance, exposure, grain, focus falloff, and depth of field across subject and environment.',
-      'Environmental light must wrap onto skin, hair, and clothing with believable color spill; all directional shadows and reflections must agree with the room lighting.',
+      'Environmental light must wrap onto skin, hair, and clothing with believable color spill; key-light direction, shadow density, highlights, and reflections must agree with the location lighting.',
+      'Do not independently beauty-light or over-sharpen the face. Avoid cutout edges, halos, mismatched texture, mismatched grain, or subject sharpness that makes the person look composited into the scene.',
       'Use natural contact shadows wherever hands, clothing, or the subject meet nearby surfaces, plus subtle foreground overlap or occlusion to create real spatial depth.',
     ].join(' '),
     [
       'LIVED-IN MOMENT:',
       'Place the subject mid-action and physically engaged with the location instead of presenting a centered studio pose.',
       'Give the environment signs of immediate use and a clear relationship to what the subject is doing.',
-      'Keep posture, gaze, hand placement, and framing observational and naturally imperfect, like a real moment already happening in this space.',
+      'Show believable body weight: pelvis, shoulders, elbows, feet, clothing, and nearby cushions or surfaces must respond naturally to gravity and contact.',
+      'Every hand and arm needs a motivated action or visible support; no floating, disconnected, or decorative limbs.',
+      'Keep posture, gaze, hand placement, and timing observational and naturally imperfect, like a candid documentary moment already happening in this space.',
+    ].join(' '),
+    [
+      'CAMERA AND COMPOSITION:',
+      'Use a plausible human camera position and an intentional editorial crop.',
+      'Favor natural asymmetry and environmental context, but avoid accidental dead space, excessive empty ceiling, default centered posing, awkward joint crops, or framing that weakens the subject.',
     ].join(' '),
   ];
 
   if (hasIdentityReference) {
     promptSections.push([
       'IDENTITY REFERENCE USAGE:',
-      'Use the uploaded image only to preserve facial identity and stable appearance.',
+      'Use the uploaded image as the master identity anchor.',
+      'Preserve exact fixed facial geometry: face shape, bone structure, eye shape and spacing, brow placement, nose width and profile, lip shape and proportions, jawline, skin tone, age, and distinctive marks.',
+      'Hair, glasses, wardrobe, expression, and pose are styling—not permission to recast the face. Change styling only when the scene requests it.',
       'Re-render the person inside this scene from the scene camera viewpoint.',
       'Create new pose, crop, expression, lighting, wardrobe behavior, and perspective appropriate to the location; do not inherit the reference image composition or studio lighting.',
+      'The result must remain immediately recognizable as the same person, not a similar-looking model or generic influencer face.',
     ].join(' '));
   }
 
@@ -377,7 +411,10 @@ function buildLivedInScenePrompt(sceneData, outputType, hasIdentityReference) {
   } else if (/\b(car|vehicle|driver|passenger|interior)\b/.test(sceneText)) {
     promptSections.push([
       'VEHICLE INTEGRATION:',
-      'Seat compression, door and dashboard occlusion, window reflections, cabin color spill, and hand contact with interior surfaces must make the subject physically occupy the vehicle.',
+      'Place the camera at a believable passenger viewpoint with deliberate framing and minimal unused ceiling.',
+      'Settle the subject into the seat with realistic pelvis and shoulder support, cushion compression, bent joints, clothing folds, and grounded leg placement.',
+      'Give each arm a natural rest point or clear action with the phone, seat, armrest, door, or console; never let an arm float out of frame without physical logic.',
+      'Door and seat occlusion, window reflections, directional window light, cabin color spill, and contact shadows must make the subject physically occupy the vehicle.',
     ].join(' '));
   } else if (/\b(rooftop|terrace|balcony|outdoor|street)\b/.test(sceneText)) {
     promptSections.push([
@@ -459,7 +496,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
     // appear asleep until the user sent another message.
     const backendMessage = msg || (
       referenceToSend
-        ? 'I attached a reference image. Analyze it, acknowledge it, and begin the scene-building interview with your first question.'
+        ? 'I attached a reference image. Tell me what identity details you will preserve, then ask what I want to create.'
         : ''
     );
     const outputInstruction = outputType === 'video'
@@ -497,6 +534,9 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
         { role: 'assistant', content: aiReply },
       ];
       const sceneData = result.scene && Object.keys(result.scene).length ? result.scene : null;
+      const nextScene = sceneData
+        ? { ...(scene || {}), ...sceneData, content_type: outputType }
+        : null;
 
       setHistory(newHistory);
       setThinking(false);
@@ -508,8 +548,12 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
       }
 
       if (sceneData) {
-        setScene(sceneData);
-        await runGeneration(sceneData, generationReference);
+        setScene(nextScene);
+        // New backend requires explicit intent. Undefined keeps compatibility
+        // with an older server during rolling deployment.
+        if (result.generate === true || result.generate == null) {
+          await runGeneration(nextScene, generationReference);
+        }
       }
     } catch (err) {
       setThinking(false);
@@ -635,6 +679,10 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
 
   const isEmpty = messages.length === 0;
   const canSend = !!input.trim() || !!refImage?.pending;
+  const hasGeneratedAsset = messages.some(message => message.imageB64 || message.imageUrl);
+  const sceneSummary = scene
+    ? [scene.setting, scene.wardrobe, scene.location, scene.vibe].filter(Boolean).join(' · ')
+    : '';
 
   return (
     <>
@@ -651,7 +699,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
           <div style={S.headerAvatar}>S</div>
           <div style={S.headerText}>
             <p style={S.headerTitle}>Scene Flow</p>
-            <p style={S.headerSub}>AI Scene Director · Add a reference, answer up to 4 questions, get your scene</p>
+            <p style={S.headerSub}>Your conversational creative director</p>
           </div>
           {sessionStarted && (
             <button
@@ -663,7 +711,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
                 cursor: 'pointer',
               }}
             >
-              New Session
+              New chat
             </button>
           )}
         </div>
@@ -672,10 +720,10 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
         {isEmpty ? (
           <div style={S.welcome}>
             <div style={S.welcomeOrb}>S</div>
-            <p style={S.welcomeTitle}>Ready to build your scene.</p>
+            <p style={S.welcomeTitle}>What are we creating?</p>
             <p style={S.welcomeSub}>
-              Add an optional reference photo, then answer up to 4 quick questions.
-              I'll package everything into a prompt and generate your image or video.
+              Talk through a rough idea, ask for creative direction, attach a reference,
+              or refine a scene for as many turns as you need.
             </p>
             <div style={S.welcomeHints}>
               {HINTS.map(h => (
@@ -713,6 +761,30 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
 
         {/* Input bar */}
         <div style={S.inputBar}>
+          {scene && (
+            <div style={S.draftBar}>
+              <Icon name="sparkles" size={15} />
+              <div style={S.draftText} title={sceneSummary}>
+                <strong style={{ color: 'var(--text-strong)' }}>Scene draft</strong>
+                {sceneSummary ? ` · ${sceneSummary}` : ' · Ready to refine'}
+              </div>
+              <button
+                type="button"
+                style={{
+                  ...S.generateBtn,
+                  opacity: generating ? 0.6 : 1,
+                  cursor: generating ? 'wait' : 'pointer',
+                }}
+                onClick={() => runGeneration(scene, refImage?.dataUrl || '')}
+                disabled={thinking || generating}
+              >
+                <Icon name={outputType === 'video' ? 'video' : 'image'} size={13} />
+                {generating
+                  ? 'Generating…'
+                  : `${hasGeneratedAsset ? 'Regenerate' : 'Generate'} ${outputType === 'video' ? 'video' : 'photo'}`}
+              </button>
+            </div>
+          )}
           {refImage && (
             <div style={S.refPreview}>
               <img src={refImage.dataUrl} alt="ref" style={S.refThumb} />
@@ -774,7 +846,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
             <textarea
               ref={textRef}
               style={S.textarea}
-              placeholder={sessionStarted ? 'Type your answer...' : 'Describe the vibe, or upload a reference to start...'}
+              placeholder="Message Scene Flow — Describe the vibe, ask anything, or refine the scene…"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}

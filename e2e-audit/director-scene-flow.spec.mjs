@@ -91,7 +91,7 @@ test('Director keeps Scene Flow state and sends the first brief with its creator
   await page.getByTitle('Send').click();
 
   await expect(page.getByText('What should Maya wear?')).toBeVisible();
-  await expect(page.getByPlaceholder('Type your answer...')).toBeEnabled();
+  await expect(page.getByPlaceholder(/Message Scene Flow/)).toBeEnabled();
   expect(chatPayloads[0].data[1]).toContain(brief);
   expect(chatPayloads[0].data[1]).toContain('Requested output format: still photo');
   expect(chatPayloads[0].data[2]).toBe(PIXEL);
@@ -100,7 +100,7 @@ test('Director keeps Scene Flow state and sends the first brief with its creator
   await page.getByRole('tab', { name: 'Talk It Through' }).click();
   await expect(page.getByText('What should Maya wear?')).toBeVisible();
 
-  await page.getByPlaceholder('Type your answer...').fill('A tailored black suit');
+  await page.getByPlaceholder(/Message Scene Flow/).fill('A tailored black suit');
   await page.getByTitle('Send').click();
   await expect(page.getByText('Your scene is ready.')).toBeVisible();
 
@@ -109,7 +109,7 @@ test('Director keeps Scene Flow state and sends the first brief with its creator
   expect(chatPayloads[1].data[2]).toBe('');
   expect(generationPayload.data[1]).toBe(PIXEL);
 
-  await page.getByRole('button', { name: 'New Session' }).click();
+  await page.getByRole('button', { name: 'New chat' }).click();
   await expect(page.getByText('Maya (creator)')).toBeVisible();
   await expect(page.getByPlaceholder(/Describe the vibe/)).toHaveValue('');
 });

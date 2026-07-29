@@ -11,6 +11,45 @@ async function seedSession(page) {
   });
 }
 
+test('Cast normalizes mislabeled image uploads before vision analysis', async ({ page }) => {
+  await seedSession(page);
+  let analysisImage = '';
+  let anchorImage = '';
+
+  await page.route('**/gradio_api/run/analyze_character', route => {
+    analysisImage = route.request().postDataJSON().data[0];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [JSON.stringify({
+        face: 'Oval face', hair: 'Dark hair', body: 'Balanced build',
+        wardrobe: 'Minimal', tone: 'Warm', personality: 'Confident', niche: 'Lifestyle',
+      })] }),
+    });
+  });
+  await page.route('**/gradio_api/run/face_anchor_extract', route => {
+    anchorImage = route.request().postDataJSON().data[0];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [JSON.stringify({ faceAnchor: 'Stable facial geometry' })] }),
+    });
+  });
+
+  await page.goto('http://127.0.0.1:3000/studio/cast');
+  await page.getByRole('button', { name: 'Create from Scratch' }).click();
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: 'portrait-with-wrong-mime.png',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(PIXEL.split(',')[1], 'base64'),
+  });
+
+  await expect.poll(() => analysisImage).toMatch(/^data:image\/jpeg;base64,/);
+  expect(anchorImage).toMatch(/^data:image\/jpeg;base64,/);
+  await expect(page.getByText(/Analysis:/)).toHaveCount(0);
+  await expect(page.getByPlaceholder(/High cheekbones/)).toHaveValue('Oval face');
+});
+
 test('endpoint timeout remains active until the complete async operation settles', async ({ page }) => {
   await seedSession(page);
   await page.goto('http://127.0.0.1:3000/');

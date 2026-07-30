@@ -93,7 +93,8 @@ test('Director keeps Scene Flow state and sends the first brief with its creator
   await expect(page.getByText('What should Maya wear?')).toBeVisible();
   await expect(page.getByPlaceholder(/Message Scene Flow/)).toBeEnabled();
   expect(chatPayloads[0].data[1]).toContain(brief);
-  expect(chatPayloads[0].data[1]).toContain('Requested output format: still photo');
+  expect(chatPayloads[0].data[1]).not.toContain('Requested output format');
+  expect(chatPayloads[0].data[1]).not.toContain('locked');
   expect(chatPayloads[0].data[2]).toBe(PIXEL);
 
   await page.getByRole('tab', { name: 'Guided' }).click();

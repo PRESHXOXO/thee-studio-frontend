@@ -60,7 +60,7 @@ test('Scene Flow defaults to Photo and overrides backend video guesses', async (
   await page.getByTitle('Send').click();
   await expect(page.getByText('Your scene is ready.')).toBeVisible();
 
-  expect(chatPayload.data[1]).toContain('Requested output format: still photo');
+  expect(chatPayload.data[1]).not.toContain('Requested output format');
   expect(generationScene.content_type).toBe('photo');
 });
 

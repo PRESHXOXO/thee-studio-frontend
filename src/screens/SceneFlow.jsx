@@ -499,10 +499,10 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
         ? 'I attached a reference image. Tell me what identity details you will preserve, then ask what I want to create.'
         : ''
     );
-    const outputInstruction = outputType === 'video'
-      ? 'Requested output format: video. Build this scene specifically for video.'
-      : 'Requested output format: still photo. Do not choose video.';
-    const instructedBackendMessage = `${backendMessage}\n\n${outputInstruction}`;
+    // Output format belongs to UI state and is applied at generation time.
+    // Sending it as prose made the assistant narrate internal state back to
+    // users ("still photo is locked") instead of having a natural conversation.
+    const conversationMessage = backendMessage;
     if (userText) {
       setMessages(m => [...m, { role: 'user', text: userText }]);
     }
@@ -516,7 +516,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
     try {
       const result = await sceneFlowChat({
         messagesJson: JSON.stringify(history),
-        userMessage: instructedBackendMessage,
+        userMessage: conversationMessage,
         refImageB64: referenceToSend,
       });
 
@@ -530,7 +530,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
         );
       const newHistory = result.history?.length ? result.history : [
         ...history,
-        { role: 'user', content: instructedBackendMessage },
+        { role: 'user', content: conversationMessage },
         { role: 'assistant', content: aiReply },
       ];
       const sceneData = result.scene && Object.keys(result.scene).length ? result.scene : null;

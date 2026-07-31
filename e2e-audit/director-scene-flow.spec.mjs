@@ -81,7 +81,7 @@ test('Director keeps Scene Flow state and sends the first brief with its creator
     });
   });
 
-  await page.goto('http://localhost:3000/studio/');
+  await page.goto('http://127.0.0.1:3000/studio/');
   await page.getByRole('button', { name: /Thee Director/ }).first().click();
   await page.getByRole('tab', { name: 'Talk It Through' }).click();
 

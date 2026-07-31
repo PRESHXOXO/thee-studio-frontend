@@ -46,6 +46,9 @@ const SLUG_TO_ID = {
   memory: 'memory', 'creator-memory': 'memory',
   'new-creator': 'images', images: 'images',
   director: 'director', 'thee-director': 'director',
+  guided: 'director',
+  'describe-it': 'director', describe: 'director', 'prompt-lab': 'director',
+  'talk-it-through': 'director', talk: 'director', 'scene-flow': 'director',
   scenes: 'scenes',
   references: 'references',
   campaigns: 'campaigns',
@@ -61,13 +64,32 @@ function slugToScreenId(slug) {
   return SLUG_TO_ID[String(slug).toLowerCase()] || null;
 }
 
+const DIRECTOR_MODE_TO_SLUG = {
+  guided: 'guided',
+  describe: 'describe-it',
+  talk: 'scene-flow',
+};
+
+function directorModeFromSlug(slug) {
+  const value = String(slug || '').toLowerCase();
+  if (value === 'guided') return 'guided';
+  if (['describe', 'describe-it', 'prompt-lab'].includes(value)) return 'describe';
+  if (['talk', 'talk-it-through', 'scene-flow'].includes(value)) return 'talk';
+  return null;
+}
+
+function directorModePath(mode) {
+  return `/studio/director/${DIRECTOR_MODE_TO_SLUG[mode] || 'guided'}`;
+}
+
 // Fallback for unknown paths: a bare app slug (e.g. /cast) redirects into the
 // studio shell; anything genuinely unknown falls through to the landing page.
 function UnknownRoute() {
   const location = useLocation();
-  const seg = location.pathname.split('/').filter(Boolean)[0];
+  const segments = location.pathname.split('/').filter(Boolean);
+  const seg = segments[0];
   const id = slugToScreenId(seg);
-  if (id) return <Navigate to={`/studio/${seg}`} replace />;
+  if (id) return <Navigate to={`/studio/${segments.join('/')}`} replace />;
   return <Landing />;
 }
 
@@ -140,7 +162,7 @@ function useBackendStatus() {
 function StudioApp() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { screen: screenSlug } = useParams();
+  const { screen: screenSlug, projectId } = useParams();
   const auth = useAuth();
   const production = useProduction();
   const authSession = auth.session;
@@ -157,6 +179,9 @@ function StudioApp() {
   const [libCount, setLibCount]               = React.useState(() => loadLibrary().length);
   const [pendingImportRequest, setPendingImportRequest] = React.useState(false);
   const backendStatus = useBackendStatus();
+  const routeDirectorMode = activeNav === 'director'
+    ? directorModeFromSlug(projectId) || directorModeFromSlug(screenSlug) || 'guided'
+    : null;
 
   // Refresh library count whenever user navigates (catches new saves)
   const handleNav = React.useCallback((id, data) => {
@@ -177,7 +202,12 @@ function StudioApp() {
     const query = id === 'library' && data?.filter
       ? `?filter=${encodeURIComponent(data.filter)}`
       : '';
-    navigate(`/studio/${id}${query}`, { replace: false });
+    const target = id === 'director'
+      ? directorModePath(
+          directorModeFromSlug(data?.mode || data?.settings?.workflow) || 'guided'
+        )
+      : `/studio/${id}${query}`;
+    navigate(target, { replace: false });
   }, [navigate]);
 
   // Back/forward or a hand-typed /studio/<slug> changes the param — mirror it
@@ -187,6 +217,14 @@ function StudioApp() {
     if (id && id !== activeNav) setActiveNav(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screenSlug]);
+
+  // Canonical Director URLs give every input mode a refresh-safe link while
+  // retaining friendly legacy aliases such as /studio/prompt-lab.
+  React.useEffect(() => {
+    if (activeNav !== 'director') return;
+    const canonical = directorModePath(routeDirectorMode);
+    if (location.pathname !== canonical) navigate(canonical, { replace: true });
+  }, [activeNav, location.pathname, navigate, routeDirectorMode]);
 
   const navItems = React.useMemo(() => BASE_NAV.map(item =>
     item.id === 'library' && libCount > 0 ? { ...item, badge: String(libCount) } : item
@@ -211,11 +249,17 @@ function StudioApp() {
   // Same setter as Characters' onCharacterChange — Director can change the
   // active creator too, and the sidebar chip needs to reflect it without
   // waiting for a nav/remount to Characters.
-  if (activeNav === 'director') screenProps.onActiveCreatorChange = setActiveCharacter;
+  if (activeNav === 'director') {
+    screenProps.onActiveCreatorChange = setActiveCharacter;
+    screenProps.initialMode = routeDirectorMode;
+    screenProps.onModeChange = mode => navigate(directorModePath(mode), { replace: false });
+  }
   if (activeNav === 'director'   && pendingDirector) {
     screenProps.initialScene  = pendingDirector.scene  || 'None';
     screenProps.initialVision = pendingDirector.vision || '';
-    screenProps.initialMode = pendingDirector.mode || pendingDirector.settings?.workflow || 'guided';
+    screenProps.initialMode = directorModeFromSlug(
+      pendingDirector.mode || pendingDirector.settings?.workflow
+    ) || routeDirectorMode;
     screenProps.initialSettings = pendingDirector.settings || null;
     if (pendingDirector.campaignId) {
       screenProps.initialCampaign = {
@@ -265,10 +309,10 @@ function StudioApp() {
           }
         />
         <main
-          key={`${activeNav}:${location.pathname}`}
+          key={activeNav}
           style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1, animation: 'screen-in 0.18s ease-out both' }}
         >
-          <StudioErrorBoundary resetKey={activeNav} onReset={() => handleNav('home')}>
+          <StudioErrorBoundary resetKey={`${activeNav}:${routeDirectorMode || ''}`} onReset={() => handleNav('home')}>
             <Screen {...screenProps} />
           </StudioErrorBoundary>
         </main>

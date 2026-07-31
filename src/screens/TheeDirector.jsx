@@ -98,11 +98,12 @@ function CharacterSelector({ characters, selectedId, onSelect }) {
 const MODES = [
   { id: 'guided',   label: 'Guided',            icon: 'sliders-horizontal', help: 'Dial in a shot with structured controls, built around your creator’s locked identity.' },
   { id: 'describe', label: 'Describe It',        icon: 'flask-conical',      help: 'Describe the image in plain words — AI engineers a cinema-grade prompt, then generates it here.' },
-  { id: 'talk',     label: 'Talk It Through',    icon: 'message-circle',     help: 'Chat it out — answer a few quick questions and Scene Flow builds the scene with you.' },
+  { id: 'talk',     label: 'Talk It Through',    icon: 'message-circle',     help: 'Chat naturally, brainstorm, revise, and generate only when the scene feels right.' },
 ];
 
 export function TheeDirector({
   onNav,
+  onModeChange,
   onActiveCreatorChange,
   initialScene = 'None',
   initialVision = '',
@@ -114,6 +115,9 @@ export function TheeDirector({
   const [mode, setMode] = React.useState(
     MODES.some(item => item.id === initialMode) ? initialMode : 'guided'
   );
+  React.useEffect(() => {
+    if (MODES.some(item => item.id === initialMode)) setMode(initialMode);
+  }, [initialMode]);
   const [characters, setCharacters] = React.useState(loadCharacters);
   // A campaign's (or a re-run/fork handoff's) assigned creator takes priority
   // over "whatever was last active" — arriving via "Open in Director" or
@@ -213,7 +217,10 @@ export function TheeDirector({
             key={m.id}
             role="tab"
             aria-selected={mode === m.id}
-            onClick={() => setMode(m.id)}
+            onClick={() => {
+              setMode(m.id);
+              onModeChange?.(m.id);
+            }}
             style={{
               display: 'flex', alignItems: 'center', gap: 7,
               padding: '9px 16px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',

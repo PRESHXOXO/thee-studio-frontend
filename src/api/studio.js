@@ -1,3 +1,5 @@
+import { serializeDirectorReferences } from '../lib/directorReferences.js';
+
 const BASE = '/gradio_api';
 const GRADIO_CONFIG_URL = '/config'; // Gradio 6.x serves config at /config, not /gradio_api/config
 const SESSION_HASH = Math.random().toString(36).slice(2);
@@ -369,14 +371,29 @@ export async function generateImage({
 // Scene Flow API
 // ---------------------------------------------------------------------------
 
-export async function sceneFlowChat({ messagesJson = '[]', userMessage = '', refImageB64 = '' } = {}) {
-  const raw = await callNamedEndpoint('scene_flow_chat', [messagesJson, userMessage, refImageB64]);
+export async function sceneFlowChat({
+  messagesJson = '[]',
+  userMessage = '',
+  referenceImages = [],
+  refImageB64 = '',
+} = {}) {
+  const references = referenceImages.length
+    ? serializeDirectorReferences(referenceImages)
+    : refImageB64;
+  const raw = await callNamedEndpoint('scene_flow_chat', [messagesJson, userMessage, references]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   return parsed; // { reply, scene, generate, history }
 }
 
-export async function sceneFlowGenerate({ sceneJson = '{}', refImageB64 = '' } = {}) {
-  const raw = await callNamedEndpoint('scene_flow_generate', [sceneJson, refImageB64]);
+export async function sceneFlowGenerate({
+  sceneJson = '{}',
+  referenceImages = [],
+  refImageB64 = '',
+} = {}) {
+  const references = referenceImages.length
+    ? serializeDirectorReferences(referenceImages)
+    : refImageB64;
+  const raw = await callNamedEndpoint('scene_flow_generate', [sceneJson, references]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   return parsed; // { result_b64, result_url, content_type, status } or { error }
 }

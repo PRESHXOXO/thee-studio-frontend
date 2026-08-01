@@ -1,8 +1,10 @@
 import React from 'react';
 import { sanitizeForOpenAI, sceneFlowChat, sceneFlowGenerate } from '../api/studio.js';
 import { Icon } from '../components/core/Icon.jsx';
+import { ReferenceImageTray } from '../components/director/ReferenceImageTray.jsx';
 import { saveToLibrary } from '../lib/library.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../lib/creatorMemory.js';
+import { referencePromptBlock } from '../lib/directorReferences.js';
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -12,8 +14,8 @@ const S = {
   root: {
     display: 'flex',
     flexDirection: 'column',
-    height: 'calc(100vh - var(--topbar-h, 56px) - 64px)',
-    minHeight: 500,
+    height: 'calc(100dvh - var(--topbar-h, 56px) - 64px)',
+    minHeight: 460,
     background: 'var(--surface-card)',
     borderRadius: 'var(--radius-xl)',
     border: '1px solid var(--border)',
@@ -40,6 +42,7 @@ const S = {
   headerSub: { font: '400 12px/1 var(--font-ui)', color: 'var(--text-muted)', marginTop: 3 },
   messages: {
     flex: 1,
+    minHeight: 0,
     overflowY: 'auto',
     padding: '24px 20px',
     display: 'flex',
@@ -49,19 +52,21 @@ const S = {
   // Welcome state
   welcome: {
     flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
-    padding: 40,
+    gap: 12,
+    padding: '24px 28px',
     textAlign: 'center',
   },
   welcomeOrb: {
-    width: 72, height: 72, borderRadius: '50%',
+    width: 64, height: 64, borderRadius: '50%',
     background: 'var(--grad-coral)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: '#fff', font: '700 28px/1 var(--font-ui)',
+    color: '#fff', font: '700 24px/1 var(--font-ui)',
     boxShadow: 'var(--shadow-coral)',
     marginBottom: 8,
   },
@@ -226,15 +231,6 @@ const S = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function readFileAsDataURL(file) {
-  return new Promise((res, rej) => {
-    const reader = new FileReader();
-    reader.onload = e => res(e.target.result);
-    reader.onerror = rej;
-    reader.readAsDataURL(file);
-  });
-}
-
 // Strip SCENE_READY:... from display text
 function cleanReply(text) {
   return text
@@ -308,13 +304,16 @@ function creatorImage(creator) {
   return creator?.refImages?.[0] || creator?.image || null;
 }
 
-function creatorReference(creator) {
+function creatorReferences(creator) {
   const img = creatorImage(creator);
-  return img ? {
+  return img ? [{
+    id: `creator-${creator.id}`,
     dataUrl: img,
     name: `${creator.name || 'Creator'} (creator)`,
+    role: 'identity',
     pending: true,
-  } : null;
+    source: 'creator',
+  }] : [];
 }
 
 function isContentPolicyError(value) {
@@ -448,16 +447,15 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
   const [messages, setMessages] = React.useState([]); // { role, text, imageB64, imageUrl }
   const [history, setHistory]   = React.useState([]); // OpenAI message history
   const [input, setInput]       = React.useState(restored.input || initialVision || '');
-  // Pre-attach the session creator's photo as the reference so "Talk It
-  // Through" shoots the same person the rest of Director is about.
-  const [refImage, setRefImage] = React.useState(() => creatorReference(creator));
+  // Pre-attach the session creator as the identity reference, then let the
+  // user add independent outfit/background/makeup/hair/pose references.
+  const [references, setReferences] = React.useState(() => creatorReferences(creator));
   const [thinking, setThinking] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
   const [scene, setScene]       = React.useState(restored.scene || null);
   const [sessionStarted, setSessionStarted] = React.useState(false);
   const [outputType, setOutputType] = React.useState(restored.outputType || 'photo');
 
-  const fileRef   = React.useRef(null);
   const bottomRef = React.useRef(null);
   const textRef   = React.useRef(null);
   const creatorIdRef = React.useRef(creator?.id ?? null);
@@ -471,7 +469,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
     setMessages([]);
     setHistory([]);
     setInput(initialVision || '');
-    setRefImage(creatorReference(creator));
+    setReferences(creatorReferences(creator));
     setThinking(false);
     setGenerating(false);
     setScene(null);
@@ -485,18 +483,17 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
 
   async function send(text) {
     const msg = (text || input).trim();
-    const referenceToSend = refImage?.pending ? refImage.dataUrl : '';
-    const generationReference = refImage?.dataUrl || '';
-    if (!msg && !referenceToSend) return;
+    const referencesToSend = references.filter(reference => reference.pending);
+    if (!msg && !referencesToSend.length) return;
     if (thinking || generating) return;
 
-    const userText = msg || '(Reference image attached)';
-    // A reference-only turn previously sent an empty userMessage. The model
-    // received image data but no instruction, so it could return no reply and
-    // appear asleep until the user sent another message.
+    const userText = msg || `(${referencesToSend.length} reference image${referencesToSend.length === 1 ? '' : 's'} attached)`;
+    const roleSummary = referencesToSend
+      .map(reference => reference.role)
+      .join(', ');
     const backendMessage = msg || (
-      referenceToSend
-        ? 'I attached a reference image. Tell me what identity details you will preserve, then ask what I want to create.'
+      referencesToSend.length
+        ? `I attached ${referencesToSend.length} visual reference image${referencesToSend.length === 1 ? '' : 's'} for these roles: ${roleSummary}. Acknowledge how you will use each role, then ask what I want to create.`
         : ''
     );
     // Output format belongs to UI state and is applied at generation time.
@@ -506,8 +503,15 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
     if (userText) {
       setMessages(m => [...m, { role: 'user', text: userText }]);
     }
-    if (referenceToSend) {
-      setMessages(m => [...m, { role: 'user', text: '', imageUrl: refImage.dataUrl }]);
+    if (referencesToSend.length) {
+      setMessages(m => [
+        ...m,
+        ...referencesToSend.map(reference => ({
+          role: 'user',
+          text: reference.role,
+          imageUrl: reference.dataUrl,
+        })),
+      ]);
     }
     setInput('');
     setThinking(true);
@@ -517,15 +521,15 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
       const result = await sceneFlowChat({
         messagesJson: JSON.stringify(history),
         userMessage: conversationMessage,
-        refImageB64: referenceToSend,
+        referenceImages: referencesToSend,
       });
 
       const rawReply = (result.reply || '').trim();
       const aiReply = rawReply.includes('insufficient_quota') || rawReply.includes('exceeded your current quota')
         ? "⚠️ OpenAI credits are empty — add billing at platform.openai.com to activate me."
         : rawReply || (
-          referenceToSend
-            ? 'Reference received. What kind of scene would you like to create with it?'
+          referencesToSend.length
+            ? 'References received. What kind of scene would you like to create with them?'
             : 'I missed that. Tell me what kind of scene you want to create.'
         );
       const newHistory = result.history?.length ? result.history : [
@@ -541,10 +545,13 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
       setHistory(newHistory);
       setThinking(false);
       setMessages(m => [...m, { role: 'assistant', text: aiReply }]);
-      // Keep the active reference for the eventual generation request, but
-      // mark it delivered so chat does not re-read the image every turn.
-      if (referenceToSend) {
-        setRefImage(current => current ? { ...current, pending: false } : current);
+      // Keep every reference for generation, but only send newly attached or
+      // re-labeled images back through conversational vision.
+      if (referencesToSend.length) {
+        const deliveredIds = new Set(referencesToSend.map(reference => reference.id));
+        setReferences(current => current.map(reference =>
+          deliveredIds.has(reference.id) ? { ...reference, pending: false } : reference
+        ));
       }
 
       if (sceneData) {
@@ -552,7 +559,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
         // New backend requires explicit intent. Undefined keeps compatibility
         // with an older server during rolling deployment.
         if (result.generate === true || result.generate == null) {
-          await runGeneration(nextScene, generationReference);
+          await runGeneration(nextScene, references);
         }
       }
     } catch (err) {
@@ -561,13 +568,16 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
     }
   }
 
-  async function runGeneration(sceneData, referenceImage = '') {
+  async function runGeneration(sceneData, generationReferences = references) {
     setGenerating(true);
+    const hasIdentityReference = generationReferences.some(reference => reference.role === 'identity');
     const requestedScene = buildLivedInScenePrompt(
       { ...sceneData, content_type: outputType },
       outputType,
-      !!referenceImage
+      hasIdentityReference
     );
+    const visualReferenceBlock = referencePromptBlock(generationReferences);
+    if (visualReferenceBlock) requestedScene.full_prompt += `\n\n${visualReferenceBlock}`;
     const memory = creator ? getCreatorMemory(creator.id) : null;
     const memoryBlock = creatorMemoryPrompt(memory);
     if (memoryBlock) requestedScene.full_prompt += `\n\n${memoryBlock}`;
@@ -577,7 +587,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
     try {
       const generate = data => sceneFlowGenerate({
         sceneJson: JSON.stringify(data),
-        refImageB64: referenceImage,
+        referenceImages: generationReferences,
       });
       let generationScene = requestedScene;
       let result;
@@ -655,19 +665,11 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
     setMessages([]);
     setHistory([]);
     setInput(initialVision || '');
-    setRefImage(creatorReference(creator));
+    setReferences(creatorReferences(creator));
     setScene(null);
     setThinking(false);
     setGenerating(false);
     setSessionStarted(false);
-  }
-
-  async function handleFileChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const dataUrl = await readFileAsDataURL(file);
-    setRefImage({ dataUrl, name: file.name, pending: true });
-    e.target.value = '';
   }
 
   function handleKeyDown(e) {
@@ -678,8 +680,10 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
   }
 
   const isEmpty = messages.length === 0;
-  const canSend = !!input.trim() || !!refImage?.pending;
-  const hasGeneratedAsset = messages.some(message => message.imageB64 || message.imageUrl);
+  const canSend = !!input.trim() || references.some(reference => reference.pending);
+  const hasGeneratedAsset = messages.some(message =>
+    message.role === 'assistant' && (message.imageB64 || message.imageUrl)
+  );
   const sceneSummary = scene
     ? [scene.setting, scene.wardrobe, scene.location, scene.vibe].filter(Boolean).join(' · ')
     : '';
@@ -775,7 +779,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
                   opacity: generating ? 0.6 : 1,
                   cursor: generating ? 'wait' : 'pointer',
                 }}
-                onClick={() => runGeneration(scene, refImage?.dataUrl || '')}
+                onClick={() => runGeneration(scene, references)}
                 disabled={thinking || generating}
               >
                 <Icon name={outputType === 'video' ? 'video' : 'image'} size={13} />
@@ -785,18 +789,16 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
               </button>
             </div>
           )}
-          {refImage && (
-            <div style={S.refPreview}>
-              <img src={refImage.dataUrl} alt="ref" style={S.refThumb} />
-              <span style={S.refLabel}>{refImage.name}</span>
-              <button
-                onClick={() => setRefImage(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16 }}
-              >
-                ×
-              </button>
-            </div>
-          )}
+          <ReferenceImageTray
+            references={references}
+            onChange={setReferences}
+            maxReferences={4}
+            defaultRole={creator ? 'outfit' : 'identity'}
+            disabled={thinking || generating}
+            compact
+            title="Scene references"
+            description="Give each image one job. Scene Flow keeps identity separate from outfit, background, makeup, hair, and pose."
+          />
           <div style={S.outputRow}>
             <span style={S.outputLabel}>Output format</span>
             <div role="radiogroup" aria-label="Scene output format" style={S.outputGroup}>
@@ -829,20 +831,6 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
             </div>
           </div>
           <div style={S.inputRow}>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={handleFileChange}
-            />
-            <button
-              style={S.attachBtn}
-              onClick={() => fileRef.current?.click()}
-              title="Attach reference image"
-            >
-              <Icon name="paperclip" size={16} />
-            </button>
             <textarea
               ref={textRef}
               style={S.textarea}

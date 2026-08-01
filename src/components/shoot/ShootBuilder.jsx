@@ -5,11 +5,13 @@ import { Icon } from '../core/Icon.jsx';
 import { GenerationProgress } from '../feedback/GenerationProgress.jsx';
 import { ImageLightbox } from '../feedback/ImageLightbox.jsx';
 import { Select } from '../forms/Select.jsx';
-import { characterGenerate, generateImage, describeOutfitImage } from '../../api/studio.js';
+import { ReferenceImageTray } from '../director/ReferenceImageTray.jsx';
+import { characterGenerate, generateImage } from '../../api/studio.js';
 import { buildCharacterPrompt } from '../../lib/characterPrompt.js';
 import { saveToLibrary } from '../../lib/library.js';
 import { compressImage } from '../../lib/imageUtils.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../../lib/creatorMemory.js';
+import { referencePromptBlock } from '../../lib/directorReferences.js';
 import {
   SHOOT_ENGINES, PORTRAIT_ANGLES, BATCH_OPTIONS, SHOOT_MOODS, SHOOT_LIGHTINGS, SHOOT_OUTFITS,
 } from '../../lib/shootOptions.js';
@@ -75,11 +77,10 @@ export function ShootBuilder({
   const [batchSize, setBatchSize]       = React.useState(restored.batchSize || 1);
   const [activeRef, setActiveRef]       = React.useState(restored.activeRef || 0);
 
-  // Outfit photo upload — analyzed description overrides the outfit pill.
-  const [outfitPhotoUrl, setOutfitPhotoUrl] = React.useState('');
-  const [outfitPhotoDesc, setOutfitPhotoDesc] = React.useState(restored.outfitPhotoDesc || '');
-  const [outfitPhotoAnalyzing, setOutfitPhotoAnalyzing] = React.useState(false);
-  const outfitFileRef = React.useRef(null);
+  const [shotReferences, setShotReferences] = React.useState([]);
+  // Preserve the analyzed description from old History entries after replacing
+  // the one-off outfit uploader with role-aware visual references.
+  const legacyOutfitPhotoDesc = restored.outfitPhotoDesc || '';
 
   // Raw-attribute escape hatch (no creator) — only rendered when allowNoCreator.
   const [rawGender, setRawGender]     = React.useState(restored.rawGender || 'Unspecified');
@@ -109,7 +110,7 @@ export function ShootBuilder({
     if (creatorIdRef.current === nextCreatorId) return;
     creatorIdRef.current = nextCreatorId;
     setActiveRef(0); setGenImages([]); setGenError('');
-    setOutfitPhotoUrl(''); setOutfitPhotoDesc('');
+    setShotReferences([]);
   }, [creator?.id]);
 
   const rawPhysiqueOptions  = getPhysiqueOptions(rawGender);
@@ -125,30 +126,12 @@ export function ShootBuilder({
     setRawJewelry(getJewelryOptions(g).find(o => o.value === rawJewelry) ? rawJewelry : 'None');
   };
 
-  const handleOutfitPhotoUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target.result;
-      setOutfitPhotoUrl(dataUrl);
-      setOutfitPhotoDesc('');
-      setOutfit('default');
-      setOutfitPhotoAnalyzing(true);
-      try {
-        const desc = await describeOutfitImage(dataUrl);
-        setOutfitPhotoDesc(desc);
-      } catch {
-        setOutfitPhotoDesc('');
-      } finally {
-        setOutfitPhotoAnalyzing(false);
-      }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
+  const handleShotReferencesChange = (nextReferences) => {
+    setShotReferences(nextReferences);
+    // The current OpenAI path is the only Guided engine that consumes every
+    // labeled visual input. Keep the selected engine honest when refs are used.
+    if (nextReferences.length) setEngine('openai_image');
   };
-
-  const clearOutfitPhoto = () => { setOutfitPhotoUrl(''); setOutfitPhotoDesc(''); };
 
   // Lighting/notes don't have dedicated slots in buildCharacterPrompt's
   // fixed template — folded into the mood argument and appended as a
@@ -168,7 +151,11 @@ export function ShootBuilder({
     engine,
     batchSize,
     activeRef,
-    outfitPhotoDesc,
+    outfitPhotoDesc: legacyOutfitPhotoDesc,
+    referenceRoles: shotReferences.map(reference => ({
+      name: reference.name,
+      role: reference.role,
+    })),
     rawGender,
     rawPhysique,
     rawSkinTone,
@@ -191,9 +178,10 @@ export function ShootBuilder({
         if (creator.locked && !allImages.length) {
           throw new Error('Identity lock is on but this creator has no reference images. Add one first.');
         }
-        const outfitOverride = outfitPhotoDesc
-          || SHOOT_OUTFITS.find(o => o.id === outfit)?.prompt
-          || null;
+        const hasOutfitReference = shotReferences.some(reference => reference.role === 'outfit');
+        const outfitOverride = hasOutfitReference
+          ? null
+          : legacyOutfitPhotoDesc || SHOOT_OUTFITS.find(o => o.id === outfit)?.prompt || null;
         const outfitOrAngle = identityMode === 'portrait' ? quickAngle : outfitOverride;
         const sceneName = scene === 'None' ? '' : scene;
         let positivePrompt = buildCharacterPrompt(creator, sceneName, composedMood, !!creator.locked, outfitOrAngle, identityMode);
@@ -203,12 +191,36 @@ export function ShootBuilder({
         if (notes.trim()) positivePrompt += `\n\nDIRECTOR'S NOTES:\n${notes.trim()}`;
 
         if (allImages.length) {
+          const primaryIdentity = allImages[activeRef] || allImages[0];
+          const remainingIdentityAnchors = allImages.filter(image => image !== primaryIdentity);
+          const providerReferences = shotReferences.length
+            ? [
+                ...shotReferences,
+                ...remainingIdentityAnchors
+                  .slice(0, Math.max(0, 3 - shotReferences.length))
+                  .map((dataUrl, index) => ({
+                    dataUrl,
+                    role: 'identity',
+                    name: `Creator angle ${index + 2}`,
+                  })),
+              ]
+            : [];
+          const referenceBlock = referencePromptBlock(
+            providerReferences,
+            { startsAfterIdentity: true }
+          );
+          if (referenceBlock) positivePrompt += `\n\n${referenceBlock}`;
           const result = await characterGenerate({
             engineId: engine,
             positivePrompt,
             negativePrompt: STANDARD_NEGATIVE,
-            characterImage: allImages[activeRef] || allImages[0],
-            anchorImages: allImages,
+            characterImage: primaryIdentity,
+            // Providers currently use four visual inputs. Put role-specific
+            // shot references first so outfit/background/makeup choices are
+            // never displaced by secondary creator angles.
+            anchorImages: providerReferences.length
+              ? providerReferences.map(reference => reference.dataUrl)
+              : allImages,
             mode: identityMode,
             batchSize,
           });
@@ -244,15 +256,28 @@ export function ShootBuilder({
           mood: composedMood, contentType: identityMode === 'portrait' ? 'Portrait' : 'Lifestyle',
           scene,
         });
-        const result = await generateImage({
-          engine: 'OpenAI Image',
-          positivePrompt,
-          negativePrompt: STANDARD_NEGATIVE,
-          imageSize: 'Vertical 9:16',
-          quality: 'High',
-          performanceMode: 'Balanced',
-          imageStyle: 'Lifestyle Creator',
-        });
+        const referenceBlock = referencePromptBlock(shotReferences);
+        if (referenceBlock) positivePrompt += `\n\n${referenceBlock}`;
+        const referenceImages = shotReferences.map(reference => reference.dataUrl);
+        const result = referenceImages.length
+          ? await characterGenerate({
+              engineId: engine,
+              positivePrompt,
+              negativePrompt: STANDARD_NEGATIVE,
+              characterImage: referenceImages[0],
+              anchorImages: referenceImages.slice(1),
+              mode: identityMode,
+              batchSize,
+            })
+          : await generateImage({
+              engine: 'OpenAI Image',
+              positivePrompt,
+              negativePrompt: STANDARD_NEGATIVE,
+              imageSize: 'Vertical 9:16',
+              quality: 'High',
+              performanceMode: 'Balanced',
+              imageStyle: 'Lifestyle Creator',
+            });
         images = result.images || [];
         images.forEach(url => saveToLibrary(url, {
           source: 'director', engine: 'OpenAI Image', scene: scene !== 'None' ? scene : undefined,
@@ -361,6 +386,18 @@ export function ShootBuilder({
         </div>
       </div>
 
+      <ReferenceImageTray
+        references={shotReferences}
+        onChange={handleShotReferencesChange}
+        maxReferences={allImages.length ? 3 : 4}
+        defaultRole={identityMode === 'portrait' ? 'makeup' : 'outfit'}
+        disabled={generating}
+        title="Shot references"
+        description={allImages.length
+          ? 'Your creator fills the identity slot. Add up to three more images and assign each a job. Multi-reference shots use OpenAI.'
+          : 'Add up to four images and assign each one a job. Multi-reference shots use OpenAI.'}
+      />
+
       {identityMode === 'portrait' ? (
         <div>
           <div style={{ ...LABEL, marginBottom: 10 }}>Camera Angle</div>
@@ -380,36 +417,18 @@ export function ShootBuilder({
           <div>
             <div style={{ ...LABEL, marginBottom: 10 }}>
               Outfit for this shot
-              {outfit !== 'default' && !outfitPhotoUrl && (
+              {outfit !== 'default' && (
                 <button onClick={() => setOutfit('default')} style={{ marginLeft: 10, font: '500 0.72rem/1 var(--font-ui)', color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>reset</button>
               )}
             </div>
-            {outfitPhotoUrl ? (
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <img src={outfitPhotoUrl} alt="Outfit" style={{ width: 52, height: 70, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }} />
-                  <button onClick={clearOutfitPhoto} style={{ position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%', background: 'var(--cherry)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 10, padding: 0 }}>✕</button>
-                </div>
-                <div style={{ flex: 1, font: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  {outfitPhotoAnalyzing ? 'Analyzing outfit…' : (outfitPhotoDesc || 'Could not analyze — pick an outfit pill instead.')}
-                </div>
-              </div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-                  {SHOOT_OUTFITS.map(o => (
-                    <PillButton key={o.id} active={outfit === o.id} onClick={() => setOutfit(o.id)}>{o.label}</PillButton>
-                  ))}
-                </div>
-                <input ref={outfitFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleOutfitPhotoUpload} />
-                <button
-                  onClick={() => outfitFileRef.current?.click()}
-                  style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-deep)', font: '500 0.78rem/1 var(--font-ui)', padding: 0, fontFamily: 'inherit' }}
-                >
-                  <Icon name="upload" size={12} /> Or upload a photo of the outfit
-                </button>
-              </>
-            )}
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+              {SHOOT_OUTFITS.map(o => (
+                <PillButton key={o.id} active={outfit === o.id} onClick={() => setOutfit(o.id)}>{o.label}</PillButton>
+              ))}
+            </div>
+            <div style={{ marginTop: 8, font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.45 }}>
+              For an exact look, add one or more Outfit references above. Visual references override these presets.
+            </div>
           </div>
 
           <div>

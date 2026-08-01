@@ -109,7 +109,7 @@ test('History re-run restores the complete Guided settings snapshot', async ({ p
 
   await expect(page).toHaveURL(/\/studio\/director/);
   await expect(page.getByRole('tab', { name: 'Guided' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('combobox')).toContainText('Rooftop');
+  await expect(page.getByRole('combobox').filter({ hasText: 'Rooftop' })).toBeVisible();
   await expect(page.getByPlaceholder(/Anything specific for this shot/)).toHaveValue('Keep the skyline soft and candid.');
   await expect(page.getByRole('button', { name: 'FLUX Schnell' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Cinematic' })).toHaveAttribute('aria-pressed', 'true');

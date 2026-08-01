@@ -85,7 +85,7 @@ test('Director keeps Scene Flow state and sends the first brief with its creator
   await page.getByRole('button', { name: /Thee Director/ }).first().click();
   await page.getByRole('tab', { name: 'Talk It Through' }).click();
 
-  await expect(page.getByText('Maya (creator)')).toBeVisible();
+  await expect(page.getByLabel('Role for Maya (creator)')).toBeVisible();
   const brief = 'Rooftop at sunset in Atlanta with cinematic lighting.';
   await page.getByPlaceholder(/Describe the vibe/).fill(brief);
   await page.getByTitle('Send').click();
@@ -95,7 +95,9 @@ test('Director keeps Scene Flow state and sends the first brief with its creator
   expect(chatPayloads[0].data[1]).toContain(brief);
   expect(chatPayloads[0].data[1]).not.toContain('Requested output format');
   expect(chatPayloads[0].data[1]).not.toContain('locked');
-  expect(chatPayloads[0].data[2]).toBe(PIXEL);
+  expect(JSON.parse(chatPayloads[0].data[2])).toEqual([
+    expect.objectContaining({ image: PIXEL, role: 'identity', name: 'Maya (creator)' }),
+  ]);
 
   await page.getByRole('tab', { name: 'Guided' }).click();
   await page.getByRole('tab', { name: 'Talk It Through' }).click();
@@ -103,14 +105,16 @@ test('Director keeps Scene Flow state and sends the first brief with its creator
 
   await page.getByPlaceholder(/Message Scene Flow/).fill('A tailored black suit');
   await page.getByTitle('Send').click();
-  await expect(page.getByText('Your scene is ready.')).toBeVisible();
+  await expect(page.getByText('Your scene is ready.')).toBeVisible({ timeout: 15_000 });
 
   // The chat sees the reference only once, while the later generation still
   // receives the same active identity reference after multiple turns.
   expect(chatPayloads[1].data[2]).toBe('');
-  expect(generationPayload.data[1]).toBe(PIXEL);
+  expect(JSON.parse(generationPayload.data[1])).toEqual([
+    expect.objectContaining({ image: PIXEL, role: 'identity', name: 'Maya (creator)' }),
+  ]);
 
   await page.getByRole('button', { name: 'New chat' }).click();
-  await expect(page.getByText('Maya (creator)')).toBeVisible();
+  await expect(page.getByLabel('Role for Maya (creator)')).toBeVisible();
   await expect(page.getByPlaceholder(/Describe the vibe/)).toHaveValue('');
 });

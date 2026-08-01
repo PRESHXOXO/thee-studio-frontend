@@ -76,7 +76,9 @@ test('Scene Flow enriches mirror scenes with lived-in spatial prompting', async 
   expect(scene.full_prompt).toContain('not a similar-looking model');
   expect(scene.full_prompt).toContain('true mirror reflection');
   expect(scene.full_prompt).toContain('do not inherit the reference image composition');
-  expect(generationPayload.data[1]).toBe(PIXEL);
+  expect(JSON.parse(generationPayload.data[1])).toEqual([
+    expect.objectContaining({ image: PIXEL, role: 'identity' }),
+  ]);
 });
 
 test('Scene Flow gives vehicle scenes grounded body and framing direction', async ({ page }) => {

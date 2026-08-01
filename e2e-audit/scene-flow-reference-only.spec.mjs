@@ -40,15 +40,18 @@ test('reference-only send wakes Scene Flow with a real instruction', async ({ pa
   await page.goto('http://127.0.0.1:3000/studio/');
   await page.getByRole('navigation').getByRole('button', { name: /Thee Director/ }).click();
   await page.getByRole('tab', { name: 'Talk It Through' }).click();
-  await page.locator('input[type="file"][accept="image/*"]').last().setInputFiles({
+  await page.locator('input[type="file"]').last().setInputFiles({
     name: 'reference.png',
     mimeType: 'image/png',
     buffer: PIXEL,
   });
   await page.getByTitle('Send').click();
 
-  await expect(page.getByText('Reference received. What kind of scene would you like to create with it?')).toBeVisible();
+  await expect(page.getByText('References received. What kind of scene would you like to create with them?')).toBeVisible();
   await expect(page.getByPlaceholder(/Message Scene Flow/)).toBeEnabled();
-  expect(chatPayload.data[1]).toMatch(/identity details.*what I want to create/);
-  expect(chatPayload.data[2]).toMatch(/^data:image\/png;base64,/);
+  expect(chatPayload.data[1]).toMatch(/visual reference image.*identity.*what I want to create/);
+  const references = JSON.parse(chatPayload.data[2]);
+  expect(references).toHaveLength(1);
+  expect(references[0].role).toBe('identity');
+  expect(references[0].image).toMatch(/^data:image\/jpeg;base64,/);
 });

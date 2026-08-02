@@ -3,7 +3,7 @@ import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
-import { analyzeCharacterImage, extractFaceAnchor, generateReferenceSet } from '../api/studio.js';
+import { analyzeCharacterReferences, extractFaceAnchor, generateReferenceSet } from '../api/studio.js';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
 import { compressImage, normalizeImageForVision } from '../lib/imageUtils.js';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
@@ -242,6 +242,8 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
   const [editing, setEditing]       = React.useState(null);
   const [importOpen, setImportOpen] = React.useState(false);
   const [importFilesError, setImportFilesError] = React.useState('');
+  const [importReferences, setImportReferences] = React.useState([]);
+  const [importReading, setImportReading] = React.useState(false);
   const [analyzing, setAnalyzing]   = React.useState(false);
   const [analyzeError, setAnalyzeError] = React.useState('');
   const [saveError, setSaveError]   = React.useState('');
@@ -297,7 +299,6 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
       setActiveId(null);
       setAnalyzeError('');
       setSaveError('');
-      if (initialCharacter.image) runAnalysis(initialCharacter.image, newEditing);
     };
     init();
   }, [initialCharacter]);
@@ -308,16 +309,27 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     if (initialImportRequest) setImportOpen(true);
   }, [initialImportRequest]);
 
-  const runAnalysis = async (imageDataUrl, currentEditing) => {
+  const analyzeReferenceSet = async (imageDataUrls) => {
+    const images = Array.isArray(imageDataUrls) ? imageDataUrls : [imageDataUrls];
+    // Do not pass normalizeImageForVision directly to map: map's index would
+    // become maxPx, shrinking the first five references to 1–4 pixels.
+    const visionImages = await Promise.all(
+      images.filter(Boolean).slice(0, 5).map(image => normalizeImageForVision(image))
+    );
+    if (!visionImages.length) throw new Error('Add at least one creator reference.');
+
+    const [result, faceAnchor] = await Promise.all([
+      analyzeCharacterReferences(visionImages),
+      extractFaceAnchor(visionImages[0]).catch(e => { console.warn('Face anchor extraction failed:', e); return ''; }),
+    ]);
+    return { result, faceAnchor };
+  };
+
+  const runAnalysis = async (imageDataUrls, currentEditing) => {
     setAnalyzing(true);
     setAnalyzeError('');
     try {
-      const visionImage = await normalizeImageForVision(imageDataUrl);
-      // Run both in parallel — general fields + precise face anchor
-      const [result, faceAnchor] = await Promise.all([
-        analyzeCharacterImage(visionImage),
-        extractFaceAnchor(visionImage).catch(e => { console.warn('Face anchor extraction failed:', e); return ''; }),
-      ]);
+      const { result, faceAnchor } = await analyzeReferenceSet(imageDataUrls);
       setEditing(ed => ({
         ...(ed || currentEditing),
         faceAnchor: faceAnchor || ed?.faceAnchor || '',
@@ -372,35 +384,62 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     setSaveError('');
   };
 
-  // "Import from Photos" — reads up to 5 reference images, runs the same
-  // vision analysis as the "Re-analyze" button (on the first image), and
-  // drops the user into the normal review/edit panel with fields prefilled.
-  const handleImportFiles = (fileList) => {
-    const files = Array.from(fileList || []).slice(0, 5);
+  // Stage the complete set before analysis. The original image is identity-only;
+  // supporting references provide broader body/style evidence.
+  const handleImportFiles = async (fileList) => {
+    const remaining = Math.max(0, 5 - importReferences.length);
+    const files = Array.from(fileList || []).slice(0, remaining);
     if (!files.length) return;
     setImportFilesError('');
+    setImportReading(true);
     const readers = files.map(file => new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = ev => resolve(ev.target.result);
+      reader.onload = ev => resolve({ image: ev.target.result, name: file.name });
       reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
       reader.readAsDataURL(file);
     }));
-    Promise.all(readers)
-      .then(dataUrls => Promise.all(dataUrls.map(compressImage)))
-      .then(compressed => {
-        const newEditing = {
-          name: '',
-          refImages: compressed,
-          fields: Object.fromEntries(FIELD_DEFS.map(f => [f.id, ''])),
-        };
-        setEditing(newEditing);
-        setActiveId(null);
-        setAnalyzeError('');
-        setSaveError('');
-        setImportOpen(false);
-        runAnalysis(compressed[0], newEditing);
-      })
-      .catch(e => setImportFilesError(e.message || 'Could not read those photos.'));
+    try {
+      const originals = await Promise.all(readers);
+      const compressed = await Promise.all(originals.map(async ref => ({
+        ...ref,
+        image: await compressImage(ref.image),
+      })));
+      setImportReferences(current => [...current, ...compressed].slice(0, 5));
+    } catch (e) {
+      setImportFilesError(e.message || 'Could not read those photos.');
+    } finally {
+      setImportReading(false);
+    }
+  };
+
+  const handleAnalyzeImport = async () => {
+    if (!importReferences.length) return;
+    setAnalyzing(true);
+    setImportFilesError('');
+    setAnalyzeError('');
+    try {
+      const images = importReferences.map(ref => ref.image);
+      const { result, faceAnchor } = await analyzeReferenceSet(images);
+      setEditing({
+        name: '',
+        refImages: images,
+        faceAnchor: faceAnchor || '',
+        fields: Object.fromEntries(FIELD_DEFS.map(field => [field.id, result[field.id] || ''])),
+      });
+      setActiveId(null);
+      setSaveError('');
+      setImportOpen(false);
+      setImportReferences([]);
+    } catch (e) {
+      const message = e.message || 'Analysis failed';
+      setImportFilesError(
+        /invalid mime|invalid_image_format|only image types/i.test(message)
+          ? 'Could not read one of these photos. Use JPG, PNG, or WebP images.'
+          : message
+      );
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const handleEdit = (char) => {
@@ -478,14 +517,12 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     reader.onload = async ev => {
       const original = ev.target.result;
       const compressed = await compressImage(original);
-      // Capture current editing snapshot BEFORE setEditing so runAnalysis
-      // gets the correct state, not the stale closure value.
-      const snapshot = editing;
       setEditing(ed => ({
         ...ed,
         refImages: [compressed, ...(ed.refImages || []).slice(1)],
       }));
-      runAnalysis(original, snapshot);
+      // Deliberately do not analyze here. Users add the whole reference set,
+      // then explicitly analyze it once; a lone headshot must not fill fields.
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -614,19 +651,18 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
         </p>
       )}
 
-      {/* Import from Photos — upload 1-5 references, analyze the first,
-          then hand off to the normal review/edit panel below. */}
+      {/* Import from Photos — stage the complete set, then analyze it once. */}
       {importOpen && (
         <Card style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ font: '600 0.9375rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Import from Photos</div>
               <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 3 }}>
-                Upload 1–5 reference photos. Thee Studio reads the first one to prefill face, hair, skin tone, body, wardrobe, personality, and content niche — review and adjust before saving.
+                Add the complete reference set before analysis. The first photo is identity-only; wardrobe is inferred only from consistent evidence across at least two supporting photos.
               </div>
             </div>
             <button
-              onClick={() => setImportOpen(false)}
+              onClick={() => { setImportOpen(false); setImportReferences([]); setImportFilesError(''); }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: 4, display: 'flex' }}
             >
               <Icon name="x" size={16} />
@@ -641,16 +677,55 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
             }}
           >
             <Icon name="images" size={26} strokeWidth={1.5} />
-            <span style={{ font: '600 0.875rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>Click to choose photos</span>
-            <span style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>Up to 5 images · JPG or PNG</span>
+            <span style={{ font: '600 0.875rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>
+              {importReferences.length ? 'Add more references' : 'Choose the complete reference set'}
+            </span>
+            <span style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>Up to 5 images · JPG, PNG, or WebP</span>
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
               multiple
+              disabled={importReading || analyzing || importReferences.length >= 5}
               style={{ display: 'none' }}
               onChange={e => { handleImportFiles(e.target.files); e.target.value = ''; }}
             />
           </label>
+          {importReferences.length > 0 && (
+            <>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {importReferences.map((reference, index) => (
+                  <div key={`${reference.name}-${index}`} style={{ width: 86 }}>
+                    <div style={{ width: 86, height: 108, borderRadius: 10, overflow: 'hidden', position: 'relative', border: index === 0 ? '2px solid var(--accent-deep)' : '1px solid var(--border)' }}>
+                      <img src={reference.image} alt={index === 0 ? 'Identity reference' : `Supporting reference ${index}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <button
+                        type="button"
+                        aria-label={`Remove ${reference.name}`}
+                        onClick={() => setImportReferences(current => current.filter((_, refIndex) => refIndex !== index))}
+                        disabled={analyzing}
+                        style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, border: 0, borderRadius: '50%', background: 'rgba(0,0,0,.65)', color: '#fff', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+                      >
+                        <Icon name="x" size={12} />
+                      </button>
+                    </div>
+                    <div style={{ marginTop: 5, font: '600 0.6875rem/1.2 var(--font-ui)', color: index === 0 ? 'var(--accent-deep)' : 'var(--text-muted)', textAlign: 'center' }}>
+                      {index === 0 ? 'Identity only' : `Supporting ${index}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {importReferences.length < 3
+                    ? 'Add at least 2 supporting photos for wardrobe analysis. A lone headshot will never define wardrobe.'
+                    : `${importReferences.length}/5 ready. Fields stay empty until you confirm this is the complete set.`}
+                </div>
+                <Button onClick={handleAnalyzeImport} loading={analyzing} disabled={analyzing || importReading}>
+                  <Icon name="sparkles" size={14} /> {analyzing ? 'Analyzing complete set…' : `Analyze Complete Set (${importReferences.length})`}
+                </Button>
+              </div>
+            </>
+          )}
+          {importReading && <div style={{ font: 'var(--text-sm)', color: 'var(--accent-deep)' }}>Preparing every reference…</div>}
           {importFilesError && (
             <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{importFilesError}</p>
           )}
@@ -689,8 +764,8 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
             {/* Additional reference photo slots (editing mode or view mode when refs exist) */}
             {(editing || displayImages.length > 1) && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {/* Slots 1–3 (indices 1–3) */}
-                {[1, 2, 3].map(i => (
+                {/* Supporting reference slots (indices 1–4) */}
+                {[1, 2, 3, 4].map(i => (
                   <RefImageSlot
                     key={i}
                     index={i}
@@ -707,9 +782,14 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
             {editing && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {primaryDisplay && !analyzing && (
-                  <Button variant="secondary" onClick={() => runAnalysis(primaryDisplay, editing)} style={{ width: '100%' }}>
-                    <Icon name="sparkles" size={13} /> Re-analyze
-                  </Button>
+                  <>
+                    <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                      Add every reference first. Fields remain unchanged until you analyze the complete set.
+                    </div>
+                    <Button variant="secondary" onClick={() => runAnalysis(displayImages, editing)} style={{ width: '100%' }}>
+                      <Icon name="sparkles" size={13} /> Analyze Complete Set ({displayImages.length})
+                    </Button>
+                  </>
                 )}
                 <Button
                   variant="secondary"
@@ -768,6 +848,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
       {/* Quick Shoot — shared with the unified Director screen's Guided tab */}
       {activeId != null && !editing && active && (
         <ShootBuilder
+          layout="split"
           creator={active}
           onGenerated={() => setShotRefreshTick(t => t + 1)}
           onSaveAsCreator={handleSaveAsAnchorForActive}

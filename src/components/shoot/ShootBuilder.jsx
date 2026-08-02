@@ -369,23 +369,28 @@ export function ShootBuilder({
         {creator && allImages.length > 1 && (
           <div>
             <div style={FIELD_LABEL}>Which angle leads</div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {allImages.map((img, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveRef(i)}
-                  aria-pressed={activeRef === i}
-                  aria-label={`Use reference ${i + 1}`}
-                  style={{
-                    width: 52, height: 69, borderRadius: 10, overflow: 'hidden', cursor: 'pointer', padding: 0,
-                    border: `2px solid ${activeRef === i ? 'var(--accent-deep)' : 'var(--border)'}`,
-                    boxShadow: activeRef === i ? 'var(--depth-media-active)' : 'var(--depth-media-rest)',
-                    background: 'none', flexShrink: 0, transition: 'box-shadow var(--t-fast), border-color var(--t-fast)',
-                  }}
-                >
-                  <img src={img} alt={`Ref ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                </button>
-              ))}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', overflowX: 'auto', paddingBottom: 4 }}>
+              {allImages.map((img, i) => {
+                const on = activeRef === i;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setActiveRef(i)}
+                    aria-pressed={on}
+                    aria-label={`Use reference ${i + 1}`}
+                    style={{
+                      position: 'relative', width: 48, height: 64, borderRadius: 8, overflow: 'hidden',
+                      cursor: 'pointer', padding: 0, flexShrink: 0, background: 'var(--surface-sunken)',
+                      border: `1.5px solid ${on ? 'var(--coral)' : 'var(--border)'}`,
+                      boxShadow: on ? '0 0 0 3px rgba(255,107,53,0.18)' : 'none',
+                      transition: 'box-shadow var(--t-fast), border-color var(--t-fast), opacity var(--t-fast)',
+                      opacity: on ? 1 : 0.72,
+                    }}
+                  >
+                    <img src={img} alt={`Ref ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -526,6 +531,34 @@ export function ShootBuilder({
           }
         </div>
       )}
+
+      {(() => {
+        const outfitLabel = SHOOT_OUTFITS.find(o => o.id === outfit)?.label;
+        const parts = [
+          creator?.name,
+          identityMode === 'portrait' ? 'Portrait' : 'Lifestyle',
+          identityMode === 'lifestyle' && scene !== 'None' ? scene : null,
+          outfit !== 'default' ? outfitLabel : null,
+          mood,
+          lighting,
+        ].filter(Boolean);
+        if (!parts.length) return null;
+        return (
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6,
+            padding: '9px 12px', borderRadius: 'var(--radius-md)',
+            background: 'var(--surface-sunken)', border: '1px solid var(--border)',
+            font: 'var(--text-sm)', color: 'var(--text-body)',
+          }}>
+            {parts.map((p, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && <span style={{ color: 'var(--text-faint)' }}>·</span>}
+                <span style={i === 0 ? { fontWeight: 600 } : undefined}>{p}</span>
+              </React.Fragment>
+            ))}
+          </div>
+        );
+      })()}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <Button variant="primary" onClick={handleGenerate} loading={generating} disabled={generating} full={layout === 'split'} style={layout === 'split' ? {} : { alignSelf: 'flex-start' }}>

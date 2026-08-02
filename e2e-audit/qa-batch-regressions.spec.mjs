@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/6ZcmWQAAAABJRU5ErkJggg==';
+const REFERENCE_SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="48"><rect width="32" height="48" fill="#8b5e3c"/></svg>');
 
 async function seedSession(page) {
   await page.addInitScript(() => {
@@ -11,13 +12,13 @@ async function seedSession(page) {
   });
 }
 
-test('Cast normalizes mislabeled image uploads before vision analysis', async ({ page }) => {
+test('Cast treats a lone primary upload as identity-only', async ({ page }) => {
   await seedSession(page);
-  let analysisImage = '';
+  let analysisPayload = '';
   let anchorImage = '';
 
   await page.route('**/gradio_api/run/analyze_character', route => {
-    analysisImage = route.request().postDataJSON().data[0];
+    analysisPayload = route.request().postDataJSON().data[0];
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -44,10 +45,71 @@ test('Cast normalizes mislabeled image uploads before vision analysis', async ({
     buffer: Buffer.from(PIXEL.split(',')[1], 'base64'),
   });
 
-  await expect.poll(() => analysisImage).toMatch(/^data:image\/jpeg;base64,/);
+  expect(analysisPayload).toBe('');
+  await expect(page.getByPlaceholder(/High cheekbones/)).toHaveValue('');
+  await page.getByRole('button', { name: 'Analyze Complete Set (1)' }).click();
+  await expect.poll(() => analysisPayload).not.toBe('');
+  const references = JSON.parse(analysisPayload).references;
+  expect(references).toHaveLength(1);
+  expect(references[0].role).toBe('identity');
+  expect(references[0].image).toMatch(/^data:image\/jpeg;base64,/);
   expect(anchorImage).toMatch(/^data:image\/jpeg;base64,/);
   await expect(page.getByText(/Analysis:/)).toHaveCount(0);
   await expect(page.getByPlaceholder(/High cheekbones/)).toHaveValue('Oval face');
+  await expect(page.getByPlaceholder(/Minimal luxury/)).toHaveValue('');
+});
+
+test('Cast waits for the complete import set and analyzes every reference together', async ({ page }) => {
+  await seedSession(page);
+  let analysisCalls = 0;
+  let analysisPayload = '';
+
+  await page.route('**/gradio_api/run/analyze_character', route => {
+    analysisCalls += 1;
+    analysisPayload = route.request().postDataJSON().data[0];
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [JSON.stringify({
+        face: 'Oval face', hair: 'Dark hair', body: 'Balanced build',
+        wardrobe: 'Tailored neutrals', tone: 'Warm', personality: 'Confident', niche: 'Lifestyle',
+      })] }),
+    });
+  });
+  await page.route('**/gradio_api/run/face_anchor_extract', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ data: [JSON.stringify({ faceAnchor: 'Stable facial geometry' })] }),
+  }));
+
+  await page.goto('http://127.0.0.1:3000/studio/cast');
+  await page.getByRole('button', { name: 'Import from Photos' }).click();
+  await page.locator('input[type="file"]').first().setInputFiles([
+    { name: 'identity.svg', mimeType: 'image/svg+xml', buffer: REFERENCE_SVG },
+    { name: 'outfit-one.svg', mimeType: 'image/svg+xml', buffer: REFERENCE_SVG },
+    { name: 'outfit-two.svg', mimeType: 'image/svg+xml', buffer: REFERENCE_SVG },
+    { name: 'outfit-three.svg', mimeType: 'image/svg+xml', buffer: REFERENCE_SVG },
+    { name: 'outfit-four.svg', mimeType: 'image/svg+xml', buffer: REFERENCE_SVG },
+  ]);
+
+  await expect(page.getByText('5/5 ready. Fields stay empty until you confirm this is the complete set.')).toBeVisible();
+  expect(analysisCalls).toBe(0);
+  await expect(page.getByPlaceholder(/High cheekbones/)).toHaveCount(0);
+
+  await page.getByRole('button', { name: /Analyze Complete Set \(5\)/ }).click();
+  await expect.poll(() => analysisCalls).toBe(1);
+  const references = JSON.parse(analysisPayload).references;
+  expect(references).toHaveLength(5);
+  expect(references.map(reference => reference.role)).toEqual(['identity', 'supporting', 'supporting', 'supporting', 'supporting']);
+  expect(references.every(reference => /^data:image\/jpeg;base64,/.test(reference.image))).toBe(true);
+  const dimensions = await page.evaluate(src => new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = reject;
+    image.src = src;
+  }), references[0].image);
+  expect(dimensions).toEqual({ width: 32, height: 48 });
+  await expect(page.getByPlaceholder(/Minimal luxury/)).toHaveValue('Tailored neutrals');
 });
 
 test('endpoint timeout remains active until the complete async operation settles', async ({ page }) => {

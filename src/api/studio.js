@@ -240,6 +240,34 @@ export async function analyzeCharacterImage(imageDataUrl) {
   return parsed;
 }
 
+export async function analyzeCharacterReferences(imageDataUrls) {
+  const references = (imageDataUrls || []).slice(0, 5).map((image, index) => ({
+    role: index === 0 ? 'identity' : 'supporting',
+    image,
+  }));
+  if (!references.length) throw new Error('Add at least one creator reference.');
+
+  const raw = await callNamedEndpoint('analyze_character', [JSON.stringify({
+    version: 2,
+    references,
+  })]);
+  const jsonStr = raw[0] || '{}';
+  const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+  if (parsed.error) throw new Error(parsed.error);
+  // Defense in depth while older backends roll over: a headshot plus one
+  // supporting photo is still not enough evidence to define a wardrobe.
+  if (references.length < 3) parsed.wardrobe = '';
+  if (references.length < 2) {
+    parsed.body = '';
+    parsed.personality = '';
+    parsed.niche = '';
+  }
+  if (![parsed.face, parsed.hair, parsed.tone].some(value => typeof value === 'string' && value.trim())) {
+    throw new Error('The analysis finished but could not read the creator’s identity. Check that the first image clearly shows their face, then try again.');
+  }
+  return parsed;
+}
+
 export async function generateCharacterSeed(params) {
   const raw = await callNamedEndpoint('character_seed_generate', [JSON.stringify(params)]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];

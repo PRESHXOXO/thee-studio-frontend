@@ -22,6 +22,38 @@ import {
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 };
 
+// Editorial section wrapper — turns the old flat wall of uppercase labels into
+// grouped, titled blocks with an icon chip and a hairline divider, so the form
+// reads like a directed shoot sheet rather than a generic settings panel.
+function Section({ icon, title, hint, first, children }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 16,
+      paddingTop: first ? 0 : 20,
+      borderTop: first ? 'none' : '1px solid var(--border)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+        <span style={{
+          width: 30, height: 30, borderRadius: 9, flexShrink: 0,
+          background: 'var(--rose-deep)', color: 'var(--accent-deep)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon name={icon} size={15} strokeWidth={2} />
+        </span>
+        <div>
+          <div style={{ font: '600 1rem/1.1 var(--font-display)', color: 'var(--text-strong)', letterSpacing: '-0.01em' }}>{title}</div>
+          {hint && <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', marginTop: 3, lineHeight: 1.4 }}>{hint}</div>}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// Small control label — no longer a heavy all-caps header competing with the
+// section titles; sits quietly above each control cluster.
+const FIELD_LABEL = { font: '600 0.72rem/1 var(--font-ui)', letterSpacing: '0.03em', color: 'var(--text-muted)', marginBottom: 9 };
+
 function PillButton({ active, onClick, children }) {
   return (
     <button
@@ -29,7 +61,7 @@ function PillButton({ active, onClick, children }) {
       aria-pressed={active}
       className="ts-pill"
       style={{
-        display: 'flex', alignItems: 'center', gap: 6,
+        display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
         padding: '7px 13px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
         border: `1.5px solid ${active ? 'var(--accent-deep)' : 'var(--border)'}`,
         background: active ? 'var(--rose-deep)' : 'transparent',
@@ -317,155 +349,158 @@ export function ShootBuilder({
   // --- Controls: everything the user dials in before generating ---
   const controlsJSX = (
     <>
-      {creator && allImages.length > 1 && (
+      {!creator && allowNoCreator && (
+        <Section icon="user-round-search" title="Build the subject" hint="No saved creator — describe who's in frame." first>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div><div style={FIELD_LABEL}>Gender</div><Select value={rawGender} onChange={handleRawGenderChange} options={GENDERS} /></div>
+            <div><div style={FIELD_LABEL}>Skin Tone</div><Select value={rawSkinTone} onChange={setRawSkinTone} options={SKIN_TONES} /></div>
+            <div><div style={FIELD_LABEL}>Body Build</div><Select value={rawPhysique} onChange={setRawPhysique} options={rawPhysiqueOptions} /></div>
+            <div><div style={FIELD_LABEL}>Eyes</div><Select value={rawEyeDetail} onChange={setRawEyeDetail} options={EYE_DETAILS} /></div>
+            <div><div style={FIELD_LABEL}>Hair Style</div><Select value={rawHairStyle} onChange={setRawHairStyle} options={rawHairStyleOptions} /></div>
+            <div><div style={FIELD_LABEL}>Hair Color</div><Select value={rawHairColor} onChange={setRawHairColor} options={HAIR_COLORS} /></div>
+            <div><div style={FIELD_LABEL}>Jewelry</div><Select value={rawJewelry} onChange={setRawJewelry} options={rawJewelryOptions} /></div>
+            <div><div style={FIELD_LABEL}>Special Features</div><Select value={rawFeatures} onChange={setRawFeatures} options={SPECIAL_FEATURES} /></div>
+          </div>
+          <div><div style={FIELD_LABEL}>Clothing / Brand Vibe</div><Select value={rawClothing} onChange={setRawClothing} options={rawClothingOptions} /></div>
+        </Section>
+      )}
+
+      <Section icon="sliders-horizontal" title="Setup" first={!(!creator && allowNoCreator)}>
+        {creator && allImages.length > 1 && (
+          <div>
+            <div style={FIELD_LABEL}>Which angle leads</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {allImages.map((img, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveRef(i)}
+                  aria-pressed={activeRef === i}
+                  aria-label={`Use reference ${i + 1}`}
+                  style={{
+                    width: 52, height: 69, borderRadius: 10, overflow: 'hidden', cursor: 'pointer', padding: 0,
+                    border: `2px solid ${activeRef === i ? 'var(--accent-deep)' : 'var(--border)'}`,
+                    boxShadow: activeRef === i ? 'var(--depth-media-active)' : 'var(--depth-media-rest)',
+                    background: 'none', flexShrink: 0, transition: 'box-shadow var(--t-fast), border-color var(--t-fast)',
+                  }}
+                >
+                  <img src={img} alt={`Ref ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
-          <div style={{ ...LABEL, marginBottom: 10 }}>Reference Photo</div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {allImages.map((img, i) => (
-              <button
-                key={i}
-                onClick={() => setActiveRef(i)}
-                aria-pressed={activeRef === i}
-                aria-label={`Use reference ${i + 1}`}
-                style={{
-                  width: 52, height: 69, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', padding: 0,
-                  border: `2px solid ${activeRef === i ? 'var(--accent-deep)' : 'var(--border)'}`,
-                  boxShadow: activeRef === i ? 'var(--depth-media-active)' : 'var(--depth-media-rest)',
-                  background: 'none', flexShrink: 0, transition: 'box-shadow var(--t-fast), border-color var(--t-fast)',
-                }}
-              >
-                <img src={img} alt={`Ref ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-              </button>
+          <div style={FIELD_LABEL}>Engine</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {SHOOT_ENGINES.map(eng => (
+              <PillButton key={eng.id} active={engine === eng.id} onClick={() => setEngine(eng.id)}>
+                <Icon name={eng.icon} size={13} strokeWidth={1.75} /> {eng.label}
+              </PillButton>
             ))}
           </div>
         </div>
-      )}
 
-      {!creator && allowNoCreator && (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div><div style={LABEL}>Gender</div><Select value={rawGender} onChange={handleRawGenderChange} options={GENDERS} /></div>
-            <div><div style={LABEL}>Skin Tone</div><Select value={rawSkinTone} onChange={setRawSkinTone} options={SKIN_TONES} /></div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div><div style={LABEL}>Body Build</div><Select value={rawPhysique} onChange={setRawPhysique} options={rawPhysiqueOptions} /></div>
-            <div><div style={LABEL}>Eyes</div><Select value={rawEyeDetail} onChange={setRawEyeDetail} options={EYE_DETAILS} /></div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div><div style={LABEL}>Hair Style</div><Select value={rawHairStyle} onChange={setRawHairStyle} options={rawHairStyleOptions} /></div>
-            <div><div style={LABEL}>Hair Color</div><Select value={rawHairColor} onChange={setRawHairColor} options={HAIR_COLORS} /></div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div><div style={LABEL}>Jewelry</div><Select value={rawJewelry} onChange={setRawJewelry} options={rawJewelryOptions} /></div>
-            <div><div style={LABEL}>Special Features</div><Select value={rawFeatures} onChange={setRawFeatures} options={SPECIAL_FEATURES} /></div>
-          </div>
-          <div><div style={LABEL}>Clothing / Brand Vibe</div><Select value={rawClothing} onChange={setRawClothing} options={rawClothingOptions} /></div>
-        </>
-      )}
-
-      <div>
-        <div style={{ ...LABEL, marginBottom: 10 }}>Engine</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {SHOOT_ENGINES.map(eng => (
-            <PillButton key={eng.id} active={engine === eng.id} onClick={() => setEngine(eng.id)}>
-              <Icon name={eng.icon} size={13} strokeWidth={1.75} /> {eng.label}
+        <div>
+          <div style={FIELD_LABEL}>Shot type</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <PillButton active={identityMode === 'portrait'} onClick={() => setIdentityMode('portrait')}>
+              <Icon name="user" size={13} strokeWidth={1.75} /> Portrait Anchor
             </PillButton>
-          ))}
+            <PillButton active={identityMode === 'lifestyle'} onClick={() => setIdentityMode('lifestyle')}>
+              <Icon name="layout" size={13} strokeWidth={1.75} /> Lifestyle Scene
+            </PillButton>
+          </div>
         </div>
-      </div>
+      </Section>
 
-      <div>
-        <div style={{ ...LABEL, marginBottom: 10 }}>Mode</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <PillButton active={identityMode === 'portrait'} onClick={() => setIdentityMode('portrait')}>
-            <Icon name="user" size={13} strokeWidth={1.75} /> Portrait Anchor
-          </PillButton>
-          <PillButton active={identityMode === 'lifestyle'} onClick={() => setIdentityMode('lifestyle')}>
-            <Icon name="layout" size={13} strokeWidth={1.75} /> Lifestyle Scene
-          </PillButton>
-        </div>
+      <div style={{ paddingTop: 20, borderTop: '1px solid var(--border)' }}>
+        <ReferenceImageTray
+          references={shotReferences}
+          onChange={handleShotReferencesChange}
+          maxReferences={allImages.length ? 3 : 4}
+          defaultRole={identityMode === 'portrait' ? 'makeup' : 'outfit'}
+          disabled={generating}
+          title="Shot references"
+          description={allImages.length
+            ? 'Your creator fills the identity slot. Add up to three more images and assign each a job. Multi-reference shots use OpenAI.'
+            : 'Add up to four images and assign each one a job. Multi-reference shots use OpenAI.'}
+        />
       </div>
-
-      <ReferenceImageTray
-        references={shotReferences}
-        onChange={handleShotReferencesChange}
-        maxReferences={allImages.length ? 3 : 4}
-        defaultRole={identityMode === 'portrait' ? 'makeup' : 'outfit'}
-        disabled={generating}
-        title="Shot references"
-        description={allImages.length
-          ? 'Your creator fills the identity slot. Add up to three more images and assign each a job. Multi-reference shots use OpenAI.'
-          : 'Add up to four images and assign each one a job. Multi-reference shots use OpenAI.'}
-      />
 
       {identityMode === 'portrait' ? (
-        <div>
-          <div style={{ ...LABEL, marginBottom: 10 }}>Camera Angle</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {PORTRAIT_ANGLES.map(angle => (
-              <PillButton key={angle} active={quickAngle === angle} onClick={() => setQuickAngle(angle)}>{angle}</PillButton>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <>
+        <Section icon="camera" title="Framing">
           <div>
-            <div style={LABEL}>Scene</div>
+            <div style={FIELD_LABEL}>Camera angle</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {PORTRAIT_ANGLES.map(angle => (
+                <PillButton key={angle} active={quickAngle === angle} onClick={() => setQuickAngle(angle)}>{angle}</PillButton>
+              ))}
+            </div>
+          </div>
+        </Section>
+      ) : (
+        <Section icon="sparkles" title="The look" hint="Set the scene, styling, and mood for this shot.">
+          <div>
+            <div style={FIELD_LABEL}>Scene</div>
             <Select value={scene} onChange={setScene} options={LOCATIONS} />
           </div>
 
           <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>
-              Outfit for this shot
+            <div style={{ ...FIELD_LABEL, display: 'flex', alignItems: 'center' }}>
+              Outfit
               {outfit !== 'default' && (
-                <button onClick={() => setOutfit('default')} style={{ marginLeft: 10, font: '500 0.72rem/1 var(--font-ui)', color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>reset</button>
+                <button onClick={() => setOutfit('default')} style={{ marginLeft: 10, font: '500 0.72rem/1 var(--font-ui)', color: 'var(--accent-deep)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>reset</button>
               )}
             </div>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, alignItems: 'flex-start' }}>
               {SHOOT_OUTFITS.map(o => (
                 <PillButton key={o.id} active={outfit === o.id} onClick={() => setOutfit(o.id)}>{o.label}</PillButton>
               ))}
             </div>
             <div style={{ marginTop: 8, font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.45 }}>
-              For an exact look, add one or more Outfit references above. Visual references override these presets.
+              For an exact look, add an Outfit reference above — visual references override these presets.
             </div>
           </div>
 
-          <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>Mood</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {SHOOT_MOODS.map(m => <PillButton key={m} active={mood === m} onClick={() => setMood(m)}>{m}</PillButton>)}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+            <div>
+              <div style={FIELD_LABEL}>Mood</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {SHOOT_MOODS.map(m => <PillButton key={m} active={mood === m} onClick={() => setMood(m)}>{m}</PillButton>)}
+              </div>
+            </div>
+            <div>
+              <div style={FIELD_LABEL}>Lighting</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {SHOOT_LIGHTINGS.map(l => <PillButton key={l} active={lighting === l} onClick={() => setLighting(l)}>{l}</PillButton>)}
+              </div>
             </div>
           </div>
-
-          <div>
-            <div style={{ ...LABEL, marginBottom: 10 }}>Lighting</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {SHOOT_LIGHTINGS.map(l => <PillButton key={l} active={lighting === l} onClick={() => setLighting(l)}>{l}</PillButton>)}
-            </div>
-          </div>
-        </>
+        </Section>
       )}
 
-      <div>
-        <div style={LABEL}>Notes <span style={{ textTransform: 'none', letterSpacing: 0 }}>(optional)</span></div>
-        <textarea
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          placeholder="Anything specific for this shot — angle, prop, energy…"
-          rows={2}
-          style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', padding: '9px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--surface-inset)', color: 'var(--text-body)', font: 'var(--text-sm)', fontFamily: 'inherit', lineHeight: 1.5, outline: 'none' }}
-        />
-      </div>
-
-      <div>
-        <div style={{ ...LABEL, marginBottom: 10 }}>Batch</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {BATCH_OPTIONS.map(n => (
-            <PillButton key={n} active={batchSize === n} onClick={() => setBatchSize(n)}>{n} image{n > 1 ? 's' : ''}</PillButton>
-          ))}
+      <Section icon="zap" title="Finishing">
+        <div>
+          <div style={FIELD_LABEL}>Notes <span style={{ textTransform: 'none', letterSpacing: 0, color: 'var(--text-faint)' }}>(optional)</span></div>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Anything specific for this shot — angle, prop, energy…"
+            rows={2}
+            style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', padding: '11px 13px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--surface-inset)', color: 'var(--text-body)', font: 'var(--text-sm)', fontFamily: 'inherit', lineHeight: 1.5, outline: 'none' }}
+          />
         </div>
-      </div>
+
+        <div>
+          <div style={FIELD_LABEL}>Batch</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {BATCH_OPTIONS.map(n => (
+              <PillButton key={n} active={batchSize === n} onClick={() => setBatchSize(n)}>{n} image{n > 1 ? 's' : ''}</PillButton>
+            ))}
+          </div>
+        </div>
+      </Section>
     </>
   );
 

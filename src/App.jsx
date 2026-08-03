@@ -12,76 +12,55 @@ import { Library } from './screens/Library.jsx';
 import { History } from './screens/History.jsx';
 import { Settings } from './screens/Settings.jsx';
 import { loadLibrary } from './lib/library.js';
+import { useAuth } from './auth/AuthContext.jsx';
+import { accessBadgeLabel, accessView, useStudioAccess } from './api/access.js';
+import { LoginScreen } from './components/auth/LoginScreen.jsx';
+import { AccessScreen } from './components/auth/AccessScreen.jsx';
 
 const BASE_NAV = [
   { section: 'Create' },
-  { id: 'home',       label: 'Studio',          icon: 'layout-dashboard' },
-  { id: 'images',     label: 'Image Generator', icon: 'image' },
-  { id: 'director',   label: 'Thee Director',   icon: 'clapperboard' },
-  { id: 'characters', label: 'Characters',      icon: 'sparkles' },
-  { id: 'scenes',     label: 'Scenes',          icon: 'mountain-snow' },
-  { id: 'references', label: 'References',      icon: 'images' },
+  { id: 'home', label: 'Studio', icon: 'layout-dashboard' },
+  { id: 'images', label: 'Image Generator', icon: 'image' },
+  { id: 'director', label: 'Thee Director', icon: 'clapperboard' },
+  { id: 'characters', label: 'Characters', icon: 'sparkles' },
+  { id: 'scenes', label: 'Scenes', icon: 'mountain-snow' },
+  { id: 'references', label: 'References', icon: 'images' },
   { section: 'Workspace' },
-  { id: 'campaigns',  label: 'Campaigns',       icon: 'megaphone' },
-  { id: 'library',    label: 'Library',         icon: 'folder-open' },
-  { id: 'history',    label: 'History',         icon: 'history' },
-  { id: 'settings',   label: 'Settings',        icon: 'settings' },
+  { id: 'campaigns', label: 'Campaigns', icon: 'megaphone' },
+  { id: 'library', label: 'Library', icon: 'folder-open' },
+  { id: 'history', label: 'History', icon: 'history' },
+  { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
 
 const SCREENS = {
-  home:       { label: 'Studio',           component: StudioHome },
-  director:   { label: 'Thee Director',    component: TheeDirector },
-  images:     { label: 'Image Generator',  component: ImageGenerator },
-  characters: { label: 'Characters',       component: Characters },
-  scenes:     { label: 'Scenes',           component: Scenes },
-  references: { label: 'References',       component: References },
-  campaigns:  { label: 'Campaigns',        component: Campaigns },
-  library:    { label: 'Library',          component: Library },
-  history:    { label: 'History',          component: History },
-  settings:   { label: 'Engine Library',   component: Settings },
+  home: { label: 'Studio', component: StudioHome },
+  director: { label: 'Thee Director', component: TheeDirector },
+  images: { label: 'Image Generator', component: ImageGenerator },
+  characters: { label: 'Characters', component: Characters },
+  scenes: { label: 'Scenes', component: Scenes },
+  references: { label: 'References', component: References },
+  campaigns: { label: 'Campaigns', component: Campaigns },
+  library: { label: 'Library', component: Library },
+  history: { label: 'History', component: History },
+  settings: { label: 'Engine Library', component: Settings },
 };
 
-// Poll Gradio /config to determine backend connectivity.
-function useBackendStatus() {
-  const [status, setStatus] = React.useState('checking'); // 'checking' | 'online' | 'offline'
-  React.useEffect(() => {
-    let cancelled = false;
-    async function check() {
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch('/gradio_api/config', { signal: controller.signal });
-        clearTimeout(timer);
-        if (!cancelled) setStatus(res.ok ? 'online' : 'offline');
-      } catch {
-        if (!cancelled) setStatus('offline');
-      }
-    }
-    check();
-    const interval = setInterval(check, 30000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
-  return status;
-}
-
-export default function App() {
-  const [activeNav, setActiveNav]             = React.useState('home');
-  const [pendingPrompts,   setPendingPrompts]   = React.useState(null);
+function StudioShell({ access, onSignOut }) {
+  const [activeNav, setActiveNav] = React.useState('home');
+  const [pendingPrompts, setPendingPrompts] = React.useState(null);
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
-  const [pendingDirector,  setPendingDirector]  = React.useState(null);
-  const [activeCharacter,  setActiveCharacter]  = React.useState(null);
-  const [libCount, setLibCount]               = React.useState(() => loadLibrary().length);
-  const backendStatus = useBackendStatus();
+  const [pendingDirector, setPendingDirector] = React.useState(null);
+  const [activeCharacter, setActiveCharacter] = React.useState(null);
+  const [libCount, setLibCount] = React.useState(() => loadLibrary().length);
 
-  // Refresh library count whenever user navigates (catches new saves)
   const handleNav = React.useCallback((id, data) => {
     setLibCount(loadLibrary().length);
-    if (id === 'images'     && data) setPendingPrompts(data);
+    if (id === 'images' && data) setPendingPrompts(data);
     if (id === 'characters' && data) setPendingCharacter(data);
-    if (id === 'director'   && data) setPendingDirector(data);
-    if (id !== 'images')     setPendingPrompts(null);
+    if (id === 'director' && data) setPendingDirector(data);
+    if (id !== 'images') setPendingPrompts(null);
     if (id !== 'characters' || !data) setPendingCharacter(null);
-    if (id !== 'director'  || !data) setPendingDirector(null);
+    if (id !== 'director' || !data) setPendingDirector(null);
     setActiveNav(id);
   }, []);
 
@@ -91,18 +70,14 @@ export default function App() {
 
   const Screen = SCREENS[activeNav]?.component || StudioHome;
   const screenLabel = SCREENS[activeNav]?.label || 'Studio Home';
-
   const screenProps = { onNav: handleNav };
-  if (activeNav === 'images'     && pendingPrompts)   screenProps.initialPrompts   = pendingPrompts;
+  if (activeNav === 'images' && pendingPrompts) screenProps.initialPrompts = pendingPrompts;
   if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
   if (activeNav === 'characters') screenProps.onCharacterChange = setActiveCharacter;
-  if (activeNav === 'director'   && pendingDirector) {
-    screenProps.initialScene  = pendingDirector.scene  || 'None';
+  if (activeNav === 'director' && pendingDirector) {
+    screenProps.initialScene = pendingDirector.scene || 'None';
     screenProps.initialVision = pendingDirector.vision || '';
   }
-
-  const statusColor = backendStatus === 'online' ? '#22c55e' : backendStatus === 'offline' ? '#ef4444' : '#f59e0b';
-  const statusLabel = backendStatus === 'online' ? 'Backend online' : backendStatus === 'offline' ? 'Backend offline' : 'Connecting…';
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>
@@ -111,22 +86,39 @@ export default function App() {
         <Topbar
           context={screenLabel}
           actions={
-            <div title={statusLabel} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)', border: '1px solid var(--border)', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>
-              <span style={{
-                width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0,
-                animation: backendStatus === 'online' ? 'none' : 'status-pulse 1.5s ease-in-out infinite',
-              }} />
-              {statusLabel}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div title="Connected" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)', border: '1px solid var(--border)', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-muted)' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+                Connected
+              </div>
+              <div style={{ padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--rose-glass)', border: '1px solid var(--border)', font: '500 0.72rem/1 var(--font-ui)', color: 'var(--accent-deep)' }}>
+                {accessBadgeLabel(access)}
+              </div>
+              <button onClick={onSignOut} style={{ border: '1px solid var(--border)', background: 'var(--white)', borderRadius: 'var(--radius-md)', padding: '7px 10px', cursor: 'pointer', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-body)' }}>
+                Sign Out
+              </button>
             </div>
           }
         />
-        <main
-          key={activeNav}
-          style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1, animation: 'screen-in 0.18s ease-out both' }}
-        >
+        <main key={activeNav} style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1, animation: 'screen-in 0.18s ease-out both' }}>
           <Screen {...screenProps} />
         </main>
       </div>
     </div>
   );
+}
+
+export default function App() {
+  const { client, session, loading: authLoading, error: authError, signIn, signOut } = useAuth();
+  const accessState = useStudioAccess(session, client);
+
+  if (authLoading) return <AccessScreen title="Connecting…" loading />;
+  if (!session) return <LoginScreen onSignIn={signIn} error={authError} configured={Boolean(client)} />;
+
+  const view = accessView(accessState.access, accessState.error);
+  if (accessState.loading) return <AccessScreen title="Connecting…" loading />;
+  if (view.state !== 'allowed') {
+    return <AccessScreen title={view.title} detail={view.detail} onRetry={accessState.error ? accessState.refresh : null} onSignOut={signOut} />;
+  }
+  return <StudioShell access={accessState.access} onSignOut={signOut} />;
 }

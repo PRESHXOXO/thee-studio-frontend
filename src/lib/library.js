@@ -50,7 +50,8 @@ export async function saveToLibrary(src, metadata = {}) {
   try {
     url = await compressForLibrary(src);
   } catch {
-    url = src; // fallback: store as-is
+    if (metadata.storagePath) throw new Error('Unable to create a safe local library preview.');
+    url = src; // Legacy local/Gradio fallback only.
   }
 
   const list = loadLibrary();
@@ -71,4 +72,14 @@ export async function saveToLibrary(src, metadata = {}) {
     try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {}
   }
   return entry;
+}
+
+export async function resolveLibraryDisplayUrl(entry, client) {
+  if (entry?.url?.startsWith('data:')) return entry.url;
+  if (entry?.storagePath && client) {
+    const { data, error } = await client.storage.from('generation-assets').createSignedUrl(entry.storagePath, 300);
+    if (error || !data?.signedUrl) throw new Error('Library image could not be displayed securely.');
+    return data.signedUrl;
+  }
+  return entry?.url || '';
 }

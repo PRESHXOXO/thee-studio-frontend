@@ -4,7 +4,9 @@ import { Select } from '../components/forms/Select.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
-import { generateImage, characterGenerate, fetchEngineChoices, sanitizeForOpenAI, generateCharacterSeed, generateCharacterVariations, generateCharacterVariationShot } from '../api/studio.js';
+import { generateCharacterSeed, generateCharacterVariations, generateCharacterVariationShot } from '../api/studio.js';
+import { generateStagingStill } from '../api/stagingGeneration.js';
+import { supabase } from '../lib/supabase.js';
 import { saveToLibrary } from '../lib/library.js';
 import {
   GENDERS, SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES,
@@ -130,8 +132,8 @@ function ImageResult({ src, index, onOpen }) {
 
 export function ImageGenerator({ initialPrompts, onNav }) {
   // Engine + generation state
-  const [engineOptions, setEngineOptions] = React.useState([]);
-  const [engine, setEngine]               = React.useState('OpenAI Image');
+  const [engineOptions]                   = React.useState([{ value: 'Thee Studio Staging', label: 'Thee Studio Staging' }]);
+  const [engine, setEngine]               = React.useState('Thee Studio Staging');
   const [perf, setPerf]                   = React.useState('Balanced');
   const [style, setStyle]                 = React.useState('Lifestyle Creator');
   const [format, setFormat]               = React.useState('Vertical 9:16');
@@ -144,6 +146,7 @@ export function ImageGenerator({ initialPrompts, onNav }) {
   const [images, setImages]               = React.useState([]);
   const [lightboxSrc, setLightboxSrc]     = React.useState(null);
   const [selectedChar, setSelectedChar]   = React.useState(null);
+  const generationInFlight = React.useRef(false);
 
   // Prompt builder state
   const [vibe, setVibe]         = React.useState('');
@@ -214,21 +217,6 @@ export function ImageGenerator({ initialPrompts, onNav }) {
     }, 40);
     return () => clearInterval(id);
   }, [aiGenLoading, aiGenImages.length, aiGenApproval]);
-
-  React.useEffect(() => {
-    fetchEngineChoices().then(choices => {
-      const list = (choices?.length ? choices : FALLBACK_ENGINES);
-      const opts = list.map(c => ({ value: c, label: c }));
-      setEngineOptions(opts);
-      const openai = list.find(c => c.toLowerCase().includes('openai'));
-      if (openai) {
-        setEngine(openai);
-      } else {
-        const isReady = c => !c.includes('Setup Needed') && !c.includes('Disabled');
-        setEngine(list.find(isReady) || list[0]);
-      }
-    });
-  }, []);
 
   React.useEffect(() => {
     if (initialPrompts?.positivePrompt) setPositive(initialPrompts.positivePrompt);
@@ -348,23 +336,17 @@ export function ImageGenerator({ initialPrompts, onNav }) {
   };
 
   const handleGenerate = async () => {
+    if (generationInFlight.current || loading) return;
+    if (!positivePrompt.trim()) {
+      setError('Enter a prompt before generating.');
+      return;
+    }
+    generationInFlight.current = true;
     setError('');
     setStatus('');
     setLoading(true);
     setImages([]);
     try {
-      const validEngines = engineOptions.map(o => o.value);
-      const safeEngine = validEngines.includes(engine)
-        ? engine
-        : validEngines.find(v => !v.includes('Setup Needed')) || validEngines[0];
-
-      if (!safeEngine) {
-        throw new Error('No engine selected. Wait for the engine list to load, then try again.');
-      }
-
-      const [width, height] = FORMAT_DIMS[format] || [832, 1216];
-      const isOpenAI = safeEngine.toLowerCase().includes('openai');
-
       // Merge prompt builder modifiers
       const mods = [
         shotType && `${shotType} shot`,
@@ -379,44 +361,28 @@ export function ImageGenerator({ initialPrompts, onNav }) {
       ].filter(Boolean).join('. ');
 
       const builtPrompt = mods ? `${positivePrompt}${positivePrompt ? '. ' : ''}${mods}` : positivePrompt;
-      const finalPositive = isOpenAI ? sanitizeForOpenAI(builtPrompt) : builtPrompt;
-
-      const charRefImage = selectedChar?.refImages?.[0];
-      const useCharRef = isOpenAI && charRefImage;
-
-      const result = useCharRef
-        ? await characterGenerate({
-            engineId: safeEngine,
-            positivePrompt: finalPositive,
-            negativePrompt,
-            imageSize: format,
-            batchSize: 1,
-            characterImage: charRefImage,
-          })
-        : await generateImage({
-            engine: safeEngine,
-            performanceMode: perf,
-            imageStyle: style,
-            imageSize: format,
-            quality,
-            width,
-            height,
-            positivePrompt: finalPositive,
-            negativePrompt,
-          });
+      const finalPositive = builtPrompt;
+      const result = await generateStagingStill(supabase, {
+        prompt: finalPositive,
+        negativePrompt,
+        format,
+      });
       const imgs = result.images || [];
       setImages(imgs);
       if (result.status) setStatus(result.status);
-      imgs.forEach(url => {
-        saveToLibrary(url, {
+      imgs.forEach(image => {
+        saveToLibrary(image.signedUrl, {
           source: 'generator',
-          engine: safeEngine,
+          engine,
           prompt: finalPositive.slice(0, 120),
+          storagePath: image.storagePath,
+          metadata: image.metadata,
         }).catch(() => {});
       });
     } catch (e) {
-      setError(e?.message || 'Generation failed. Make sure your Gradio app is running on port 7860.');
+      setError(e?.message || 'Generation could not be completed. No retry was sent.');
     } finally {
+      generationInFlight.current = false;
       setLoading(false);
     }
   };
@@ -889,7 +855,7 @@ export function ImageGenerator({ initialPrompts, onNav }) {
         {status && !error && <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', margin: 0 }}>{status}</p>}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <Button variant="primary" loading={loading} onClick={handleGenerate} disabled={!engine} style={{ minWidth: 140 }}>
+          <Button variant="primary" loading={loading} onClick={handleGenerate} disabled={loading || !engine || !positivePrompt.trim()} style={{ minWidth: 140 }}>
             <Icon name="sparkles" size={15} style={loading ? { animation: 'spin 1s linear infinite' } : {}} /> Generate
           </Button>
           <GenerationProgress
@@ -907,8 +873,8 @@ export function ImageGenerator({ initialPrompts, onNav }) {
       {/* Output canvas */}
       {images.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
-          {images.map((src, i) => (
-            <ImageResult key={i} src={src} index={i} onOpen={setLightboxSrc} />
+          {images.map((image, i) => (
+            <ImageResult key={image.storagePath || i} src={image.signedUrl} index={i} onOpen={setLightboxSrc} />
           ))}
         </div>
       ) : (

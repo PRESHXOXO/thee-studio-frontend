@@ -6,6 +6,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
+    include: ['src/**/*.test.{js,jsx}'],
     restoreMocks: true,
   },
   server: {
@@ -17,6 +18,12 @@ export default defineConfig({
         selfHandleResponse: false,
         proxyTimeout: 300000,
         timeout: 300000,
+      },
+      '/config': {
+        target: 'http://127.0.0.1:7860',
+        changeOrigin: true,
+        proxyTimeout: 10000,
+        timeout: 10000,
       },
     },
   },

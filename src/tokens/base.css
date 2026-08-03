@@ -21,7 +21,7 @@ p { margin: 0; }
   color: var(--text-muted);
 }
 
-::selection { background: var(--peach); color: var(--ink); }
+::selection { background: var(--coral); color: var(--ink); }
 
 :focus-visible { outline: none; box-shadow: var(--focus-ring); }
 

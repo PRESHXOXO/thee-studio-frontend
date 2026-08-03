@@ -1,27 +1,40 @@
 /* Thee Studio™ — Color tokens
-   Warm, editorial, feminine-tech. Coral & cherry accents on cream/rose-glass surfaces. */
+   Light rebrand: soft lavender-white canvas, white card surfaces, indigo +
+   orange-pink-gold accent family, deep-navy text for contrast.
+   Variable NAMES are legacy (coral/rose/cream) — this is the second retheme
+   through the same names (previously "Miami Sunset" dark). Keeping names
+   lets every screen retheme without edits. */
 :root {
-  /* ---- Base palette ---- */
-  --cream:        #FFF7F2;  /* soft cream — app background */
-  --white:        #FFFFFF;  /* clean white */
-  --rose-glass:   #FFF0ED;  /* rose glass — primary card surface */
-  --blush:        #FFE1DC;  /* soft blush */
-  --peach:        #FFD1C7;  /* pale peach */
-  --coral:        #FF6B4A;  /* coral — primary action */
-  --hot-coral:    #FF4F5E;  /* hot coral */
-  --cherry:       #D91E46;  /* cherry red — deep action */
-  --ruby:         #E83D52;  /* ruby accent */
-  --champagne:    #FFD166;  /* champagne — highlight / lock */
-  --plum:         #211821;  /* deep plum — dark surfaces */
-  --ink:          #101014;  /* ink black — text */
-  --warm-gray:    #6E625D;  /* warm gray — secondary text */
-  --border-fine:  #E8DDD3;  /* fine border */
+  /* ---- Base palette (legacy names, light values) ---- */
+  --cream:        #F7F6FC;  /* app background — soft lavender-white */
+  --white:        #FFFFFF;  /* primary card surface */
+  --rose-glass:   #F1EEFA;  /* glass panel surface — pale lavender tint */
+  --blush:        #EDEAFB;  /* soft hover fill */
+  --peach:        #FFD9BE;  /* soft accent fill / secondary border */
+  --coral:        #FF6B35;  /* orange — primary action */
+  --hot-coral:    #FF2E7E;  /* hot pink — bright accent */
+  --cherry:       #FF2E7E;  /* hot pink — destructive / deep action */
+  --ruby:         #FF5C93;  /* rose accent */
+  --champagne:    #FFB238;  /* gold — highlight / lock */
+  --plum:         #1E1B3A;  /* deep indigo-navy — intentionally dark panels/buttons */
+  --ink:          #14101F;  /* absolute dark — text on bright accent fills */
+  --warm-gray:    #8B85A0;  /* muted gray-lavender — secondary text */
+  --border-fine:  #EAE7F2;  /* fine border */
+  --border-default: var(--border-fine);
 
-  /* ---- Tints for depth (derived, warm) ---- */
-  --plum-80:      #2C1F2C;
-  --plum-60:      #4A3A45;
-  --cream-deep:   #FBEBE3;  /* cream one step down, for inset wells */
-  --rose-deep:    #FFE6E0;
+  /* ---- Indigo — the sidebar/active-state accent from the new palette ---- */
+  --accent-indigo:      #4F3CC9;
+  --accent-indigo-soft: #EDEAFB;
+
+  /* ---- Cobalt technical accent — cool counterpoint to the warm gradient ---- */
+  --cobalt:       #2F7BFF;  /* technical / support accent */
+  --cobalt-soft:  #EAF2FF;  /* cobalt tint surface */
+
+  /* ---- Tints for depth ---- */
+  --plum-80:      #2A2650;
+  --plum-60:      #3D3870;
+  --cream-deep:   #EFEDF7;  /* one step below card, inset wells */
+  --rose-deep:    #EDEAFB;  /* active nav / selected fill */
 
   /* ---- Semantic: surfaces ---- */
   --surface-app:        var(--cream);
@@ -29,45 +42,46 @@
   --surface-card-rose:  var(--rose-glass);
   --surface-inset:      var(--cream-deep);
   --surface-dark:       var(--plum);
-  --surface-sidebar:    var(--white);
+  --surface-sidebar:    #FFFFFF;  /* white, separated from content by border only */
   --surface-raised:     var(--white);
+  --surface-app-translucent: rgba(247,246,252,0.96); /* topbar backdrop — near-opaque so content slides cleanly behind it instead of ghosting/hard-clipping at the border on scroll */
 
   /* ---- Semantic: text ---- */
-  --text-strong:   var(--ink);      /* headlines, primary */
-  --text-body:     #2A2329;         /* body copy */
+  --text-strong:   #17132A;         /* headlines — near-black navy */
+  --text-body:     #3F3A56;         /* body copy — dark gray-purple */
   --text-muted:    var(--warm-gray);/* secondary / captions */
-  --text-on-dark:  #FCEFE9;
-  --text-on-accent:#FFFFFF;
-  --text-faint:    #A6968E;         /* placeholders, disabled (still readable) */
+  --text-on-dark:  #F5F3FA;         /* text on dark surfaces (plum buttons/panels) */
+  --text-on-accent:#FFFFFF;         /* text on hot pink/orange/indigo fills */
+  --text-faint:    #B0AAC4;         /* placeholders, disabled */
 
   /* ---- Semantic: borders ---- */
   --border:        var(--border-fine);
-  --border-strong: #DBC8BC;
-  --border-on-dark:#3A2E37;
+  --border-strong: #D6D1E8;
+  --border-on-dark:#4A3B6E;
 
   /* ---- Semantic: accents ---- */
   --accent:        var(--coral);
   --accent-hot:    var(--hot-coral);
-  --accent-deep:   var(--cherry);
+  --accent-deep:   #FF7A45;   /* orange text accent */
   --accent-ruby:   var(--ruby);
   --accent-gold:   var(--champagne);
   --accent-soft:   var(--blush);
 
-  /* ---- Status ---- */
-  --status-ready:   #2F9E6B;  /* warm-leaning green */
-  --status-ready-bg:#E4F4EC;
-  --status-warn:    #C8881E;
-  --status-warn-bg: #FBEFD6;
+  /* ---- Status — kept distinct from the sunset gradient so review states still read clearly ---- */
+  --status-ready:   #16A34A;  /* green */
+  --status-ready-bg:#DCFCE7;
+  --status-warn:    #EA580C;  /* orange warning */
+  --status-warn-bg: #FFEDD5;
   --status-off:     var(--warm-gray);
-  --status-off-bg:  #EFE6DF;
-  --status-locked:  var(--cherry);
-  --status-locked-bg:#FCE3E7;
+  --status-off-bg:  #F1EEFA;
+  --status-locked:  #FF2E7E;  /* hot pink */
+  --status-locked-bg:#FFE3EE;
 
-  /* ---- Gradients ---- */
-  --grad-coral:   linear-gradient(135deg, var(--coral) 0%, var(--hot-coral) 55%, var(--cherry) 100%);
-  --grad-rose:    linear-gradient(160deg, #FFFFFF 0%, var(--rose-glass) 100%);
-  --grad-blush:   linear-gradient(160deg, var(--peach) 0%, var(--blush) 100%);
-  --grad-plum:    linear-gradient(150deg, var(--plum) 0%, #34232F 100%);
+  /* ---- Gradients — sunset everywhere ---- */
+  --grad-coral:   linear-gradient(135deg, #FF2E7E 0%, #FF6B35 55%, #FFB238 100%); /* hot pink → orange → gold */
+  --grad-rose:    linear-gradient(160deg, #FBF4FF 0%, #F1EEFA 100%);             /* glass panel */
+  --grad-blush:   linear-gradient(160deg, #F7F1FF 0%, #EFEAFB 100%);
+  --grad-plum:    linear-gradient(150deg, #2A2650 0%, #1E1B3A 100%);
   /* warm placeholder fill for portrait / proof-sheet imagery */
-  --grad-portrait:linear-gradient(155deg, #E9B79F 0%, #C77E66 45%, #7A4A47 100%); /* @kind color */
+  --grad-portrait:linear-gradient(155deg, #FF6B35 0%, #C9457A 45%, #2E1B48 100%); /* @kind color */
 }

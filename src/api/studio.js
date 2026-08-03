@@ -1,4 +1,7 @@
+import { serializeDirectorReferences } from '../lib/directorReferences.js';
+
 const BASE = '/gradio_api';
+const GRADIO_CONFIG_URL = '/config'; // Gradio 6.x serves config at /config, not /gradio_api/config
 const SESSION_HASH = Math.random().toString(36).slice(2);
 
 // Replaces words that trigger OpenAI's output safety filter while preserving prompt quality.
@@ -16,6 +19,15 @@ const OPENAI_REPLACEMENTS = [
   [/\bboudoir[\w\s-]*inspired\b/gi,          'studio-style editorial'],
   [/\bboudoir\b/gi,                          'studio editorial'],
   [/\bintimate\b/gi,                         'close and personal'],
+  [/\bbathroom mirror\b/gi,                  'dressing-room mirror'],
+  [/\bbedroom\b/gi,                          'private suite'],
+  [/\bprovocative\b/gi,                      'bold editorial'],
+  [/\bskin-tight\b/gi,                       'fitted'],
+  [/\bcleavage\b/gi,                         'neckline'],
+  [/\bbralette\b/gi,                         'fitted top'],
+  [/\bbikini\b/gi,                           'swimwear'],
+  [/\bno nudity\b/gi,                        'fully clothed'],
+  [/\bnon-sexual(?:ized)?\b/gi,              'wholesome'],
   // Skin language that triggers output moderation
   [/visible pores[^.)]*/gi,                  'realistic skin detail'],
   [/natural skin imperfections/gi,           'authentic natural features'],
@@ -38,31 +50,6 @@ export function sanitizeForOpenAI(prompt) {
     safe = safe.replace(pattern, replacement);
   }
   return safe;
-}
-
-async function predict(fnIndex, data) {
-  const res = await fetch(`${BASE}/run/predict`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fn_index: fnIndex, data, session_hash: SESSION_HASH }),
-  });
-
-  if (!res.ok) {
-    let detail = '';
-    try { detail = await res.text(); } catch {}
-    throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
-  }
-
-  const contentType = res.headers.get('content-type') || '';
-
-  // Gradio 6.x returns SSE stream
-  if (contentType.includes('text/event-stream')) {
-    return await readSSE(res);
-  }
-
-  // Older fallback: plain JSON
-  const json = await res.json();
-  return json.data;
 }
 
 async function readSSE(response) {
@@ -96,28 +83,54 @@ async function readSSE(response) {
   throw new Error('Stream ended without completion');
 }
 
+// Hard ceiling on any single generation call. gpt-image-2 at high quality is
+// genuinely slow (tens of seconds), so this is generous — but without it a
+// hung/overloaded backend leaves the UI spinning forever with no feedback.
+// On expiry the fetch aborts and callers surface a real error instead.
+const ENDPOINT_TIMEOUT_MS = 180000;
+
+export async function withEndpointTimeout(task, timeoutMs = ENDPOINT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await task(controller.signal);
+  } catch (e) {
+    if (controller.signal.aborted || e.name === 'AbortError') {
+      throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s — the generation backend didn’t respond. It may be overloaded; try again.`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Calls a named Gradio endpoint, handling both Gradio 4.x (/run/) and 5.x (/call/) formats.
 async function callNamedEndpoint(apiName, data) {
-  // Try Gradio 4.x format first
-  const res = await fetch(`${BASE}/run/${apiName}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data, session_hash: SESSION_HASH }),
-  });
+  // One deadline covers the request, response parsing, Gradio fallback, and
+  // the complete SSE stream. Keeping the controller alive until readSSE()
+  // resolves is important: fetch() itself resolves as soon as headers arrive.
+  return withEndpointTimeout(async signal => {
+    // Try Gradio 4.x format first
+    const res = await fetch(`${BASE}/run/${apiName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data, session_hash: SESSION_HASH }),
+      signal,
+    });
 
-  if (res.ok) {
-    const contentType = res.headers.get('content-type') || '';
-    return contentType.includes('text/event-stream')
-      ? await readSSE(res)
-      : (await res.json()).data;
-  }
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      return contentType.includes('text/event-stream')
+        ? await readSSE(res)
+        : (await res.json()).data;
+    }
 
-  // If /run/ returned 4xx/5xx, try Gradio 5.x /call/ format
-  if (res.status >= 400) {
+    // If /run/ returned 4xx/5xx, try Gradio 5.x /call/ format.
     const callRes = await fetch(`${BASE}/call/${apiName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data }),
+      signal,
     });
     if (!callRes.ok) {
       let detail = '';
@@ -125,26 +138,13 @@ async function callNamedEndpoint(apiName, data) {
       throw new Error(`HTTP ${callRes.status}: ${detail.slice(0, 300)}`);
     }
     const { event_id } = await callRes.json();
-    const pollRes = await fetch(`${BASE}/call/${apiName}/${event_id}`);
+    if (!event_id) throw new Error('Generation backend did not return an event id.');
+
+    const pollRes = await fetch(`${BASE}/call/${apiName}/${event_id}`, { signal });
     if (!pollRes.ok) throw new Error(`HTTP ${pollRes.status}`);
     return await readSSE(pollRes);
-  }
-
-  let detail = '';
-  try { detail = await res.text(); } catch {}
-  throw new Error(`HTTP ${res.status}: ${detail.slice(0, 300)}`);
+  });
 }
-
-// fn_index map (order of .click/.change registrations in app.py)
-// creative_engine_input.change = 0
-// update_image_generator_status × 9 (for loop over 9 controls) = indices 1–9
-// build_director_button.click = 10
-// ... 38 more handlers ...
-// generate_image_button.click = 49
-const FN = {
-  build_director_outputs: 10,
-  generate_image: 49,
-};
 
 // Engine names that identify this dropdown by content when label matching fails.
 const ENGINE_KEYWORDS = ['Draft', 'DreamShaper', 'Portrait', 'Beauty', 'Campaign', 'Shot', 'Still', 'FLUX', 'OpenAI', 'Replicate', 'Cloud'];
@@ -154,7 +154,7 @@ export async function fetchEngineChoices() {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(`${BASE}/config`, { signal: controller.signal });
+    const res = await fetch(GRADIO_CONFIG_URL, { signal: controller.signal });
     clearTimeout(timer);
     if (!res.ok) return null;
     const config = await res.json();
@@ -192,7 +192,7 @@ export async function buildDirectorOutputs({
   scene = 'None',
   useIdentityLock = false,
 } = {}) {
-  const data = await predict(FN.build_director_outputs, [
+  const data = await callNamedEndpoint('build_director_outputs', [
     vision, contentType, mood, outputGoal,
     character || 'None',
     scene || 'None',
@@ -208,6 +208,14 @@ export async function buildDirectorOutputs({
 
 // Sends a base64 image data URL to the backend vision model and returns
 // structured character field data ({ face, hair, body, wardrobe, tone, personality, niche }).
+// Rewrite absolute Gradio host URLs to relative so the Vite proxy serves
+// them same-origin — without this, <img>/<canvas> reads are cross-origin
+// and canvas.toDataURL() throws a silent, unrecoverable SecurityError.
+function relativizeUrl(url) {
+  if (!url || url.startsWith('data:')) return url;
+  return url.replace(/^https?:\/\/127\.0\.0\.1:\d+\/gradio_api/, '/gradio_api');
+}
+
 // Uses /run/analyze_character — in Gradio 6.x the URL path IS the api_name.
 export async function characterGenerate({ engineId, positivePrompt, negativePrompt, characterImage, anchorImages = [], mode = 'lifestyle', imageSize = 'Vertical 9:16', batchSize = 1 }) {
   const raw = await callNamedEndpoint('character_generate', [
@@ -232,25 +240,66 @@ export async function analyzeCharacterImage(imageDataUrl) {
   return parsed;
 }
 
+export async function analyzeCharacterReferences(imageDataUrls) {
+  const references = (imageDataUrls || []).slice(0, 5).map((image, index) => ({
+    role: index === 0 ? 'identity' : 'supporting',
+    image,
+  }));
+  if (!references.length) throw new Error('Add at least one creator reference.');
+
+  const raw = await callNamedEndpoint('analyze_character', [JSON.stringify({
+    version: 2,
+    references,
+  })]);
+  const jsonStr = raw[0] || '{}';
+  const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+  if (parsed.error) throw new Error(parsed.error);
+  // Defense in depth while older backends roll over: a headshot plus one
+  // supporting photo is still not enough evidence to define a wardrobe.
+  if (references.length < 3) parsed.wardrobe = '';
+  if (references.length < 2) {
+    parsed.body = '';
+    parsed.personality = '';
+    parsed.niche = '';
+  }
+  if (![parsed.face, parsed.hair, parsed.tone].some(value => typeof value === 'string' && value.trim())) {
+    throw new Error('The analysis finished but could not read the creator’s identity. Check that the first image clearly shows their face, then try again.');
+  }
+  return parsed;
+}
+
 export async function generateCharacterSeed(params) {
   const raw = await callNamedEndpoint('character_seed_generate', [JSON.stringify(params)]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
+  parsed.image = relativizeUrl(parsed.image);
   return parsed; // { image, faceAnchor }
 }
 
-export async function generateCharacterVariations(params) {
-  const raw = await callNamedEndpoint('character_variations_generate', [JSON.stringify(params)]);
+export async function generateReferenceSet(params) {
+  const raw = await callNamedEndpoint('generate_reference_set', [JSON.stringify(params)]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
-  return parsed; // { images: [...] }
+  return parsed; // { images: [...], errors: [...] }
 }
 
 export async function generateCharacterVariationShot(params) {
   const raw = await callNamedEndpoint('character_variation_shot', [JSON.stringify(params)]);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
+  parsed.image = relativizeUrl(parsed.image);
   return parsed; // { image }
+}
+
+// Translates a freeform correction into structured Creator Builder identity
+// fields via the backend's parse_creator_correction (GPT-4o-mini JSON mode).
+// Returns {} (not an error) when nothing could be confidently mapped —
+// callers should still send the raw text through to generation regardless.
+export async function parseCreatorCorrection(text, gender) {
+  const raw = await callNamedEndpoint('parse_creator_correction', [JSON.stringify({ text, gender })]);
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed;
 }
 
 export async function describeOutfitImage(imageDataUrl) {
@@ -296,6 +345,20 @@ export async function saveFalKey(key) {
   return parsed;
 }
 
+// Which providers have a key configured server-side (UI-saved or already in
+// .env at boot). Lets Engine Library badges reflect real config instead of
+// only a browser-local "saved via UI" flag. Returns {} on any failure so the
+// caller falls back to the local flag rather than blanking every badge.
+export async function fetchApiKeyStatus() {
+  try {
+    const raw = await callNamedEndpoint('api_key_status', ['']);
+    const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+    return parsed && !parsed.error ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 export async function generateImage({
   engine = '',
   performanceMode = 'Balanced',
@@ -313,7 +376,7 @@ export async function generateImage({
   width = 832,
   height = 1216,
 } = {}) {
-  const data = await predict(FN.generate_image, [
+  const data = await callNamedEndpoint('generate_image', [
     engine, performanceMode, comfyServerUrl, comfyWorkflowPath,
     imageStyle, positivePrompt, negativePrompt, imageSize,
     quality, batchSize, seed, cfg, steps, width, height,
@@ -330,4 +393,49 @@ export async function generateImage({
   }).filter(Boolean);
 
   return { images, status: data[1] || '' };
+}
+
+// ---------------------------------------------------------------------------
+// Scene Flow API
+// ---------------------------------------------------------------------------
+
+export async function sceneFlowChat({
+  messagesJson = '[]',
+  userMessage = '',
+  referenceImages = [],
+  refImageB64 = '',
+} = {}) {
+  const references = referenceImages.length
+    ? serializeDirectorReferences(referenceImages)
+    : refImageB64;
+  const raw = await callNamedEndpoint('scene_flow_chat', [messagesJson, userMessage, references]);
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  return parsed; // { reply, scene, generate, history }
+}
+
+export async function sceneFlowGenerate({
+  sceneJson = '{}',
+  referenceImages = [],
+  refImageB64 = '',
+} = {}) {
+  const references = referenceImages.length
+    ? serializeDirectorReferences(referenceImages)
+    : refImageB64;
+  const raw = await callNamedEndpoint('scene_flow_generate', [sceneJson, references]);
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  return parsed; // { result_b64, result_url, content_type, status } or { error }
+}
+
+// ---------------------------------------------------------------------------
+// Prompt Lab API
+// ---------------------------------------------------------------------------
+
+// Runs the OpenAI-powered prompt engine on the backend.
+// Resolves to { prompt, slots, why_this_works, variants, moods, target, model }
+// or { refusal }; throws on backend { error }.
+export async function promptLabBuild(request) {
+  const raw = await callNamedEndpoint('prompt_lab_build', [JSON.stringify(request)]);
+  const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
+  if (parsed.error) throw new Error(parsed.error);
+  return parsed;
 }

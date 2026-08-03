@@ -1,7 +1,5 @@
-// Shared creative prompt data and builder logic for Image Generator and Thee Director.
+// Shared creative prompt data and builder logic for Creator Builder and Thee Director.
 
-export const CONTENT_TYPES = ['Portrait', 'Beauty', 'Fashion', 'Lifestyle', 'Product', 'UGC', 'Campaign', 'Social Post', 'Cinematic Still', 'Travel / Hospitality'].map(v => ({ value: v, label: v }));
-export const MOODS         = ['Clean', 'Soft', 'Luxury', 'Bold', 'Romantic', 'Playful', 'Editorial', 'Candid', 'Cinematic', 'Elevated Casual'].map(v => ({ value: v, label: v }));
 export const LOCATIONS     = [
   'None', 'Yacht', 'Penthouse', 'Private Jet', 'Rooftop', 'Poolside',
   'Studio', 'Boutique Hotel', 'Art Gallery', 'Night Club', 'Garden',
@@ -174,12 +172,18 @@ export const JEWELRY_MEN = [
   { value: 'gold chain and watch combo — stacked',                                  label: 'Chain + Watch Combo' },
 ];
 
-// Combined for unspecified gender
-export const JEWELRY_OPTIONS = [
-  { value: 'None', label: 'None / Minimal' },
-  ...JEWELRY_WOMEN.filter(j => j.value !== 'None'),
-  ...JEWELRY_MEN.filter(j => j.value !== 'None'),
-];
+// Combined for unspecified gender — deduped by value (both lists share some
+// options, e.g. "Luxury Watch", which produced duplicate React keys)
+export const JEWELRY_OPTIONS = (() => {
+  const seen = new Set(['None']);
+  const combined = [{ value: 'None', label: 'None / Minimal' }];
+  for (const j of [...JEWELRY_WOMEN, ...JEWELRY_MEN]) {
+    if (j.value === 'None' || seen.has(j.value)) continue;
+    seen.add(j.value);
+    combined.push(j);
+  }
+  return combined;
+})();
 
 export const CLOTHING_WOMEN = [
   { value: 'Unspecified', label: 'Unspecified' },
@@ -349,7 +353,7 @@ export const STYLE_DIRECTIONS = [
   'High Fashion', 'Vintage & Retro',
 ];
 
-export const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, missing fingers, broken anatomy, unnatural body proportions, stiff pose, flat lighting, harsh flash, oversaturated colors, cluttered background, cartoon styling, floating tattoos, fake jewelry, bad fabric physics, cropped limbs, generic photo, artificial smile, lifeless expression, overprocessed HDR, grainy, noisy, unrealistic skin color, washed-out skin, plastic hair, duplicate body parts, distorted face, text on clothing, visible brand names, graphic prints on garments, fake logos, illegible text, random letters on fabric, misspelled words, hallucinated typography';
+export const STANDARD_NEGATIVE = 'low resolution, blurry, plastic skin, waxy skin, over-smoothed face, AI beauty filter, uncanny face, distorted eyes, warped hands, extra fingers, missing fingers, missing arm, hidden arm, merged arm, arm absorbed into body or clothing, broken anatomy, unnatural body proportions, stiff pose, cheesy pose, influencer-basic pose, exaggerated suggestive pose, flat lighting, harsh flash, oversaturated colors, cluttered background, obviously AI-generated background, studio cutout look, cartoon styling, illustration styling, HDR overprocessing, floating tattoos, fake jewelry, bad fabric physics, cropped limbs, cropped outfit, generic photo, generic face, changed identity, different person, recast face, artificial smile, lifeless expression, overprocessed HDR, grainy, noisy, unrealistic skin color, washed-out skin, plastic hair, duplicate body parts, distorted face, text on clothing, visible brand names, graphic prints on garments, fake logos, illegible text, random letters on fabric, misspelled words, hallucinated typography';
 
 export function buildStructuredVision({ vision = '', gender = 'Unspecified', physique = 'Unspecified', skinTone = 'Unspecified', hairStyle = 'Unspecified', hairColor = 'Unspecified', eyeDetail = 'Unspecified', jewelry = 'None', clothing = 'Unspecified', features = 'None', mood = 'Clean', contentType = 'Portrait', scene = 'None', character = null, shootHairStyle = 'Unspecified', shootHairColor = 'Unspecified', shootJewelry = 'None', outfitPhotoDesc = '' } = {}) {
   const s = [];
@@ -359,6 +363,14 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
 
   if (character) {
     const f = character.fields || {};
+    const possessive = isMale ? 'his' : 'her';
+    const personNoun = isMale ? 'man' : 'woman';
+
+    if (character.faceAnchor) {
+      s.push(
+        `IMPORTANT:\nUse the uploaded reference image as the identity anchor for ${character.name}. Preserve ${possessive} recognizable face, beauty, skin tone, and overall look. ${character.name} must read as the same ${personNoun} from the reference image, not a generic model. Photorealistic only. No illustration, no cartoon styling, no plastic AI finish, no fantasy gloss.`
+      );
+    }
 
     // TALENT — face and skin
     const talentParts = [];
@@ -370,11 +382,10 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     }
     if (talentParts.length) s.push(`TALENT — ${character.name}: ${talentParts.join('. ')}.`);
 
-    // BUILD & PRESENCE
-    const presenceParts = [];
-    if (f.body)        presenceParts.push(f.body);
-    if (f.personality) presenceParts.push(f.personality);
-    if (presenceParts.length) s.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
+    // PRESENCE — personality/energy only. Body descriptors dropped: they
+    // trigger OpenAI output moderation when combined with fashion framing,
+    // and build is already locked via the reference image anyway.
+    if (f.personality) s.push(`PRESENCE: ${f.personality}.`);
 
     // OUTFIT
     const outfitUsed = outfitPhotoDesc
@@ -420,8 +431,10 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     if (features !== 'None') presenceParts.push(features);
     s.push(`BUILD & PRESENCE: ${presenceParts.join('. ')}.`);
 
-    // OUTFIT
-    if (clothing !== 'Unspecified') {
+    // OUTFIT — an uploaded outfit photo always wins over the dropdown/default
+    if (outfitPhotoDesc) {
+      s.push(`OUTFIT: ${outfitPhotoDesc}. Clothing feels premium and believable — real fabric weight, accurate drape, natural folds.`);
+    } else if (clothing !== 'Unspecified') {
       s.push(`OUTFIT: ${clothing}. The clothing should feel real and expensive — accurate fabric weight, natural folds, believable drape, and structure that moves naturally with the body. Nothing stiff, shiny, cheap, or plastic-looking.`);
     } else if (isMale) {
       s.push('OUTFIT: Choose a specific, complete outfit that fits the scene — varsity jacket with dark jeans and clean sneakers, a tailored suit, a premium hoodie and sweats, a linen shirt and chinos, or a bomber jacket with dark jeans. The clothing should feel real and expensive — accurate fabric weight, natural folds, believable drape, and structure that moves naturally with the body. Nothing stiff, shiny, cheap, or plastic-looking.');
@@ -454,7 +467,13 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
     s.push(defaultScene);
   }
 
-  if (vision) s.push(`ART DIRECTION: ${vision}`);
+  // Strip any auto-inserted "Wearing: ..." sentence from vision before using
+  // it as ART DIRECTION — the outfit is already covered by the OUTFIT
+  // section above (outfitPhotoDesc), so keeping it here just duplicates it.
+  const cleanedVision = outfitPhotoDesc
+    ? vision.replace(`Wearing: ${outfitPhotoDesc}`, '').replace(/\n{3,}/g, '\n\n').trim()
+    : vision;
+  if (cleanedVision) s.push(`ART DIRECTION: ${cleanedVision}`);
 
   // SHOOT FEEL
   const shootFeelParts = [contentType !== 'Portrait' ? contentType : '', mood !== 'Clean' ? mood : ''].filter(Boolean);
@@ -466,14 +485,16 @@ export function buildStructuredVision({ vision = '', gender = 'Unspecified', phy
 
   // POSE & COMPOSITION
   const poseDir = isMale
-    ? 'Three-quarter to full-body fashion photograph so the outfit reads clearly. Natural grounded posture — leaning against the car or a surface, one hand in pocket, or standing relaxed with weight shifted naturally. Masculine composed energy, relaxed hands, real body balance, and no stiffness.'
-    : 'Three-quarter body fashion photograph so the outfit is clearly visible. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, relaxed hands, real body balance.';
+    ? 'Three-quarter to full-body fashion photograph so the outfit reads clearly. Both arms fully visible and anatomically correct. Natural grounded posture — leaning against the car or a surface, one hand in pocket, or standing relaxed with weight shifted naturally. Masculine composed energy, relaxed hands, real body balance, and no stiffness.'
+    : 'Three-quarter body fashion photograph so the outfit is clearly visible. Both arms fully visible and anatomically correct — neither arm cropped, hidden, or merged into the torso. Natural confident posture, candid-feeling but composed. Flattering angle, intentional negative space, relaxed hands, real body balance.';
   s.push(`POSE & COMPOSITION: ${poseDir}`);
 
   s.push('LIGHTING: Soft dimensional natural or studio-style lighting that wraps realistically around the subject. Warm refined color grading, natural shadows, believable highlights, and depth in the skin, clothing, jewelry, and any environmental reflections.');
-  s.push('CAMERA & DETAIL: Shot on a Canon EOS R5, 85mm portrait lens at f/1.4, Kodak Portra 400 film stock rendering. Shallow depth of field with natural bokeh. Crisp focus on the face, eyes, hair, jewelry, tattoos, and styling details. 8K resolution, ultra-detailed skin pores and texture.');
-  s.push('QUALITY & TEXTURE: Commercial-level retouching that preserves healthy natural skin texture, visible pores, realistic highlights, accurate fabric weight, natural folds, believable clothing structure, and individual hair strand detail. The image should feel premium and finished without erasing the humanity of the subject. Avoid AI over-smoothing, plastic skin, waxy texture, distorted hands, warped fingers, extra limbs, melted fabric, fake-looking jewelry, stiff clothing, generic faces, and studio-backdrop energy.');
+  s.push('CAMERA & IMAGE FEEL: Shot like a real premium campaign on a Canon EOS R5, 85mm portrait lens at f/1.4, Kodak Portra 400 film rendering. Shallow depth of field with natural bokeh. Crisp focus on the face, eyes, hair, jewelry, and styling details. The image should feel like a real professional fashion/lifestyle shoot, not an AI prototype.');
+  s.push('QUALITY & RETOUCHING: Commercial-level retouching only. Preserve natural skin texture, visible pores, realistic highlights, natural body proportions, accurate anatomy, believable hands, and individual hair strands. No text, logos, brand names, or graphic prints on clothing. The final image should feel polished and premium without erasing humanity.');
   s.push('CONTENT STANDARD: Fully clothed, tasteful, brand-appropriate fashion and lifestyle photography suitable for a premium campaign.');
+
+  s.push(`FINAL GOAL:\nA photorealistic${scene && scene !== 'None' ? ` ${scene.toLowerCase()}` : ''} fashion campaign image${character ? ` of ${character.name}` : ''} that feels polished, stylish, and expensive — like it was captured by a real photographer for a premium lifestyle brand. The image must feel believable, natural, and editorial, while clearly showcasing the outfit and styling.`);
 
   return s.join('\n\n');
 }

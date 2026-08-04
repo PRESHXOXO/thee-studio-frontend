@@ -240,6 +240,7 @@ function StudioApp({ access }) {
     screenProps.initialFilter = new URLSearchParams(location.search).get('filter') || 'all';
   }
   if (activeNav === 'images'     && pendingImages) {
+    screenProps.initialCreatorId   = pendingImages.creatorId   || null;
     screenProps.initialName        = pendingImages.name        || '';
     screenProps.initialNiche       = pendingImages.niche       || '';
     screenProps.initialVision      = pendingImages.vision      || '';

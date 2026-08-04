@@ -55,8 +55,38 @@ export class LocalPipelineRepository {
     return this.add(this.state.creators, {
       id: createId('creator'), user_id: this.userId, name: input.name,
       handle: input.handle || null, description: input.description || null,
+      profile_status: input.profileStatus || 'draft', profile_data: input.profileData || {},
       created_at: timestamp(), updated_at: timestamp(),
     });
+  }
+  async getCreator(creatorId) {
+    return this.state.creators.find(item => item.id === creatorId && item.user_id === this.userId) || null;
+  }
+  async saveCreatorProfile(creatorId, input) {
+    let creator = creatorId ? await this.getCreator(creatorId) : null;
+    if (!creator) creator = await this.createCreator(input);
+    else {
+      Object.assign(creator, {
+        name: input.name,
+        handle: input.handle || null,
+        description: input.description || null,
+        profile_status: input.profileStatus || 'draft',
+        profile_data: input.profileData || {},
+        updated_at: timestamp(),
+      });
+      this.save();
+    }
+    if (input.identity) await this.saveIdentity(creator.id, input.identity);
+    return creator;
+  }
+  async loadCreatorProfile(creatorId) {
+    const creator = await this.getCreator(creatorId);
+    if (!creator) return null;
+    return {
+      creator,
+      identity: await this.getIdentity(creatorId),
+      references: await this.listReferenceAssets(creatorId),
+    };
   }
   async getIdentity(creatorId) {
     return this.state.identities.find(item => item.creator_id === creatorId) || null;
@@ -93,21 +123,44 @@ export class LocalPipelineRepository {
     return value;
   }
   async listReferenceAssets(creatorId) {
-    return this.state.references.filter(item => item.creator_id === creatorId);
+    return this.state.references.filter(item => item.creator_id === creatorId && item.is_active !== false);
   }
-  async uploadReferenceAsset(creatorId, category, file, notes) {
+  async uploadReferenceAsset(creatorId, referenceType, file, notes) {
     const signedUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
     });
+    const canonical = referenceType === 'headshot' || referenceType === 'full_body';
+    if (canonical) {
+      this.state.references.forEach(item => {
+        if (item.creator_id === creatorId && item.reference_type === referenceType && item.is_active !== false) {
+          item.is_active = false;
+          item.is_canonical = false;
+          item.archived_at = timestamp();
+        }
+      });
+    }
     return this.add(this.state.references, {
-      id: createId('ref'), user_id: this.userId, creator_id: creatorId, category,
-      storage_path: `local/${file.name}`, original_filename: file.name,
+      id: createId('ref'), user_id: this.userId, creator_id: creatorId,
+      reference_type: referenceType,
+      category: referenceType === 'headshot' ? 'face' : referenceType === 'full_body' ? 'full_body' : 'profile',
+      storage_path: `local/${creatorId}/${referenceType}/${file.name}`, original_filename: file.name,
       mime_type: file.type, size_bytes: file.size, notes: notes || null,
-      created_at: timestamp(), signed_url: signedUrl,
+      is_active: true, is_canonical: canonical, archived_at: null,
+      created_at: timestamp(), updated_at: timestamp(), signed_url: signedUrl,
     });
+  }
+  async removeReferenceAsset(referenceId) {
+    const reference = this.state.references.find(item => item.id === referenceId && item.user_id === this.userId);
+    if (!reference) return false;
+    reference.is_active = false;
+    reference.is_canonical = false;
+    reference.archived_at = timestamp();
+    reference.updated_at = timestamp();
+    this.save();
+    return true;
   }
 
   async listProjects() { return [...this.state.projects].reverse(); }

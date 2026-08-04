@@ -1,4 +1,9 @@
 import { creatorIdentityFromStudio } from './domain.js';
+import {
+  listCreatorReferences,
+  removeCreatorReference,
+  uploadCreatorReference,
+} from '../lib/creatorReferences.js';
 
 function one(data, error) {
   if (error) throw new Error(error.message);
@@ -51,8 +56,48 @@ export class SupabasePipelineRepository {
     const result = await this.db.from('creators').insert({
       user_id: this.userId, name: input.name, handle: input.handle || null,
       description: input.description || null, studio_source_id: input.studioSourceId != null ? String(input.studioSourceId) : null,
+      profile_status: input.profileStatus || 'draft', profile_data: input.profileData || {},
     }).select().single();
     return one(result.data, result.error);
+  }
+  async getCreator(creatorId) {
+    const result = await this.db.from('creators').select('*').eq('id', creatorId).eq('user_id', this.userId).maybeSingle();
+    if (result.error) throw new Error(result.error.message);
+    return result.data || null;
+  }
+  async saveCreatorProfile(creatorId, input) {
+    let creator;
+    const creating = !creatorId;
+    if (creatorId) {
+      const result = await this.db.from('creators').update({
+        name: input.name,
+        handle: input.handle || null,
+        description: input.description || null,
+        profile_status: input.profileStatus || 'draft',
+        profile_data: input.profileData || {},
+      }).eq('id', creatorId).eq('user_id', this.userId).select().single();
+      creator = one(result.data, result.error);
+    } else {
+      creator = await this.createCreator(input);
+    }
+    if (input.identity) {
+      try {
+        await this.saveIdentity(creator.id, input.identity);
+      } catch (error) {
+        if (creating) await this.db.from('creators').delete().eq('id', creator.id).eq('user_id', this.userId);
+        throw error;
+      }
+    }
+    return creator;
+  }
+  async loadCreatorProfile(creatorId) {
+    const creator = await this.getCreator(creatorId);
+    if (!creator) return null;
+    const [identity, references] = await Promise.all([
+      this.getIdentity(creatorId),
+      listCreatorReferences(this.db, this.userId, creatorId),
+    ]);
+    return { creator, identity, references };
   }
   async getIdentity(creatorId) {
     const { data, error } = await this.db.from('creator_identity_profiles').select('*').eq('creator_id', creatorId).maybeSingle();
@@ -87,28 +132,13 @@ export class SupabasePipelineRepository {
     return one(result.data, result.error);
   }
   async listReferenceAssets(creatorId) {
-    const { data, error } = await this.db.from('creator_reference_assets').select('*').eq('creator_id', creatorId).order('created_at', { ascending: false });
-    if (error) throw new Error(error.message);
-    return Promise.all((data || []).map(async asset => {
-      const signed = await this.db.storage.from('creator-references').createSignedUrl(asset.storage_path, 3600);
-      return { ...asset, signed_url: signed.data?.signedUrl };
-    }));
+    return listCreatorReferences(this.db, this.userId, creatorId);
   }
-  async uploadReferenceAsset(creatorId, category, file, notes) {
-    const safeName = file.name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-');
-    const path = `${this.userId}/${creatorId}/${category}/${crypto.randomUUID()}-${safeName}`;
-    const upload = await this.db.storage.from('creator-references').upload(path, file, { contentType: file.type, upsert: false });
-    if (upload.error) throw new Error(upload.error.message);
-    const result = await this.db.from('creator_reference_assets').insert({
-      user_id: this.userId, creator_id: creatorId, category, storage_path: path,
-      original_filename: file.name, mime_type: file.type, size_bytes: file.size,
-      notes: notes || null,
-    }).select().single();
-    if (result.error) {
-      await this.db.storage.from('creator-references').remove([path]);
-      throw new Error(result.error.message);
-    }
-    return result.data;
+  async uploadReferenceAsset(creatorId, referenceType, file, notes) {
+    return uploadCreatorReference(this.db, this.userId, creatorId, referenceType, file, notes);
+  }
+  async removeReferenceAsset(referenceId) {
+    return removeCreatorReference(this.db, this.userId, referenceId);
   }
 
   async listProjects() {

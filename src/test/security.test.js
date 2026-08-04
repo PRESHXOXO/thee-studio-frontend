@@ -38,4 +38,10 @@ describe('frontend security contract', () => {
     expect(app).not.toContain('/gradio_api/config');
     expect(app).toContain('Connected');
   });
+
+  it('does not call Gradio from cloud New Creator', () => {
+    const creator = fs.readFileSync('src/screens/ImageGenerator.jsx', 'utf8');
+    expect(creator).not.toMatch(/gradio_api|generateCharacterSeed|generateCharacterVariationShot|parseCreatorCorrection/);
+    expect(creator).toContain('uploadReferenceAsset');
+  });
 });

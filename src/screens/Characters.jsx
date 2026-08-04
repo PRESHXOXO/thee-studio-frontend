@@ -634,7 +634,16 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
               <Icon name="fingerprint" size={15} /> {active.locked ? 'Locked' : 'Lock Identity'}
             </Button>
           )}
-          {!editing && active && <Button variant="secondary" onClick={() => handleEdit(active)}><Icon name="pencil" size={14} /> Edit</Button>}
+          {!editing && active && (
+            <Button
+              variant="secondary"
+              onClick={() => active.cloudProfile
+                ? onNav?.('images', { creatorId: active.id })
+                : handleEdit(active)}
+            >
+              <Icon name="pencil" size={14} /> Edit
+            </Button>
+          )}
           <Button variant="secondary" onClick={handleNew}><Icon name="user-plus" size={15} /> Create from Scratch</Button>
           <Button variant="secondary" onClick={() => { setImportOpen(true); setImportFilesError(''); }}><Icon name="upload" size={15} /> Import from Photos</Button>
         </div>

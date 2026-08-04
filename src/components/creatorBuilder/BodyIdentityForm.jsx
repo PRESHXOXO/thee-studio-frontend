@@ -10,16 +10,18 @@ import {
 } from '../../lib/creatorIdentity.js';
 import { getPhysiqueOptions } from '../../lib/promptData.js';
 
-// Step 4 — only Overall Build (already set in Step 1) and Body Shape are
-// required; everything else is optional detail. Backend note: there is no
-// dedicated full-body-reference generation endpoint — the "Full Body" shot
-// already produced in Step 3's five-image pack is reused here, and these
-// proportion fields feed into a regenerate call for that one image so it
-// reflects the added detail, rather than inventing a new backend call.
-export function BodyIdentityForm({ draft, onChange, fullBodyUrl, onRefineFullBody, refining, onContinue }) {
+// Step 4 keeps approved proportions UI while replacing legacy generation
+// with one required private full-body upload.
+export function BodyIdentityForm({ draft, onChange, fullBodyUrl, onUploadFullBody, onRemoveFullBody, uploading, error, onContinue }) {
   const body = draft.bodyIdentity;
+  const inputRef = React.useRef(null);
   const set = (key) => (value) => onChange({ ...draft, bodyIdentity: { ...body, [key]: value } });
   const buildOptions = getPhysiqueOptions(draft.coreIdentity.gender);
+  const handleFile = event => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file) onUploadFullBody?.(file);
+  };
 
   return (
     <Card style={{ padding: '24px 24px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -28,13 +30,13 @@ export function BodyIdentityForm({ draft, onChange, fullBodyUrl, onRefineFullBod
           Define their proportions
         </h2>
         <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', margin: 0 }}>
-          This helps Thee Studio preserve the same body across lifestyle and full-body images.
+          Add one full-body reference, then describe proportions for future workflows.
         </p>
       </div>
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={{ flex: '0 0 140px', aspectRatio: '2/3', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--grad-portrait)', border: '1px solid var(--border)' }}>
-          {refining ? (
+          {uploading ? (
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Icon name="loader" size={20} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent-deep)' }} />
             </div>
@@ -91,6 +93,10 @@ export function BodyIdentityForm({ draft, onChange, fullBodyUrl, onRefineFullBod
         </div>
       </div>
 
+      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} hidden />
+
+      {error && <p role="alert" style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{error}</p>}
+
       <div>
         <div style={LABEL}>Optional Body Description</div>
         <textarea
@@ -103,10 +109,15 @@ export function BodyIdentityForm({ draft, onChange, fullBodyUrl, onRefineFullBod
       </div>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-        <Button variant="accent" onClick={onRefineFullBody} loading={refining} disabled={refining}>
-          <Icon name="refresh-cw" size={14} /> Refine Full-Body Reference
+        <Button variant="accent" onClick={() => inputRef.current?.click()} loading={uploading} disabled={uploading}>
+          <Icon name={fullBodyUrl ? 'refresh-cw' : 'upload'} size={14} /> {fullBodyUrl ? 'Replace Full-Body Reference' : 'Upload Full-Body Reference'}
         </Button>
-        <Button variant="primary" onClick={onContinue} disabled={body.overallBuild === 'Unspecified' || body.bodyShape === 'Unspecified'}>
+        {fullBodyUrl && (
+          <Button variant="secondary" onClick={onRemoveFullBody} disabled={uploading}>
+            <Icon name="trash-2" size={14} /> Remove
+          </Button>
+        )}
+        <Button variant="primary" onClick={onContinue} disabled={!fullBodyUrl || uploading || body.overallBuild === 'Unspecified' || body.bodyShape === 'Unspecified'}>
           Continue <Icon name="arrow-right" size={14} />
         </Button>
       </div>

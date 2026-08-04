@@ -89,6 +89,7 @@ export function blankCreatorDraft() {
   const now = new Date().toISOString();
   return {
     id: newCreatorId(),
+    cloudCreatorId: null,
     name: '',
     status: CREATOR_STATUS.DRAFT,
     identityVersion: 1,

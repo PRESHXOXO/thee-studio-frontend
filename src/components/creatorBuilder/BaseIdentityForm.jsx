@@ -53,7 +53,7 @@ export function BaseIdentityForm({ draft, onChange, onSubmit, submitting }) {
         <div>
           <div style={{ font: '600 0.88rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>Build with Thee Studio</div>
           <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 3 }}>
-            Choose a few details and we'll create the first look at your new creator.
+            Save identity details, then add private creator reference photos.
           </div>
         </div>
       </div>
@@ -117,7 +117,7 @@ export function BaseIdentityForm({ draft, onChange, onSubmit, submitting }) {
           style={TEXTAREA_STYLE}
         />
         <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', marginTop: 6 }}>
-          Optional — add anything you want the AI to understand about their appearance.
+          Optional — describe identity details you want preserved in future workflows.
         </div>
       </div>
 
@@ -131,8 +131,8 @@ export function BaseIdentityForm({ draft, onChange, onSubmit, submitting }) {
         full
         style={{ marginTop: 4 }}
       >
-        <Icon name="sparkles" size={16} style={submitting ? { animation: 'spin 1s linear infinite' } : {}} />
-        {submitting ? 'Generating…' : 'Generate My Creator'}
+        <Icon name="arrow-right" size={16} />
+        {submitting ? 'Saving…' : 'Save & Add Headshot'}
       </Button>
       {!requiredFilled && (
         <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', textAlign: 'center', marginTop: -8 }}>

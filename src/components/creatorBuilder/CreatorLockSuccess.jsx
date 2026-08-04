@@ -16,20 +16,17 @@ export function CreatorLockSuccess({ name, primaryUrl, onContinue, onSkipToBrand
         display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 'var(--radius-pill)',
         background: 'var(--status-ready-bg)', color: 'var(--status-ready)', font: '600 0.75rem/1 var(--font-ui)',
       }}>
-        <Icon name="fingerprint" size={12} strokeWidth={2.5} /> Identity Locked
+        <Icon name="fingerprint" size={12} strokeWidth={2.5} /> References Saved
       </div>
       <h2 style={{ font: 'var(--display-md, 1.5rem)/1.2 var(--font-display)', color: 'var(--text-strong)', margin: 0 }}>
-        {name} is officially locked.
+        {name}'s references are secure.
       </h2>
       <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', margin: 0, maxWidth: 380 }}>
-        Their face, skin, and hair identity are saved and will stay consistent across every future shoot. Next: define their body proportions, or skip straight to brand and styling.
+        Headshot and identity details are privately saved. Next: add a full-body reference and define proportions.
       </p>
       <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
         <Button variant="primary" onClick={onContinue}>
           <Icon name="person-stand" size={15} /> Define Body
-        </Button>
-        <Button variant="secondary" onClick={onSkipToBrand}>
-          Skip to Brand <Icon name="arrow-right" size={14} />
         </Button>
       </div>
     </Card>

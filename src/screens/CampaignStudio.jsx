@@ -260,7 +260,7 @@ function MotionModal({ onClose, onGenerate }) {
 }
 
 function ShotCard({ shot, workspace, busy, onGenerate, onReview, onMotion, onExport }) {
-  const [count, setCount] = React.useState(4);
+  const [count, setCount] = React.useState(1);
   const assets = workspace.assets.filter(asset => asset.shot_id === shot.id);
   const selection = workspace.selections.find(item => item.shot_id === shot.id);
   const hero = assets.find(asset => asset.id === selection?.still_asset_id);
@@ -288,7 +288,7 @@ function ShotCard({ shot, workspace, busy, onGenerate, onReview, onMotion, onExp
         <Icon name="sparkles" size={17} color="var(--accent-deep)" />
         <span style={{ flex: 1, font: 'var(--text-sm)', color: 'var(--text-body)' }}>Generate candidate set</span>
         <select aria-label={`Candidate count for ${shot.title}`} value={count} onChange={event => setCount(Number(event.target.value))} style={{ ...INPUT, width: 'auto' }}>
-          {[2, 4, 6].map(value => <option key={value} value={value}>{value} frames</option>)}
+          {[1, 2, 4].map(value => <option key={value} value={value}>{value} {value === 1 ? 'frame' : 'frames'}</option>)}
         </select>
         <Button variant={assets.length ? 'secondary' : 'primary'} size="sm" loading={busy} onClick={() => onGenerate(shot, count)}>{assets.length ? 'Regenerate' : 'Generate stills'}</Button>
       </div>
@@ -402,6 +402,7 @@ function CampaignDetail({ projectId, repository, pipeline, refreshUsage }) {
   const [reviewAsset, setReviewAsset] = React.useState(null);
   const [motion, setMotion] = React.useState(null);
   const [busyShot, setBusyShot] = React.useState(null);
+  const runningShots = React.useRef(new Set());
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -412,10 +413,12 @@ function CampaignDetail({ projectId, repository, pipeline, refreshUsage }) {
   React.useEffect(() => { load(); }, [load]);
 
   const run = async (shot, action) => {
+    if (runningShots.current.has(shot.id)) return;
+    runningShots.current.add(shot.id);
     setBusyShot(shot.id); setError('');
     try { await action(); await load(); await refreshUsage(); }
     catch (caught) { setError(caught.message || 'Production action failed.'); }
-    finally { setBusyShot(null); }
+    finally { runningShots.current.delete(shot.id); setBusyShot(null); }
   };
   const exportAsset = async (shot, asset, type) => run(shot, () => pipeline.createExport(
     workspace.project.id,

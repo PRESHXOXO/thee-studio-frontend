@@ -1,7 +1,10 @@
 const wait = milliseconds => new Promise(resolve => window.setTimeout(resolve, milliseconds));
 
-async function invoke(db, functionName, body) {
-  const { data, error } = await db.functions.invoke(functionName, { body });
+async function invoke(db, functionName, body, headers) {
+  const { data, error } = await db.functions.invoke(functionName, {
+    body,
+    ...(headers ? { headers } : {}),
+  });
   if (error) throw new Error(`${functionName}: ${error.message}`);
   if (!data) throw new Error(`${functionName}: empty provider response`);
   return data;
@@ -10,7 +13,11 @@ async function invoke(db, functionName, body) {
 class EdgeStillProvider {
   key = 'edge-still-v1';
   constructor(db) { this.db = db; }
-  generate(input) { return invoke(this.db, 'crisp-generate-stills', input); }
+  generate(input) {
+    return invoke(this.db, 'crisp-generate-stills', input, {
+      'idempotency-key': input.runId,
+    });
+  }
 }
 
 class EdgeClipProvider {

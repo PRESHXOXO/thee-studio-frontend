@@ -8,6 +8,7 @@ import { saveToLibrary, loadLibrary } from '../lib/library.js';
 import { compressImage, normalizeImageForVision } from '../lib/imageUtils.js';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
 import { persistCloudDocument } from '../lib/cloudStore.js';
+import { canonicalCreatorId } from '../lib/cloudCreators.js';
 import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 
 // Starter archetypes for the empty-cast state — no fake portraits to seed
@@ -638,7 +639,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
             <Button
               variant="secondary"
               onClick={() => active.cloudProfile
-                ? onNav?.('images', { creatorId: active.id })
+                ? onNav?.('images', { creatorId: canonicalCreatorId(active) })
                 : handleEdit(active)}
             >
               <Icon name="pencil" size={14} /> Edit

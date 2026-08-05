@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test e2e-audit --workers=1",
-    "audit:mvp": "node scripts/audit-mvp.mjs"
+    "audit:mvp": "node scripts/audit-mvp.mjs",
+    "test:checkout:staging": "node e2e-audit/staging-checkout-journey.mjs"
   },
   "dependencies": {
     "@gradio/client": "^1.0.0",

@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test e2e-audit --workers=1"
+    "test:e2e": "playwright test e2e-audit --workers=1",
+    "audit:mvp": "node scripts/audit-mvp.mjs"
   },
   "dependencies": {
     "@gradio/client": "^1.0.0",

@@ -1,10 +1,10 @@
 import React from 'react';
 import { Icon } from '../core/Icon.jsx';
 
-function CreatorChip({ activeCharacter, onNavigate }) {
+function CreatorChip({ activeCharacter, onNavigate, destination = 'characters' }) {
   return (
     <div
-      onClick={() => onNavigate && onNavigate('characters')}
+      onClick={() => onNavigate && onNavigate(destination, destination === 'images' && activeCharacter?.id ? { creatorId: activeCharacter.id } : undefined)}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
         borderRadius: 'var(--radius-md)', background: 'var(--cream-deep)',
@@ -35,7 +35,7 @@ function CreatorChip({ activeCharacter, onNavigate }) {
   );
 }
 
-export function Sidebar({ items = [], active, onNavigate, footer, activeCharacter, style }) {
+export function Sidebar({ items = [], active, onNavigate, footer, activeCharacter, creatorDestination, style }) {
   return (
     <nav style={{
       width: 'var(--sidebar-w)', flex: 'none', height: '100vh',
@@ -96,7 +96,7 @@ export function Sidebar({ items = [], active, onNavigate, footer, activeCharacte
       {/* Creator chip footer */}
       {footer !== null && (
         <div style={{ flexShrink: 0, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-          {footer || <CreatorChip activeCharacter={activeCharacter} onNavigate={onNavigate} />}
+          {footer || <CreatorChip activeCharacter={activeCharacter} onNavigate={onNavigate} destination={creatorDestination} />}
         </div>
       )}
     </nav>

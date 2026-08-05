@@ -143,7 +143,7 @@ function mergeCloudProfile(current, loaded) {
 }
 
 export function ImageGenerator({
-  onNav, initialCreatorId = null, initialName = '', initialNiche = '', initialVision = '', initialDescription = '',
+  onNav, cloudMvp = false, initialCreatorId = null, initialName = '', initialNiche = '', initialVision = '', initialDescription = '',
 }) {
   const { repository } = useProduction();
   const hasArchetypeHandoff = !!(initialName || initialNiche || initialVision || initialDescription);
@@ -369,7 +369,7 @@ export function ImageGenerator({
       await persistCloudDocument('ts_characters', value);
       saveActiveCreatorId(newChar.id);
       localStorage.removeItem(DRAFT_KEY);
-      onNav?.('characters');
+      onNav?.(cloudMvp ? 'campaigns' : 'characters');
     } catch (error) {
       setSaveError(error.message || 'Creator could not be saved.');
     } finally {

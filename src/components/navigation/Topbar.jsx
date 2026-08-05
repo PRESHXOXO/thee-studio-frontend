@@ -4,7 +4,7 @@ import { SearchPalette } from './SearchPalette.jsx';
 import { NotificationsMenu } from './NotificationsMenu.jsx';
 import { ProfileMenu } from './ProfileMenu.jsx';
 
-export function Topbar({ context = 'Studio', actions, user = 'Thee Studio', userEmail, userSrc, onNav, onSignOut, style }) {
+export function Topbar({ context = 'Studio', actions, user = 'Thee Studio', userEmail, userSrc, onNav, onSignOut, allowedNavIds, showSettings = true, style }) {
   const [searchOpen, setSearchOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -48,10 +48,10 @@ export function Topbar({ context = 'Studio', actions, user = 'Thee Studio', user
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
         {actions}
         <NotificationsMenu onNav={onNav} />
-        <ProfileMenu user={user} userEmail={userEmail} userSrc={userSrc} onNav={onNav} onSignOut={onSignOut} />
+        <ProfileMenu user={user} userEmail={userEmail} userSrc={userSrc} onNav={onNav} onSignOut={onSignOut} showSettings={showSettings} />
       </div>
     </header>
-    <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onNav={onNav} />
+    <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onNav={onNav} allowedNavIds={allowedNavIds} />
     </>
   );
 }

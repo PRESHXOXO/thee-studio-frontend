@@ -14,6 +14,13 @@ const SHORTCUTS = [
   { icon: 'megaphone',    label: 'Campaigns',       sub: 'Launch a shoot',   nav: 'campaigns' },
 ];
 
+const CLOUD_MVP_SHORTCUTS = [
+  { icon: 'image',       label: 'New Creator', sub: 'Upload and save a creator', nav: 'images' },
+  { icon: 'megaphone',   label: 'Campaigns',   sub: 'Launch a still campaign', nav: 'campaigns' },
+  { icon: 'folder-open', label: 'Library',     sub: 'Open private assets', nav: 'library' },
+  { icon: 'history',     label: 'History',     sub: 'Review recent work', nav: 'history' },
+];
+
 function ShortcutCard({ item, onNav }) {
   const [hovered, setHovered] = React.useState(false);
   return (
@@ -95,7 +102,14 @@ function nextStep({ charCount, libCount, unreviewed }) {
   return { icon: 'megaphone', text: 'Pipeline is clear. Plan your next shoot or launch a campaign.', nav: 'campaigns', cta: 'Open Campaigns' };
 }
 
-export function StudioHome({ onNav }) {
+function cloudNextStep({ charCount, libCount, unreviewed }) {
+  if (charCount === 0) return { icon: 'image', text: 'Start by uploading a creator headshot and full-body reference.', nav: 'images', cta: 'New Creator' };
+  if (libCount === 0) return { icon: 'megaphone', text: 'Your creator is ready. Build a still campaign.', nav: 'campaigns', cta: 'Open Campaigns' };
+  if (unreviewed > 0) return { icon: 'eye', text: `${unreviewed} draft${unreviewed !== 1 ? 's' : ''} waiting for review. Approve keepers, flag fixes.`, nav: 'library', cta: 'Review Drafts' };
+  return { icon: 'megaphone', text: 'Pipeline is clear. Plan your next campaign.', nav: 'campaigns', cta: 'Open Campaigns' };
+}
+
+export function StudioHome({ onNav, cloudMvp = false }) {
   const [recent, setRecent]   = React.useState([]);
   const [charCount, setChars] = React.useState(0);
   const [libCount, setLib]    = React.useState(0);
@@ -133,7 +147,7 @@ export function StudioHome({ onNav }) {
         </h1>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <Button variant="secondary" onClick={() => onNav && onNav('images')}><Icon name="wand-2" size={15} /> New Creator</Button>
-          <Button variant="accent" onClick={() => onNav && onNav('characters', 'import')}><Icon name="upload" size={15} /> Import Creator</Button>
+          <Button variant="accent" onClick={() => onNav && onNav(cloudMvp ? 'campaigns' : 'characters', cloudMvp ? undefined : 'import')}><Icon name={cloudMvp ? 'megaphone' : 'upload'} size={15} /> {cloudMvp ? 'Campaigns' : 'Import Creator'}</Button>
         </div>
 
         {/* Live stats */}
@@ -147,7 +161,9 @@ export function StudioHome({ onNav }) {
 
       {/* Next recommended step */}
       {(() => {
-        const step = nextStep({ charCount, libCount, unreviewed: pipeline.unreviewed });
+        const step = cloudMvp
+          ? cloudNextStep({ charCount, libCount, unreviewed: pipeline.unreviewed })
+          : nextStep({ charCount, libCount, unreviewed: pipeline.unreviewed });
         return (
           <div style={{
             position: 'relative', zIndex: 1,
@@ -190,7 +206,7 @@ export function StudioHome({ onNav }) {
       <div>
         <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Quick Actions</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 'var(--grid-gap-card)' }}>
-          {SHORTCUTS.map(s => <ShortcutCard key={s.nav} item={s} onNav={onNav} />)}
+          {(cloudMvp ? CLOUD_MVP_SHORTCUTS : SHORTCUTS).map(s => <ShortcutCard key={s.nav} item={s} onNav={onNav} />)}
         </div>
       </div>
 
@@ -224,7 +240,7 @@ export function StudioHome({ onNav }) {
             {/* One real "generate more" slot instead of blank gradient
                 fillers — an affordance, not dead padding. */}
             <button
-              onClick={() => onNav && onNav('director')}
+              onClick={() => onNav && onNav(cloudMvp ? 'campaigns' : 'director')}
               style={{
                 aspectRatio: '3/4', borderRadius: 'var(--radius-lg)', cursor: 'pointer',
                 border: '1.5px dashed var(--border)', background: 'transparent',
@@ -240,14 +256,14 @@ export function StudioHome({ onNav }) {
           </div>
         ) : (
           <div
-            onClick={() => onNav && onNav('characters')}
+            onClick={() => onNav && onNav(cloudMvp ? 'images' : 'characters')}
             style={{ padding: '36px 24px', borderRadius: 'var(--radius-lg)', border: '1.5px dashed var(--border)', textAlign: 'center', cursor: 'pointer', transition: 'border-color var(--t-fast), background var(--t-fast)' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.background = 'var(--rose-glass)'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.background = ''; }}
           >
             <Icon name="image" size={28} strokeWidth={1.25} style={{ color: 'var(--text-faint)', marginBottom: 10 }} />
             <div style={{ font: '600 0.9375rem/1 var(--font-ui)', color: 'var(--text-muted)', marginBottom: 6 }}>No generations yet</div>
-            <div style={{ font: 'var(--text-sm)', color: 'var(--text-faint)' }}>Set up a creator and run Quick Shoot to see results here.</div>
+            <div style={{ font: 'var(--text-sm)', color: 'var(--text-faint)' }}>{cloudMvp ? 'Set up a creator and run a Campaign to see results here.' : 'Set up a creator and run Quick Shoot to see results here.'}</div>
           </div>
         )}
       </div>

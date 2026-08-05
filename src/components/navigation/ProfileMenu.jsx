@@ -2,7 +2,7 @@ import React from 'react';
 import { Avatar } from '../core/Avatar.jsx';
 import { Icon } from '../core/Icon.jsx';
 
-export function ProfileMenu({ user = 'Thee Studio', userEmail, userSrc, onNav, onSignOut }) {
+export function ProfileMenu({ user = 'Thee Studio', userEmail, userSrc, onNav, onSignOut, showSettings = true }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
 
@@ -38,7 +38,7 @@ export function ProfileMenu({ user = 'Thee Studio', userEmail, userSrc, onNav, o
               </div>
             )}
           </div>
-          <button
+          {showSettings && <button
             onClick={() => { onNav?.('settings'); setOpen(false); }}
             style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
@@ -47,7 +47,7 @@ export function ProfileMenu({ user = 'Thee Studio', userEmail, userSrc, onNav, o
             }}
           >
             <Icon name="settings" size={14} strokeWidth={1.75} /> Settings
-          </button>
+          </button>}
           {onSignOut && (
             <button
               onClick={() => { setOpen(false); onSignOut(); }}

@@ -2,11 +2,11 @@ import React from 'react';
 import { Icon } from '../core/Icon.jsx';
 import { searchIndex } from '../../lib/search.js';
 
-export function SearchPalette({ open, onClose, onNav }) {
+export function SearchPalette({ open, onClose, onNav, allowedNavIds }) {
   const [query, setQuery] = React.useState('');
   const [activeIdx, setActiveIdx] = React.useState(0);
   const inputRef = React.useRef(null);
-  const results = React.useMemo(() => searchIndex(query), [query]);
+  const results = React.useMemo(() => searchIndex(query).filter(item => !allowedNavIds || allowedNavIds.has(item.navId)), [allowedNavIds, query]);
 
   React.useEffect(() => {
     if (open) {

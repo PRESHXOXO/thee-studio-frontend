@@ -44,4 +44,16 @@ describe('frontend security contract', () => {
     expect(creator).not.toMatch(/gradio_api|generateCharacterSeed|generateCharacterVariationShot|parseCreatorCorrection/);
     expect(creator).toContain('uploadReferenceAsset');
   });
+
+  it('uses Declarative Mode and rejects unstable React Router RSC code paths', () => {
+    const source = files(path.resolve('src'))
+      .filter(file => !file.includes(`${path.sep}test${path.sep}`) && !file.includes('.test.'))
+      .map(file => fs.readFileSync(file, 'utf8')).join('\n');
+    const main = fs.readFileSync('src/main.jsx', 'utf8');
+    expect(main).toMatch(/BrowserRouter/);
+    expect(source).toMatch(/\bRoutes\b/);
+    expect(source).toMatch(/\bRoute\b/);
+    expect(source).not.toMatch(/from\s+['"]react-router(?:-dom)?\/(?:rsc|unstable|server)/i);
+    expect(source).not.toMatch(/unstable_(?:RSC|createCallServer|routeRSCServerRequest)/);
+  });
 });

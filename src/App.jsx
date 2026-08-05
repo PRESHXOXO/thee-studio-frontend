@@ -23,6 +23,8 @@ import { ProductionProvider } from './context/ProductionContext.jsx';
 import { LoginScreen } from './components/auth/LoginScreen.jsx';
 import { AccessScreen } from './components/auth/AccessScreen.jsx';
 import { accessBadgeLabel, accessView, useStudioAccess } from './api/access.js';
+import { createCheckoutSession } from './api/checkout.js';
+import { CLOUD_MVP_NAV_IDS, cloudMvpNavItems, isCloudMvpEnabled } from './lib/cloudMvp.js';
 
 function RequireAuth({ children }) {
   const auth = useAuth();
@@ -44,13 +46,42 @@ function RequireAuth({ children }) {
 function RequireProductAccess({ children }) {
   const auth = useAuth();
   const accessState = useStudioAccess(auth.session?.raw ?? null, auth.client);
+  const location = useLocation();
+  const [checkoutLoading, setCheckoutLoading] = React.useState(false);
+  const [checkoutError, setCheckoutError] = React.useState('');
   const view = accessView(accessState.access, accessState.error);
+  React.useEffect(() => {
+    if (new URLSearchParams(location.search).get('checkout') !== 'success' || view.state === 'allowed') return undefined;
+    let checks = 0;
+    const timer = window.setInterval(() => {
+      checks += 1;
+      accessState.refresh();
+      if (checks >= 15) window.clearInterval(timer);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [accessState.refresh, location.search, view.state]);
+
+  const startCheckout = async () => {
+    if (checkoutLoading) return;
+    setCheckoutLoading(true);
+    setCheckoutError('');
+    try {
+      const result = await createCheckoutSession(auth.client);
+      window.location.assign(result.checkoutUrl);
+    } catch (error) {
+      setCheckoutError(error.message || 'Checkout could not be started.');
+      setCheckoutLoading(false);
+    }
+  };
   if (accessState.loading) return <AccessScreen title="Connecting…" loading />;
   if (view.state !== 'allowed') {
     return (
       <AccessScreen
         title={view.title}
         detail={view.detail}
+        error={checkoutError}
+        checkoutLoading={checkoutLoading}
+        onCheckout={view.state === 'pricing_required' ? startCheckout : null}
         onRetry={accessState.error ? accessState.refresh : null}
         onSignOut={auth.signOut}
       />
@@ -166,7 +197,9 @@ function StudioApp({ access }) {
   const { screen: screenSlug, projectId } = useParams();
   const auth = useAuth();
   const authSession = auth.session;
-  const [activeNav, setActiveNav]             = React.useState(() => slugToScreenId(screenSlug) || 'home');
+  const cloudMvp = isCloudMvpEnabled(import.meta.env);
+  const initialNav = slugToScreenId(screenSlug) || 'home';
+  const [activeNav, setActiveNav]             = React.useState(() => cloudMvp && !CLOUD_MVP_NAV_IDS.has(initialNav) ? 'home' : initialNav);
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
   const [pendingDirector,  setPendingDirector]  = React.useState(null);
   const [pendingImages,    setPendingImages]    = React.useState(null);
@@ -184,6 +217,11 @@ function StudioApp({ access }) {
 
   // Refresh library count whenever user navigates (catches new saves)
   const handleNav = React.useCallback((id, data) => {
+    if (cloudMvp && !CLOUD_MVP_NAV_IDS.has(id)) {
+      setActiveNav('home');
+      navigate('/studio/home', { replace: false });
+      return;
+    }
     setLibCount(loadLibrary().length);
     // data === 'import' is a sentinel from "Import Creator" entry points
     // (Studio Home) — distinct from the AI-builder handoff object, which
@@ -207,32 +245,37 @@ function StudioApp({ access }) {
         )
       : `/studio/${id}${query}`;
     navigate(target, { replace: false });
-  }, [navigate]);
+  }, [cloudMvp, navigate]);
 
   // Back/forward or a hand-typed /studio/<slug> changes the param — mirror it
   // into activeNav so the rendered screen follows the URL.
   React.useEffect(() => {
     const id = slugToScreenId(screenSlug);
+    if (cloudMvp && id && !CLOUD_MVP_NAV_IDS.has(id)) {
+      setActiveNav('home');
+      navigate('/studio/home', { replace: true });
+      return;
+    }
     if (id && id !== activeNav) setActiveNav(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screenSlug]);
+  }, [cloudMvp, navigate, screenSlug]);
 
   // Canonical Director URLs give every input mode a refresh-safe link while
   // retaining friendly legacy aliases such as /studio/prompt-lab.
   React.useEffect(() => {
-    if (activeNav !== 'director') return;
+    if (cloudMvp || activeNav !== 'director') return;
     const canonical = directorModePath(routeDirectorMode);
     if (location.pathname !== canonical) navigate(canonical, { replace: true });
-  }, [activeNav, location.pathname, navigate, routeDirectorMode]);
+  }, [activeNav, cloudMvp, location.pathname, navigate, routeDirectorMode]);
 
-  const navItems = React.useMemo(() => BASE_NAV.map(item =>
+  const navItems = React.useMemo(() => cloudMvpNavItems(BASE_NAV.map(item =>
     item.id === 'library' && libCount > 0 ? { ...item, badge: String(libCount) } : item
-  ), [libCount]);
+  ), cloudMvp), [cloudMvp, libCount]);
 
   const Screen = SCREENS[activeNav]?.component || StudioHome;
   const screenLabel = SCREENS[activeNav]?.label || 'Studio Home';
 
-  const screenProps = { onNav: handleNav };
+  const screenProps = { onNav: handleNav, cloudMvp };
   if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
   if (activeNav === 'characters' && pendingImportRequest) screenProps.initialImportRequest = true;
   if (activeNav === 'characters') screenProps.onCharacterChange = setActiveCharacter;
@@ -283,7 +326,7 @@ function StudioApp({ access }) {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>
-      <Sidebar items={navItems} active={activeNav} onNavigate={id => handleNav(id)} activeCharacter={activeCharacter} />
+      <Sidebar items={navItems} active={activeNav} onNavigate={handleNav} activeCharacter={activeCharacter} creatorDestination={cloudMvp ? 'images' : 'characters'} />
       <div style={{ marginLeft: 'var(--sidebar-w, 248px)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Topbar
           context={screenLabel}
@@ -291,6 +334,8 @@ function StudioApp({ access }) {
           user={authSession?.name || 'Thee Studio'}
           userEmail={authSession?.email}
           onSignOut={handleSignOut}
+          allowedNavIds={cloudMvp ? CLOUD_MVP_NAV_IDS : null}
+          showSettings={!cloudMvp}
           actions={
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div title="Internal access with usage tracking" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--accent-indigo-soft)', border: '1px solid var(--border)', font: '600 0.75rem/1 var(--font-ui)', color: 'var(--accent-indigo)' }}>

@@ -386,7 +386,7 @@ function CampaignList({ repository, isCloud }) {
           })}
         </div>
       ) : (
-        <Card><EmptyState icon="clapperboard" title={creators.length ? 'Build your first production campaign' : 'Create a cast member first'} body={creators.length ? 'Start with a brief, plan intentional shots, review candidates, and deliver approved assets.' : 'Campaigns inherit identity from your Cast. Create and save a creator, then return here.'} cta={creators.length ? 'New campaign' : 'Go to Cast'} onCta={() => creators.length ? setCreating(true) : navigate('/studio/characters')} /></Card>
+        <Card><EmptyState icon="clapperboard" title={creators.length ? 'Build your first production campaign' : isCloud ? 'Create a creator first' : 'Create a cast member first'} body={creators.length ? 'Start with a brief, plan intentional shots, review candidates, and deliver approved assets.' : isCloud ? 'Campaigns use your saved creator details. Create and save a creator, then return here.' : 'Campaigns inherit identity from your Cast. Create and save a creator, then return here.'} cta={creators.length ? 'New campaign' : isCloud ? 'New Creator' : 'Go to Cast'} onCta={() => creators.length ? setCreating(true) : navigate(isCloud ? '/studio/images' : '/studio/characters')} /></Card>
       )}
       {creating && <CampaignModal creators={creators} onClose={() => setCreating(false)} onCreate={create} />}
     </div>

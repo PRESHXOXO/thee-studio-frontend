@@ -7,14 +7,15 @@ if (!baseUrl || !email || !password) throw new Error('Required staging journey e
 
 let stage = 'launch';
 const browser = await chromium.launch({ headless: true });
+let page;
 try {
   const context = await browser.newContext();
-  const page = await context.newPage();
+  page = await context.newPage();
 
   stage = 'login';
   await page.goto(`${baseUrl}/studio`, { waitUntil: 'domcontentloaded' });
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
+  await page.locator('input[type="password"]').fill(password);
   await page.getByRole('button', { name: 'Sign In' }).click();
 
   stage = 'pricing';
@@ -35,10 +36,29 @@ try {
       }
       await page.waitForTimeout(500);
     }
-    throw new Error(`Stripe field was unavailable: ${selectors[0]}`);
+    const fields = [];
+    const labels = [];
+    for (const frame of page.frames()) {
+      for (const field of await frame.locator('input').all()) {
+        fields.push({
+          name: await field.getAttribute('name'),
+          type: await field.getAttribute('type'),
+          autocomplete: await field.getAttribute('autocomplete'),
+          label: await field.getAttribute('aria-label'),
+        });
+      }
+      labels.push(...(await frame.locator('label').allTextContents()));
+    }
+    throw new Error(`Stripe field was unavailable: ${selectors[0]}; fields=${JSON.stringify(fields).slice(0, 2200)}; labels=${JSON.stringify(labels).slice(0, 1200)}`);
   }
 
   stage = 'test-mode payment';
+  const cardButton = page.getByRole('button', { name: /pay with card/i }).filter({ visible: true }).first();
+  if (await cardButton.count()) {
+    await cardButton.click();
+  } else {
+    await page.getByText('Card', { exact: true }).first().click({ force: true });
+  }
   await fillInAnyFrame(['input[name="cardNumber"]', 'input[autocomplete="cc-number"]', 'input[aria-label*="Card number" i]'], '4242424242424242');
   await fillInAnyFrame(['input[name="cardExpiry"]', 'input[autocomplete="cc-exp"]', 'input[aria-label*="expiration" i]'], '1234');
   await fillInAnyFrame(['input[name="cardCvc"]', 'input[autocomplete="cc-csc"]', 'input[aria-label*="security code" i]', 'input[aria-label*="CVC" i]'], '123');
@@ -46,11 +66,12 @@ try {
   for (const [selectors, value] of [
     [['input[name="billingName"]', 'input[autocomplete="name"]'], 'Staging Checkout Test'],
     [['input[name="billingPostalCode"]', 'input[autocomplete="postal-code"]'], '10001'],
+    [['input[name="phoneNumber"]', 'input[autocomplete="tel"]'], '+12025550123'],
   ]) {
     try { await fillInAnyFrame(selectors, value); } catch { /* optional in the active Checkout locale */ }
   }
 
-  const submit = page.getByRole('button', { name: /subscribe|pay|complete order|start trial/i }).last();
+  const submit = page.getByRole('button', { name: /^(subscribe|pay|complete order|start trial)$/i }).filter({ visible: true }).first();
   await submit.click();
 
   stage = 'webhook access';

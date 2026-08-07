@@ -21,6 +21,10 @@ function fakeClient(initialSession = null) {
         return { data: { subscription: { unsubscribe: vi.fn() } } };
       }),
       signInWithPassword: vi.fn(),
+      signUp: vi.fn(),
+      signInWithOAuth: vi.fn(),
+      resetPasswordForEmail: vi.fn(),
+      updateUser: vi.fn(),
       signOut: vi.fn().mockResolvedValue({ error: null }),
     },
   };
@@ -38,6 +42,9 @@ function Probe() {
       <span>{auth.error}</span>
       <button onClick={() => auth.signIn({ email: 'owner@example.invalid', password: 'password' }).catch(() => {})}>login</button>
       <button onClick={auth.signOut}>logout</button>
+      <button onClick={() => auth.signUp({ name: 'New User', email: 'new@example.invalid', password: 'password1' })}>signup</button>
+      <button onClick={() => auth.requestPasswordReset('new@example.invalid')}>recover</button>
+      <button onClick={() => auth.updatePassword('new-password')}>reset</button>
     </div>
   );
 }
@@ -83,5 +90,27 @@ describe('AuthProvider', () => {
     await screen.findByText('owner-4');
     await act(async () => client.emit('SIGNED_OUT', null));
     await waitFor(() => expect(screen.getByText('signed-out')).toBeInTheDocument());
+  });
+
+  it('signs up with confirmation redirected to plan selection', async () => {
+    const client = fakeClient();
+    client.auth.signUp.mockResolvedValue({ data: { session: null }, error: null });
+    render(<AuthProvider client={client}><Probe /></AuthProvider>);
+    await screen.findByText('signed-out');
+    fireEvent.click(screen.getByText('signup'));
+    await waitFor(() => expect(client.auth.signUp).toHaveBeenCalled());
+    expect(client.auth.signUp.mock.calls[0][0].options.emailRedirectTo).toBe(`${window.location.origin}/plans?confirmed=true`);
+  });
+
+  it('requests recovery and updates a recovered password', async () => {
+    const client = fakeClient();
+    client.auth.resetPasswordForEmail.mockResolvedValue({ error: null });
+    client.auth.updateUser.mockResolvedValue({ error: null });
+    render(<AuthProvider client={client}><Probe /></AuthProvider>);
+    await screen.findByText('signed-out');
+    fireEvent.click(screen.getByText('recover'));
+    fireEvent.click(screen.getByText('reset'));
+    await waitFor(() => expect(client.auth.resetPasswordForEmail).toHaveBeenCalledWith('new@example.invalid', { redirectTo: `${window.location.origin}/reset-password` }));
+    expect(client.auth.updateUser).toHaveBeenCalledWith({ password: 'new-password' });
   });
 });

@@ -1,4 +1,4 @@
-const SYNCED_KEYS = [
+export const SYNCED_KEYS = [
   'ts_characters',
   'ts_library',
   'ts_references',
@@ -8,8 +8,20 @@ const SYNCED_KEYS = [
   'ts_creator_memory_v1',
 ];
 
+// Browser cache is only a working copy for the currently authenticated user.
+// These keys must never survive logout or an account switch.
+export const USER_SCOPED_CACHE_KEYS = [
+  ...SYNCED_KEYS,
+  'ts_creator_draft',
+  'ts_production_v1',
+  'ts_notif_seen_at',
+  'ts_auth_session',
+  'ts_test_accounts',
+];
+
 let runtime = null;
 let writeChain = Promise.resolve();
+let runtimeEpoch = 0;
 
 function announceSync(type, detail) {
   if (typeof window !== 'undefined') {
@@ -18,30 +30,30 @@ function announceSync(type, detail) {
 }
 
 export async function bootstrapCloudStore(db, userId) {
-  runtime = { db, userId };
+  clearUserScopedCache();
+  const epoch = ++runtimeEpoch;
+  runtime = { db, userId, epoch };
   const { data, error } = await db.from('studio_documents')
     .select('document_key,payload')
     .in('document_key', SYNCED_KEYS);
   if (error) throw new Error(`Cloud data sync failed: ${error.message}`);
+  if (runtime?.epoch !== epoch || runtime?.userId !== userId) return;
   const documents = new Map((data || []).map(row => [row.document_key, row.payload?.value]));
-  const migrations = [];
   for (const key of SYNCED_KEYS) {
     if (documents.has(key)) {
       const value = documents.get(key);
       if (value == null) localStorage.removeItem(key);
       else localStorage.setItem(key, String(value));
-      continue;
+    } else {
+      localStorage.removeItem(key);
     }
-    const localValue = localStorage.getItem(key);
-    if (localValue != null) migrations.push(writeDocument(key, localValue));
   }
-  await Promise.all(migrations);
 }
 
-async function writeDocument(key, value) {
-  if (!runtime || !SYNCED_KEYS.includes(key)) return;
-  const { error } = await runtime.db.from('studio_documents').upsert({
-    user_id: runtime.userId,
+async function writeDocument(key, value, sourceRuntime = runtime) {
+  if (!sourceRuntime || runtime?.epoch !== sourceRuntime.epoch || !SYNCED_KEYS.includes(key)) return;
+  const { error } = await sourceRuntime.db.from('studio_documents').upsert({
+    user_id: sourceRuntime.userId,
     document_key: key,
     payload: { value },
   }, { onConflict: 'user_id,document_key' });
@@ -51,9 +63,10 @@ async function writeDocument(key, value) {
 
 export function persistCloudDocument(key, value) {
   if (!runtime || !SYNCED_KEYS.includes(key)) return Promise.resolve();
+  const sourceRuntime = runtime;
   writeChain = writeChain
     .catch(() => undefined)
-    .then(() => writeDocument(key, value))
+    .then(() => writeDocument(key, value, sourceRuntime))
     .catch(error => {
       announceSync('thee:cloud-sync-error', { message: error.message, key });
       reportStudioError(error, { key, operation: 'cloud_document_write' });
@@ -107,8 +120,15 @@ export async function removeCloudAsset(path) {
 }
 
 export function resetCloudStore() {
+  runtimeEpoch += 1;
   runtime = null;
   writeChain = Promise.resolve();
+  clearUserScopedCache();
+}
+
+export function clearUserScopedCache() {
+  if (typeof localStorage === 'undefined') return;
+  for (const key of USER_SCOPED_CACHE_KEYS) localStorage.removeItem(key);
 }
 
 export function reportStudioError(error, context = {}, source = 'frontend') {

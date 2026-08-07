@@ -14,6 +14,8 @@ export function safeAuthMessage(error) {
   if (message.includes('invalid login credentials')) return 'Email or password is incorrect.';
   if (message.includes('email not confirmed')) return 'Confirm your email before signing in.';
   if (message.includes('network') || message.includes('fetch')) return 'Unable to reach the sign-in service.';
+  if (message.includes('already registered')) return 'An account already exists for this email.';
+  if (message.includes('password')) return 'Use a password with at least 8 characters.';
   return 'Sign-in failed. Check your details and try again.';
 }
 
@@ -78,6 +80,8 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
   const signIn = React.useCallback(async ({ email, password }) => {
     if (!client) throw new Error('Staging connection is not configured.');
     setError('');
+    resetCloudStore();
+    setSession(null);
     const { data, error: signInError } = await client.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
@@ -93,6 +97,57 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
     return next;
   }, [client]);
 
+  const signUp = React.useCallback(async ({ name, email, password }) => {
+    if (!client) throw new Error('Staging connection is not configured.');
+    setError('');
+    resetCloudStore();
+    setSession(null);
+    const { data, error: signUpError } = await client.auth.signUp({
+      email: email.trim().toLowerCase(),
+      password,
+      options: {
+        data: { name: name.trim(), full_name: name.trim() },
+        emailRedirectTo: `${window.location.origin}/plans?confirmed=true`,
+      },
+    });
+    if (signUpError) {
+      const safe = safeAuthMessage(signUpError);
+      setError(safe);
+      throw new Error(safe);
+    }
+    const next = normalizeSupabaseSession(data.session);
+    if (next) {
+      await bootstrapCloudStore(client, next.id);
+      setSession(next);
+    }
+    return { session: next, confirmationRequired: !next };
+  }, [client]);
+
+  const requestPasswordReset = React.useCallback(async email => {
+    if (!client) throw new Error('Staging connection is not configured.');
+    const { error: resetError } = await client.auth.resetPasswordForEmail(
+      email.trim().toLowerCase(),
+      { redirectTo: `${window.location.origin}/reset-password` },
+    );
+    if (resetError) throw new Error('Password reset email could not be sent. Try again.');
+  }, [client]);
+
+  const updatePassword = React.useCallback(async password => {
+    if (!client) throw new Error('Staging connection is not configured.');
+    const { error: updateError } = await client.auth.updateUser({ password });
+    if (updateError) throw new Error('Password could not be updated. Request a new reset link.');
+  }, [client]);
+
+  const googleEnabled = import.meta.env.VITE_SUPABASE_GOOGLE_AUTH_ENABLED === 'true';
+  const signInWithGoogle = React.useCallback(async () => {
+    if (!client || !googleEnabled) throw new Error('Google sign-in is not available.');
+    const { error: oauthError } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/plans` },
+    });
+    if (oauthError) throw new Error('Google sign-in could not be started.');
+  }, [client, googleEnabled]);
+
   const signOut = React.useCallback(async () => {
     if (client) await client.auth.signOut();
     setSession(null);
@@ -106,9 +161,14 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
     error,
     syncError,
     mode: client ? 'cloud' : 'misconfigured',
+    googleEnabled,
     signIn,
+    signUp,
+    signInWithGoogle,
+    requestPasswordReset,
+    updatePassword,
     signOut,
-  }), [client, session, loading, error, syncError, signIn, signOut]);
+  }), [client, session, loading, error, syncError, googleEnabled, signIn, signUp, signInWithGoogle, requestPasswordReset, updatePassword, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

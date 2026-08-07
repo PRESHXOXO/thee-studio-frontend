@@ -347,8 +347,8 @@ function Footer() {
 
 export function Landing() {
   const navigate = useNavigate();
-  const goToSignup = () => navigate('/auth?mode=signup');
-  const goToLogin = () => navigate('/auth?mode=login');
+  const goToSignup = () => navigate('/signup');
+  const goToLogin = () => navigate('/login');
 
   return (
     <div style={{ fontFamily: 'var(--font-ui)' }}>
@@ -385,7 +385,7 @@ export function Landing() {
       <div style={{ paddingTop: 64 }}>
         <HeroSection onCTA={goToSignup} />
         <FeaturesSection />
-        <PricingSection onCTA={goToSignup} />
+        <PricingSection onCTA={() => navigate('/plans')} />
         <Footer />
       </div>
     </div>

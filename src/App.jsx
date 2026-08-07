@@ -20,26 +20,21 @@ import { resolveActiveCreator } from './lib/activeCreator.js';
 import { StudioErrorBoundary } from './components/system/StudioErrorBoundary.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import { ProductionProvider } from './context/ProductionContext.jsx';
-import { LoginScreen } from './components/auth/LoginScreen.jsx';
 import { AccessScreen } from './components/auth/AccessScreen.jsx';
 import { accessBadgeLabel, accessView, useStudioAccess } from './api/access.js';
-import { createCheckoutSession } from './api/checkout.js';
 import { CLOUD_MVP_NAV_IDS, cloudMvpNavItems, isCloudMvpEnabled } from './lib/cloudMvp.js';
+import { Landing } from './screens/Landing.jsx';
+import { Auth } from './screens/Auth.jsx';
+import { ForgotPassword } from './screens/ForgotPassword.jsx';
+import { ResetPassword } from './screens/ResetPassword.jsx';
+import { Plans } from './screens/Plans.jsx';
 
 function RequireAuth({ children }) {
   const auth = useAuth();
   if (auth.loading) {
     return <AccessScreen title="Opening your studio…" loading />;
   }
-  if (!auth.session) {
-    return (
-      <LoginScreen
-        configured={Boolean(auth.client)}
-        error={auth.error}
-        onSignIn={(email, password) => auth.signIn({ email, password })}
-      />
-    );
-  }
+  if (!auth.session) return <Navigate to="/login" replace state={{ from: `${window.location.pathname}${window.location.search}` }} />;
   return children;
 }
 
@@ -47,8 +42,6 @@ function RequireProductAccess({ children }) {
   const auth = useAuth();
   const accessState = useStudioAccess(auth.session?.raw ?? null, auth.client);
   const location = useLocation();
-  const [checkoutLoading, setCheckoutLoading] = React.useState(false);
-  const [checkoutError, setCheckoutError] = React.useState('');
   const view = accessView(accessState.access, accessState.error);
   React.useEffect(() => {
     if (new URLSearchParams(location.search).get('checkout') !== 'success' || view.state === 'allowed') return undefined;
@@ -61,27 +54,13 @@ function RequireProductAccess({ children }) {
     return () => window.clearInterval(timer);
   }, [accessState.refresh, location.search, view.state]);
 
-  const startCheckout = async () => {
-    if (checkoutLoading) return;
-    setCheckoutLoading(true);
-    setCheckoutError('');
-    try {
-      const result = await createCheckoutSession(auth.client);
-      window.location.assign(result.checkoutUrl);
-    } catch (error) {
-      setCheckoutError(error.message || 'Checkout could not be started.');
-      setCheckoutLoading(false);
-    }
-  };
   if (accessState.loading) return <AccessScreen title="Connecting…" loading />;
+  if (view.state === 'pricing_required') return <Navigate to="/plans" replace state={{ from: location.pathname }} />;
   if (view.state !== 'allowed') {
     return (
       <AccessScreen
         title={view.title}
         detail={view.detail}
-        error={checkoutError}
-        checkoutLoading={checkoutLoading}
-        onCheckout={view.state === 'pricing_required' ? startCheckout : null}
         onRetry={accessState.error ? accessState.refresh : null}
         onSignOut={auth.signOut}
       />
@@ -145,7 +124,7 @@ function UnknownRoute() {
   const seg = segments[0];
   const id = slugToScreenId(seg);
   if (id) return <Navigate to={`/studio/${segments.join('/')}`} replace />;
-  return <Navigate to="/studio" replace />;
+  return <Navigate to="/" replace />;
 }
 
 // Prompt Lab and Scene Flow are no longer top-level nav destinations — both
@@ -321,7 +300,7 @@ function StudioApp({ access }) {
 
   const handleSignOut = async () => {
     await auth.signOut();
-    navigate('/auth?mode=login', { replace: true });
+    navigate('/login', { replace: true });
   };
 
   return (
@@ -377,8 +356,13 @@ export default function App() {
   );
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/studio" replace />} />
-      <Route path="/auth" element={protectedStudio} />
+      <Route path="/" element={<Landing />} />
+      <Route path="/login" element={<Auth mode="login" />} />
+      <Route path="/signup" element={<Auth mode="signup" />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/plans" element={<Plans />} />
+      <Route path="/auth" element={<Navigate to="/login" replace />} />
       <Route path="/studio" element={protectedStudio} />
       <Route path="/studio/:screen" element={protectedStudio} />
       <Route path="/studio/:screen/:projectId" element={protectedStudio} />

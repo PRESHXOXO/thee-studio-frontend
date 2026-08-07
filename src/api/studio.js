@@ -329,13 +329,13 @@ export async function analyzeCharacterReferences(imageDataUrls, { creatorId = nu
   let faceAnchor = '';
   if (hasSupabaseConfig()) {
     // Combines Analyze Complete Set + face/identity anchor extraction in one
-    // billable call — the first reference is always identity-only, so it
-    // doubles as the anchor without a second OpenAI request.
+    // billable call — the anchor is generated as text by the same vision
+    // request, never the reference image itself.
     const data = await invokeCastFunction('cast-analyze-references', creatorId
       ? { creatorId }
       : { references });
     parsed = { ...data.profile };
-    faceAnchor = data.identityAnchor ? references[0]?.image ?? '' : '';
+    faceAnchor = typeof data.identityAnchor === 'string' ? data.identityAnchor : '';
   } else {
     const raw = await callNamedEndpoint('analyze_character', [JSON.stringify({ version: 2, references })]);
     const jsonStr = raw[0] || '{}';

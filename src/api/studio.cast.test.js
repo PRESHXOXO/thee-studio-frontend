@@ -31,10 +31,15 @@ const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcS
 
 describe('Cast cloud workflows never call local Gradio', () => {
   it('analyzeCharacterReferences calls cast-analyze-references, not /gradio_api', async () => {
-    invoke.mockResolvedValueOnce({ data: { profile: { face: 'x', hair: 'y', tone: 'z' }, identityAnchor: PIXEL }, error: null });
+    const anchorText = 'Oval face, high cheekbones, almond eyes.';
+    invoke.mockResolvedValueOnce({ data: { profile: { face: 'x', hair: 'y', tone: 'z' }, identityAnchor: anchorText }, error: null });
     const result = await analyzeCharacterReferences([PIXEL]);
     expect(invoke).toHaveBeenCalledWith('cast-analyze-references', expect.objectContaining({ body: { references: [{ role: 'identity', image: PIXEL }] } }));
-    expect(result.faceAnchor).toBe(PIXEL);
+    // Regression: faceAnchor must be the text identity description the
+    // backend generated, never the reference image/data URL itself.
+    expect(result.faceAnchor).toBe(anchorText);
+    expect(result.faceAnchor).not.toContain('data:image');
+    expect(result.faceAnchor).not.toBe(PIXEL);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 

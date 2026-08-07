@@ -71,7 +71,11 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
     });
     const { data } = client.auth.onAuthStateChange((_event, nextSession) => {
       setError('');
-      void applySession(nextSession);
+      // Supabase holds its auth lock while notifying listeners. Defer cloud
+      // queries so an account switch cannot deadlock the sign-in promise.
+      window.setTimeout(() => {
+        if (active) void applySession(nextSession);
+      }, 0);
     });
     return () => {
       active = false;

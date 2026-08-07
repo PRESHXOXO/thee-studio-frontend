@@ -2,6 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from './AuthContext.jsx';
+import { bootstrapCloudStore } from '../lib/cloudStore.js';
 
 vi.mock('../lib/cloudStore.js', () => ({
   bootstrapCloudStore: vi.fn().mockResolvedValue(undefined),
@@ -54,6 +55,23 @@ describe('AuthProvider', () => {
     const client = fakeClient(session('owner-1'));
     render(<AuthProvider client={client}><Probe /></AuthProvider>);
     expect(await screen.findByText('owner-1')).toBeInTheDocument();
+  });
+
+  it('does not expose a signed-out gap when the initial auth event races session restoration', async () => {
+    const pending = [];
+    bootstrapCloudStore.mockImplementation(() => new Promise(resolve => pending.push(resolve)));
+    const restored = session('owner-race');
+    const client = fakeClient(restored);
+    render(<AuthProvider client={client}><Probe /></AuthProvider>);
+    await waitFor(() => expect(client.auth.onAuthStateChange).toHaveBeenCalled());
+    await act(async () => client.emit('INITIAL_SESSION', restored));
+    await waitFor(() => expect(pending).toHaveLength(2));
+    await act(async () => pending.shift()());
+    expect(screen.getByText('loading')).toBeInTheDocument();
+    expect(screen.queryByText('signed-out')).not.toBeInTheDocument();
+    await act(async () => pending.shift()());
+    expect(await screen.findByText('owner-race')).toBeInTheDocument();
+    bootstrapCloudStore.mockResolvedValue(undefined);
   });
 
   it('signs in with password authentication', async () => {

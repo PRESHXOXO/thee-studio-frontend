@@ -40,7 +40,10 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
     } else {
       resetCloudStore();
     }
-    if (transition === transitionRef.current) setSession(normalized);
+    if (transition === transitionRef.current) {
+      setSession(normalized);
+      setLoading(false);
+    }
     return transition === transitionRef.current ? normalized : null;
   }, [client]);
 
@@ -67,7 +70,6 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
       if (!active) return;
       if (sessionError) setError('Your session could not be restored. Sign in again.');
       await applySession(data?.session ?? null);
-      if (active) setLoading(false);
     });
     const { data } = client.auth.onAuthStateChange((_event, nextSession) => {
       setError('');

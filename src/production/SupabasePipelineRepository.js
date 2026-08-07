@@ -4,6 +4,7 @@ import {
   removeCreatorReference,
   uploadCreatorReference,
 } from '../lib/creatorReferences.js';
+import { createTelemetryRequestKey, trackStorageOperation } from '../api/usageTelemetry.js';
 
 function one(data, error) {
   if (error) throw new Error(error.message);
@@ -135,7 +136,28 @@ export class SupabasePipelineRepository {
     return listCreatorReferences(this.db, this.userId, creatorId);
   }
   async uploadReferenceAsset(creatorId, referenceType, file, notes) {
-    return uploadCreatorReference(this.db, this.userId, creatorId, referenceType, file, notes);
+    const telemetryKey = createTelemetryRequestKey();
+    try {
+      const reference = await uploadCreatorReference(this.db, this.userId, creatorId, referenceType, file, notes);
+      await trackStorageOperation({
+        requestKey: telemetryKey,
+        storageOperation: 'storage_write',
+        storageDeltaBytes: file.size,
+        bucket: 'creator-references',
+        objectType: referenceType,
+      });
+      return reference;
+    } catch (error) {
+      await trackStorageOperation({
+        requestKey: telemetryKey,
+        storageOperation: 'storage_write',
+        status: 'failed',
+        bucket: 'creator-references',
+        objectType: referenceType,
+        failureReason: error.message,
+      });
+      throw error;
+    }
   }
   async removeReferenceAsset(referenceId) {
     return removeCreatorReference(this.db, this.userId, referenceId);

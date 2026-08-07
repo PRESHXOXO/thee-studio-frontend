@@ -21,7 +21,44 @@ const STAGES_REPLICATE = [
   { label: 'Downloading result…',     target: 94, ms: 5000  },
 ];
 
-function getStages(engine, identityLocked) {
+const STAGES_SCENE = [
+  { label: 'Reading scene and references…', target: 16, ms: 7000 },
+  { label: 'Building the final composition…', target: 42, ms: 18000 },
+  { label: 'Generating your scene…', target: 82, ms: 70000 },
+  { label: 'Rendering high-resolution details…', target: 94, ms: 45000 },
+];
+
+const STAGES_VIDEO = [
+  { label: 'Preparing identity and motion…', target: 16, ms: 12000 },
+  { label: 'Queuing the video render…', target: 34, ms: 20000 },
+  { label: 'Rendering motion and continuity…', target: 82, ms: 110000 },
+  { label: 'Finalizing your video…', target: 94, ms: 50000 },
+];
+
+const STAGES_CREATOR = [
+  { label: 'Building creator identity…', target: 22, ms: 9000 },
+  { label: 'Generating reference image…', target: 80, ms: 65000 },
+  { label: 'Locking facial details…', target: 94, ms: 35000 },
+];
+
+const STAGES_REFERENCE_SET = [
+  { label: 'Preparing the identity lock…', target: 14, ms: 12000 },
+  { label: 'Generating reference angles…', target: 82, ms: 210000 },
+  { label: 'Finishing the reference set…', target: 94, ms: 70000 },
+];
+
+const STAGES_CAMPAIGN = [
+  { label: 'Preparing campaign direction…', target: 18, ms: 8000 },
+  { label: 'Generating candidate frames…', target: 84, ms: 90000 },
+  { label: 'Saving candidates for review…', target: 94, ms: 30000 },
+];
+
+function getStages(engine, identityLocked, mode) {
+  if (mode === 'scene') return STAGES_SCENE;
+  if (mode === 'video') return STAGES_VIDEO;
+  if (mode === 'creator') return STAGES_CREATOR;
+  if (mode === 'reference-set') return STAGES_REFERENCE_SET;
+  if (mode === 'campaign') return STAGES_CAMPAIGN;
   if (engine && (engine.includes('replicate') || engine.includes('photomaker') || engine.includes('instantid') || engine.includes('flux'))) return STAGES_REPLICATE;
   if (identityLocked) return STAGES_IDENTITY;
   return STAGES_STANDARD;
@@ -30,7 +67,7 @@ function getStages(engine, identityLocked) {
 // easeOutCubic
 function ease(t) { return 1 - Math.pow(1 - t, 3); }
 
-export function GenerationProgress({ active, identityLocked = false, engine = '', batchSize = 1, style }) {
+export function GenerationProgress({ active, identityLocked = false, engine = '', batchSize = 1, mode = 'image', style }) {
   const [progress, setProgress]     = React.useState(0);
   const [stageIdx, setStageIdx]     = React.useState(0);
   const [complete, setComplete]     = React.useState(false);
@@ -40,7 +77,7 @@ export function GenerationProgress({ active, identityLocked = false, engine = ''
   const stageRef    = React.useRef(null);
   const stageIdxRef = React.useRef(0);
   const progressRef = React.useRef(0);
-  const stages      = React.useMemo(() => getStages(engine, identityLocked), [engine, identityLocked]);
+  const stages      = React.useMemo(() => getStages(engine, identityLocked, mode), [engine, identityLocked, mode]);
   const currentStage = stages[Math.min(stageIdx, stages.length - 1)];
 
   React.useEffect(() => {
@@ -61,7 +98,15 @@ export function GenerationProgress({ active, identityLocked = false, engine = ''
 
         const prevTarget = idx === 0 ? 0 : stages[idx - 1].target;
         const t = Math.min(1, (now - stageRef.current) / stage.ms);
-        const p = prevTarget + (stage.target - prevTarget) * ease(t);
+        let p = prevTarget + (stage.target - prevTarget) * ease(t);
+
+        // Real provider APIs do not stream percentage data. Once the timed
+        // stages finish, keep creeping toward 98% so a long render never
+        // looks frozen while still reserving 100% for a real response.
+        if (t >= 1 && idx === stages.length - 1) {
+          const overtime = Math.max(0, now - stageRef.current - stage.ms);
+          p = stage.target + (98 - stage.target) * (1 - Math.exp(-overtime / 90000));
+        }
 
         setProgress(p);
         progressRef.current = p;
@@ -84,7 +129,7 @@ export function GenerationProgress({ active, identityLocked = false, engine = ''
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
       setProgress(100);
       setComplete(true);
-      const hide = setTimeout(() => setVisible(false), 1800);
+      const hide = setTimeout(() => setVisible(false), 1400);
       return () => clearTimeout(hide);
     }
   }, [active]);
@@ -106,9 +151,9 @@ export function GenerationProgress({ active, identityLocked = false, engine = ''
       border: '1px solid var(--border)',
       boxShadow: 'var(--shadow-xs)',
       transition: 'opacity 0.4s',
-      opacity: complete ? 0 : 1,
+      opacity: 1,
       ...style,
-    }}>
+    }} role="status" aria-live="polite" aria-label={complete ? 'Generation complete' : label}>
       {/* Label row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, font: '500 0.8125rem/1 var(--font-ui)', color: complete ? 'var(--status-ready)' : 'var(--text-body)' }}>

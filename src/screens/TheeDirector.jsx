@@ -6,6 +6,7 @@ import { PromptLab } from './PromptLab.jsx';
 import { SceneFlow } from './SceneFlow.jsx';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
 import { persistCloudDocument } from '../lib/cloudStore.js';
+import { isLocalStudioServiceEnabled, LOCAL_ACTION_UNAVAILABLE } from '../api/studio.js';
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', margin: 0 };
 
@@ -177,6 +178,7 @@ export function TheeDirector({
   };
 
   const gated = characters.length > 0 && !selectedCharId && !buildWithoutCreator;
+  const localServicesEnabled = isLocalStudioServiceEnabled();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
@@ -189,6 +191,13 @@ export function TheeDirector({
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 520 }}>Shape content that connects. Dial in every detail. Let Thee Studio handle the rest.</p>
         </div>
       </div>
+
+      {!localServicesEnabled && (
+        <Card variant="rose" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Icon name="clock" size={16} />
+          <span style={{ font: 'var(--text-sm)', color: 'var(--text-body)' }}>{LOCAL_ACTION_UNAVAILABLE}</span>
+        </Card>
+      )}
 
       {/* Pinned campaign context — visible across all three tabs since it's
           about the session, not just the Guided form. */}

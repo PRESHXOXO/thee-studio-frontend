@@ -15,6 +15,8 @@ import { Library } from './screens/Library.jsx';
 import { History } from './screens/History.jsx';
 import { Settings } from './screens/Settings.jsx';
 import { CreatorMemory } from './screens/CreatorMemory.jsx';
+import { AdminTelemetry } from './screens/AdminTelemetry.jsx';
+import { fetchAdminAccess } from './api/adminTelemetry.js';
 import { loadLibrary } from './lib/library.js';
 import { resolveActiveCreator } from './lib/activeCreator.js';
 import { StudioErrorBoundary } from './components/system/StudioErrorBoundary.jsx';
@@ -22,7 +24,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import { ProductionProvider } from './context/ProductionContext.jsx';
 import { AccessScreen } from './components/auth/AccessScreen.jsx';
 import { accessBadgeLabel, accessView, useStudioAccess } from './api/access.js';
-import { CLOUD_MVP_NAV_IDS, cloudMvpNavItems, isCloudMvpEnabled } from './lib/cloudMvp.js';
+import { isCloudMvpEnabled } from './lib/cloudMvp.js';
 import { Landing } from './screens/Landing.jsx';
 import { Auth } from './screens/Auth.jsx';
 import { ForgotPassword } from './screens/ForgotPassword.jsx';
@@ -91,6 +93,7 @@ const SLUG_TO_ID = {
   exports: 'exports',
   runs: 'runs', 'provider-runs': 'runs',
   settings: 'settings', 'engine-library': 'settings',
+  admin: 'admin-telemetry', 'admin-telemetry': 'admin-telemetry', usage: 'admin-telemetry',
 };
 
 function slugToScreenId(slug) {
@@ -168,6 +171,7 @@ const SCREENS = {
   exports:    { label: 'Exports',          component: ProductionExports },
   runs:       { label: 'Jobs',             component: ProductionRuns },
   settings:   { label: 'Generation Settings', component: Settings },
+  'admin-telemetry': { label: 'Cost & Profitability', component: AdminTelemetry },
 };
 
 function StudioApp({ access }) {
@@ -178,7 +182,7 @@ function StudioApp({ access }) {
   const authSession = auth.session;
   const cloudMvp = isCloudMvpEnabled(import.meta.env);
   const initialNav = slugToScreenId(screenSlug) || 'home';
-  const [activeNav, setActiveNav]             = React.useState(() => cloudMvp && !CLOUD_MVP_NAV_IDS.has(initialNav) ? 'home' : initialNav);
+  const [activeNav, setActiveNav]             = React.useState(initialNav);
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
   const [pendingDirector,  setPendingDirector]  = React.useState(null);
   const [pendingImages,    setPendingImages]    = React.useState(null);
@@ -190,17 +194,20 @@ function StudioApp({ access }) {
   });
   const [libCount, setLibCount]               = React.useState(() => loadLibrary().length);
   const [pendingImportRequest, setPendingImportRequest] = React.useState(false);
+  const [adminAccess, setAdminAccess] = React.useState({ allowed: false, role: null, checked: auth.mode !== 'cloud' });
   const routeDirectorMode = activeNav === 'director'
     ? directorModeFromSlug(projectId) || directorModeFromSlug(screenSlug) || 'guided'
     : null;
 
+  React.useEffect(() => {
+    let active = true;
+    if (auth.mode !== 'cloud') return undefined;
+    fetchAdminAccess().then(access => { if (active) setAdminAccess({ ...access, checked: true }); });
+    return () => { active = false; };
+  }, [auth.mode, authSession?.user?.id]);
+
   // Refresh library count whenever user navigates (catches new saves)
   const handleNav = React.useCallback((id, data) => {
-    if (cloudMvp && !CLOUD_MVP_NAV_IDS.has(id)) {
-      setActiveNav('home');
-      navigate('/studio/home', { replace: false });
-      return;
-    }
     setLibCount(loadLibrary().length);
     // data === 'import' is a sentinel from "Import Creator" entry points
     // (Studio Home) — distinct from the AI-builder handoff object, which
@@ -224,43 +231,53 @@ function StudioApp({ access }) {
         )
       : `/studio/${id}${query}`;
     navigate(target, { replace: false });
-  }, [cloudMvp, navigate]);
+  }, [navigate]);
 
   // Back/forward or a hand-typed /studio/<slug> changes the param — mirror it
   // into activeNav so the rendered screen follows the URL.
   React.useEffect(() => {
     const id = slugToScreenId(screenSlug);
-    if (cloudMvp && id && !CLOUD_MVP_NAV_IDS.has(id)) {
-      setActiveNav('home');
-      navigate('/studio/home', { replace: true });
-      return;
-    }
     if (id && id !== activeNav) setActiveNav(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloudMvp, navigate, screenSlug]);
+  }, [screenSlug]);
 
   // Canonical Director URLs give every input mode a refresh-safe link while
   // retaining friendly legacy aliases such as /studio/prompt-lab.
   React.useEffect(() => {
-    if (cloudMvp || activeNav !== 'director') return;
+    if (activeNav !== 'director') return;
     const canonical = directorModePath(routeDirectorMode);
     if (location.pathname !== canonical) navigate(canonical, { replace: true });
-  }, [activeNav, cloudMvp, location.pathname, navigate, routeDirectorMode]);
+  }, [activeNav, location.pathname, navigate, routeDirectorMode]);
 
-  const navItems = React.useMemo(() => cloudMvpNavItems(BASE_NAV.map(item =>
-    item.id === 'library' && libCount > 0 ? { ...item, badge: String(libCount) } : item
-  ), cloudMvp), [cloudMvp, libCount]);
+  const navItems = React.useMemo(() => {
+    const items = BASE_NAV.map(item =>
+      item.id === 'library' && libCount > 0 ? { ...item, badge: String(libCount) } : item
+    );
+    if (adminAccess.allowed) items.push(
+      { section: 'Admin' },
+      { id: 'admin-telemetry', label: 'Cost & Profitability', icon: 'activity' },
+    );
+    return items;
+  }, [adminAccess.allowed, libCount]);
 
   const Screen = SCREENS[activeNav]?.component || StudioHome;
   const screenLabel = SCREENS[activeNav]?.label || 'Studio Home';
 
-  const screenProps = { onNav: handleNav, cloudMvp };
+  // Cloud mode stays enabled for New Creator's private upload workflow, but
+  // no longer shrinks the approved application shell or Studio home.
+  const screenProps = { onNav: handleNav, cloudMvp: activeNav === 'images' ? cloudMvp : false };
   if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
   if (activeNav === 'characters' && pendingImportRequest) screenProps.initialImportRequest = true;
   if (activeNav === 'characters') screenProps.onCharacterChange = setActiveCharacter;
   if (activeNav === 'library') {
     screenProps.initialFilter = new URLSearchParams(location.search).get('filter') || 'all';
   }
+  if (activeNav === 'admin-telemetry') {
+    screenProps.authorized = adminAccess.allowed;
+    screenProps.accessChecked = adminAccess.checked;
+    screenProps.adminRole = adminAccess.role;
+  }
+  if (activeNav === 'settings') screenProps.access = access;
   if (activeNav === 'images'     && pendingImages) {
     screenProps.initialCreatorId   = pendingImages.creatorId   || null;
     screenProps.initialName        = pendingImages.name        || '';
@@ -305,7 +322,7 @@ function StudioApp({ access }) {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>
-      <Sidebar items={navItems} active={activeNav} onNavigate={handleNav} activeCharacter={activeCharacter} creatorDestination={cloudMvp ? 'images' : 'characters'} />
+      <Sidebar items={navItems} active={activeNav} onNavigate={handleNav} activeCharacter={activeCharacter} creatorDestination="characters" />
       <div style={{ marginLeft: 'var(--sidebar-w, 248px)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Topbar
           context={screenLabel}
@@ -313,8 +330,8 @@ function StudioApp({ access }) {
           user={authSession?.name || 'Thee Studio'}
           userEmail={authSession?.email}
           onSignOut={handleSignOut}
-          allowedNavIds={cloudMvp ? CLOUD_MVP_NAV_IDS : null}
-          showSettings={!cloudMvp}
+          allowedNavIds={null}
+          showSettings
           actions={
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div title="Internal access with usage tracking" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--accent-indigo-soft)', border: '1px solid var(--border)', font: '600 0.75rem/1 var(--font-ui)', color: 'var(--accent-indigo)' }}>

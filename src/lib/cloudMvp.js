@@ -1,9 +1,18 @@
 export const CLOUD_MVP_NAV_IDS = new Set([
   'home',
+  'characters',
+  'memory',
   'images',
+  'director',
+  'scenes',
+  'references',
   'campaigns',
   'library',
   'history',
+  'exports',
+  'runs',
+  'settings',
+  'admin-telemetry',
 ]);
 
 export function isCloudMvpEnabled(env = {}) {
@@ -11,10 +20,6 @@ export function isCloudMvpEnabled(env = {}) {
 }
 
 export function cloudMvpNavItems(items, enabled) {
-  if (!enabled) return items;
-  const filtered = items.filter(item => !item.id || CLOUD_MVP_NAV_IDS.has(item.id));
-  return filtered.filter((item, index) => {
-    if (!item.section) return true;
-    return filtered.slice(index + 1).some(next => next.id) && (index === 0 || filtered[index - 1]?.id);
-  });
+  void enabled;
+  return items;
 }

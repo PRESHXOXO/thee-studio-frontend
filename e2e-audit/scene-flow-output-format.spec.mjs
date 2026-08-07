@@ -39,14 +39,18 @@ test('Scene Flow defaults to Photo and overrides backend video guesses', async (
     });
   });
 
-  await page.route('**/gradio_api/run/scene_flow_generate', route => {
+  await page.route('**/gradio_api/run/scene_flow_generate', async route => {
     const payload = route.request().postDataJSON();
     generationScene = JSON.parse(payload.data[0]);
+    await new Promise(resolve => setTimeout(resolve, 800));
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        data: [JSON.stringify({ result_b64: PIXEL_B64, content_type: 'photo', status: 'done' })],
+        data: [
+          { url: `data:image/png;base64,${PIXEL_B64}` },
+          JSON.stringify({ content_type: 'photo', status: 'done' }),
+        ],
       }),
     });
   });
@@ -58,7 +62,9 @@ test('Scene Flow defaults to Photo and overrides backend video guesses', async (
   await expect(page.getByRole('radio', { name: 'Photo' })).toBeChecked();
   await page.getByPlaceholder(/Describe the vibe/).fill('Rooftop fashion portrait.');
   await page.getByTitle('Send').click();
+  await expect(page.getByRole('status', { name: /Reading scene and references/ })).toBeVisible();
   await expect(page.getByText('Your scene is ready.')).toBeVisible();
+  await expect(page.getByAltText('Generated')).toBeVisible();
 
   expect(chatPayload.data[1]).not.toContain('Requested output format');
   expect(generationScene.content_type).toBe('photo');
@@ -119,4 +125,43 @@ test('Scene Flow honors explicit Video selection', async ({ page }) => {
   await expect(page.getByText('Your scene is ready.')).toBeVisible();
 
   expect(generationScene.content_type).toBe('video');
+});
+
+test('Scene Flow reports a completed provider response with no media as an error', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('ts_auth_session', JSON.stringify({
+      id: 'empty-result-tester',
+      name: 'Empty Result Tester',
+      email: 'empty-result@example.test',
+    }));
+  });
+
+  await page.route('**/config', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ components: [] }),
+  }));
+  await page.route('**/gradio_api/run/scene_flow_chat', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      data: [JSON.stringify({
+        reply: 'Rendering now.',
+        history: [],
+        generate: true,
+        scene: { setting: 'studio', content_type: 'photo', full_prompt: 'Safe studio portrait.' },
+      })],
+    }),
+  }));
+  await page.route('**/gradio_api/run/scene_flow_generate', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ data: [JSON.stringify({ status: 'done', content_type: 'photo' })] }),
+  }));
+
+  await page.goto('http://127.0.0.1:3000/studio/director/scene-flow');
+  await page.getByPlaceholder(/Describe the vibe/).fill('Create a safe studio portrait.');
+  await page.getByTitle('Send').click();
+  await expect(page.getByText(/provider finished without returning an image/i)).toBeVisible();
+  await expect(page.getByText('Your scene is ready.')).toHaveCount(0);
 });

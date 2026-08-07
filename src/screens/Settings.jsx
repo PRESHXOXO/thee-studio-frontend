@@ -2,7 +2,15 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
-import { saveApiKey, saveGeminiKey, saveReplicateKey, saveFalKey, fetchApiKeyStatus } from '../api/studio.js';
+import {
+  fetchApiKeyStatus,
+  isLocalStudioServiceEnabled,
+  LOCAL_ACTION_UNAVAILABLE,
+  saveApiKey,
+  saveFalKey,
+  saveGeminiKey,
+  saveReplicateKey,
+} from '../api/studio.js';
 import { useProduction } from '../context/ProductionContext.jsx';
 
 // `provider` maps an engine to the backend api_key_status flag so a key set
@@ -68,6 +76,7 @@ function EngineRow({ engine, isActive, onSelect }) {
 // backend that accepted your key is actually reachable right now, not that
 // the key itself is still valid server-side.
 async function pingBackend() {
+  if (!isLocalStudioServiceEnabled()) return null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
@@ -110,6 +119,10 @@ function KeyField({ label, description, placeholder, localStorageKey, serverConf
   }
 
   async function handleTest() {
+    if (!isLocalStudioServiceEnabled()) {
+      setTestState('unavailable');
+      return;
+    }
     setTestState('testing');
     const ok = await pingBackend();
     setTestState(ok ? 'ok' : 'fail');
@@ -147,6 +160,11 @@ function KeyField({ label, description, placeholder, localStorageKey, serverConf
         {testState === 'fail' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, font: 'var(--text-sm)', color: 'var(--status-warn)', background: 'var(--status-warn-bg)', padding: '9px 12px', borderRadius: 'var(--radius-md)' }}>
             <Icon name="alert-triangle" size={14} /> Backend unreachable right now — check the server is running.
+          </div>
+        )}
+        {testState === 'unavailable' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, font: 'var(--text-sm)', color: 'var(--status-warn)', background: 'var(--status-warn-bg)', padding: '9px 12px', borderRadius: 'var(--radius-md)' }}>
+            <Icon name="clock" size={14} /> {LOCAL_ACTION_UNAVAILABLE}
           </div>
         )}
       </div>
@@ -187,8 +205,10 @@ function KeyField({ label, description, placeholder, localStorageKey, serverConf
   );
 }
 
-export function Settings() {
+export function Settings({ access = null }) {
   const { usage } = useProduction();
+  const localServicesEnabled = isLocalStudioServiceEnabled();
+  const internalAccess = access?.account_type === 'internal' || access?.billing_exempt === true;
   const [activeEngine, setActiveEngine] = React.useState('openai');
   const [savedTick, setSavedTick] = React.useState(0);
   const [keyStatus, setKeyStatus] = React.useState({}); // { openai, gemini, replicate, fal }
@@ -202,10 +222,11 @@ export function Settings() {
   // Pull real server-side key config on mount and after any save, so a key
   // that lives in .env (not saved through this UI) still reads as connected.
   React.useEffect(() => {
+    if (!localServicesEnabled) return undefined;
     let live = true;
-    fetchApiKeyStatus().then(st => { if (live) setKeyStatus(st || {}); });
+    fetchApiKeyStatus().then(st => { if (live) setKeyStatus(st || {}); }).catch(() => undefined);
     return () => { live = false; };
-  }, [savedTick]);
+  }, [localServicesEnabled, savedTick]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
@@ -222,29 +243,31 @@ export function Settings() {
         <div>
           <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 8 }}>Managed generation</div>
           <div style={{ font: '600 1.25rem/1.2 var(--font-display)', color: 'var(--text-strong)' }}>
-            {usage.remaining} credits remaining
+            {internalAccess ? 'Internal access · usage tracked' : `${usage.remaining} credits remaining`}
           </div>
           <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, margin: '7px 0 0', maxWidth: 560 }}>
             Thee Studio securely runs the recommended generation provider for you. No API key is required for the included workflow.
           </p>
         </div>
-        <div style={{ minWidth: 180 }}>
+        {!internalAccess && <div style={{ minWidth: 180 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', font: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 7 }}>
             <span>{usage.used} used</span><span>{usage.included} included</span>
           </div>
           <div style={{ height: 8, borderRadius: 'var(--radius-pill)', background: 'var(--white)', overflow: 'hidden' }}>
             <div style={{ width: `${Math.min(100, (usage.used / Math.max(usage.included, 1)) * 100)}%`, height: '100%', background: 'var(--grad-coral)', borderRadius: 'inherit' }} />
           </div>
-        </div>
+        </div>}
       </Card>
 
       <div>
-        <Button variant="secondary" onClick={() => setAdvancedOpen(value => !value)}>
+        <Button variant="secondary" disabled={!localServicesEnabled} onClick={() => setAdvancedOpen(value => !value)}>
           <Icon name="settings" size={15} />
           {advancedOpen ? 'Hide advanced provider setup' : 'Advanced provider setup'}
         </Button>
         <p style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', margin: '8px 0 0' }}>
-          Optional: connect your own provider account for specialized engines.
+          {localServicesEnabled
+            ? 'Optional: connect your own provider account for specialized engines.'
+            : 'Advanced local provider setup is unavailable in cloud. Coming soon.'}
         </p>
       </div>
 

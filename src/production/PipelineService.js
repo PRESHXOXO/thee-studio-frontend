@@ -1,6 +1,7 @@
 import { creatorMemoryPrompt } from '../lib/creatorMemory.js';
 
 const now = () => new Date().toISOString();
+export const MAX_GENERATION_ATTEMPTS = 3;
 
 export class PipelineService {
   constructor(repository, providers) {
@@ -204,6 +205,9 @@ export class PipelineService {
 
   async retryRun(run) {
     const attempt = Number(run.attempt || 1) + 1;
+    if (attempt > MAX_GENERATION_ATTEMPTS) {
+      throw new Error(`Maximum of ${MAX_GENERATION_ATTEMPTS} generation attempts reached.`);
+    }
     if (run.provider_type === 'still') {
       const { shot, identity, memory } = await this.repository.getShotContext(run.request_payload.shotId);
       return this.generateStills(shot, identity, run.request_payload.candidateCount, {

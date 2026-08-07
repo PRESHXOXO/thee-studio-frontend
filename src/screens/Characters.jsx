@@ -3,13 +3,20 @@ import { Button } from '../components/core/Button.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
-import { analyzeCharacterReferences, extractFaceAnchor, generateReferenceSet } from '../api/studio.js';
+import {
+  analyzeCharacterReferences,
+  extractFaceAnchor,
+  generateReferenceSet,
+  isLocalStudioServiceEnabled,
+  LOCAL_ACTION_UNAVAILABLE,
+} from '../api/studio.js';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
 import { compressImage, normalizeImageForVision } from '../lib/imageUtils.js';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
 import { persistCloudDocument } from '../lib/cloudStore.js';
 import { canonicalCreatorId } from '../lib/cloudCreators.js';
 import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
+import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 
 // Starter archetypes for the empty-cast state — no fake portraits to seed
 // with, so these hand off to New Creator with niche/energy pre-filled
@@ -602,6 +609,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
   const primaryDisplay = displayImages[editing ? 0 : activeRef] || displayImages[0] || null;
 
   const showPanel = !!(editing || activeId != null);
+  const localServicesEnabled = isLocalStudioServiceEnabled();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
@@ -650,6 +658,13 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
         </div>
       </div>
 
+      {!localServicesEnabled && (
+        <Card variant="rose" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Icon name="clock" size={16} />
+          <span style={{ font: 'var(--text-sm)', color: 'var(--text-body)' }}>{LOCAL_ACTION_UNAVAILABLE} Uploads and manual creator editing remain available.</span>
+        </Card>
+      )}
+
       {analyzeError && (
         <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>
           Analysis: {analyzeError} — fields can still be filled manually.
@@ -660,6 +675,13 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
           Save failed: {saveError}
         </p>
       )}
+      <GenerationProgress
+        active={refSetLoading}
+        identityLocked
+        engine="OpenAI"
+        mode="reference-set"
+        batchSize={15}
+      />
 
       {/* Import from Photos — stage the complete set, then analyze it once. */}
       {importOpen && (

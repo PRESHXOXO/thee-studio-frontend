@@ -1,8 +1,18 @@
 import { serializeDirectorReferences } from '../lib/directorReferences.js';
+import { finishUsageTelemetry, startUsageTelemetry } from './usageTelemetry.js';
 
 const BASE = '/gradio_api';
 const GRADIO_CONFIG_URL = '/config'; // Gradio 6.x serves config at /config, not /gradio_api/config
 const SESSION_HASH = Math.random().toString(36).slice(2);
+export const LOCAL_ACTION_UNAVAILABLE = 'This action needs local studio services and is unavailable in cloud. Coming soon.';
+
+export function isLocalStudioServiceEnabled(env = import.meta.env) {
+  return env?.DEV === true || env?.VITE_ALLOW_LOCAL_MODE === 'true';
+}
+
+function requireLocalStudioService() {
+  if (!isLocalStudioServiceEnabled()) throw new Error(LOCAL_ACTION_UNAVAILABLE);
+}
 
 // Replaces words that trigger OpenAI's output safety filter while preserving prompt quality.
 // Applied automatically when engine is OpenAI Image.
@@ -88,6 +98,8 @@ async function readSSE(response) {
 // hung/overloaded backend leaves the UI spinning forever with no feedback.
 // On expiry the fetch aborts and callers surface a real error instead.
 const ENDPOINT_TIMEOUT_MS = 180000;
+const IMAGE_GENERATION_TIMEOUT_MS = 360000;
+const REFERENCE_SET_TIMEOUT_MS = 900000;
 
 export async function withEndpointTimeout(task, timeoutMs = ENDPOINT_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -105,11 +117,14 @@ export async function withEndpointTimeout(task, timeoutMs = ENDPOINT_TIMEOUT_MS)
 }
 
 // Calls a named Gradio endpoint, handling both Gradio 4.x (/run/) and 5.x (/call/) formats.
-async function callNamedEndpoint(apiName, data) {
+async function callNamedEndpoint(apiName, data, timeoutMs = ENDPOINT_TIMEOUT_MS, telemetryRequestKey) {
+  requireLocalStudioService();
+  const telemetry = await startUsageTelemetry(apiName, data, telemetryRequestKey);
   // One deadline covers the request, response parsing, Gradio fallback, and
   // the complete SSE stream. Keeping the controller alive until readSSE()
   // resolves is important: fetch() itself resolves as soon as headers arrive.
-  return withEndpointTimeout(async signal => {
+  try {
+    const result = await withEndpointTimeout(async signal => {
     // Try Gradio 4.x format first
     const res = await fetch(`${BASE}/run/${apiName}`, {
       method: 'POST',
@@ -143,7 +158,16 @@ async function callNamedEndpoint(apiName, data) {
     const pollRes = await fetch(`${BASE}/call/${apiName}/${event_id}`, { signal });
     if (!pollRes.ok) throw new Error(`HTTP ${pollRes.status}`);
     return await readSSE(pollRes);
-  });
+    }, timeoutMs);
+    await finishUsageTelemetry(telemetry, result);
+    return result;
+  } catch (error) {
+    try { await finishUsageTelemetry(telemetry, null, error); }
+    catch (auditError) {
+      throw new Error(`${error.message} Usage audit also failed: ${auditError.message}`);
+    }
+    throw error;
+  }
 }
 
 // Engine names that identify this dropdown by content when label matching fails.
@@ -151,6 +175,7 @@ const ENGINE_KEYWORDS = ['Draft', 'DreamShaper', 'Portrait', 'Beauty', 'Campaign
 
 // Fetch the Creative Engine dropdown choices live from the Gradio config.
 export async function fetchEngineChoices() {
+  if (!isLocalStudioServiceEnabled()) return null;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 6000);
@@ -221,7 +246,7 @@ export async function characterGenerate({ engineId, positivePrompt, negativeProm
   const raw = await callNamedEndpoint('character_generate', [
     JSON.stringify({ engineId, positivePrompt, negativePrompt, imageSize, batchSize, anchorImages, mode }),
     characterImage,
-  ]);
+  ], IMAGE_GENERATION_TIMEOUT_MS);
   const jsonStr = raw[0] || '{}';
   const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
   if (parsed.error) throw new Error(parsed.error);
@@ -269,7 +294,7 @@ export async function analyzeCharacterReferences(imageDataUrls) {
 }
 
 export async function generateCharacterSeed(params) {
-  const raw = await callNamedEndpoint('character_seed_generate', [JSON.stringify(params)]);
+  const raw = await callNamedEndpoint('character_seed_generate', [JSON.stringify(params)], IMAGE_GENERATION_TIMEOUT_MS);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
   parsed.image = relativizeUrl(parsed.image);
@@ -277,14 +302,14 @@ export async function generateCharacterSeed(params) {
 }
 
 export async function generateReferenceSet(params) {
-  const raw = await callNamedEndpoint('generate_reference_set', [JSON.stringify(params)]);
+  const raw = await callNamedEndpoint('generate_reference_set', [JSON.stringify(params)], REFERENCE_SET_TIMEOUT_MS);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
   return parsed; // { images: [...], errors: [...] }
 }
 
 export async function generateCharacterVariationShot(params) {
-  const raw = await callNamedEndpoint('character_variation_shot', [JSON.stringify(params)]);
+  const raw = await callNamedEndpoint('character_variation_shot', [JSON.stringify(params)], IMAGE_GENERATION_TIMEOUT_MS);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
   parsed.image = relativizeUrl(parsed.image);
@@ -380,7 +405,7 @@ export async function generateImage({
     engine, performanceMode, comfyServerUrl, comfyWorkflowPath,
     imageStyle, positivePrompt, negativePrompt, imageSize,
     quality, batchSize, seed, cfg, steps, width, height,
-  ]);
+  ], IMAGE_GENERATION_TIMEOUT_MS);
 
   // Gradio 6.x gallery returns objects like { url: "http://127.0.0.1:7860/gradio_api/file=..." }
   // Rewrite to relative /gradio_api/... so our Vite proxy can serve them.
@@ -417,11 +442,23 @@ export async function sceneFlowGenerate({
   sceneJson = '{}',
   referenceImages = [],
   refImageB64 = '',
+  telemetryRequestKey,
 } = {}) {
   const references = referenceImages.length
     ? serializeDirectorReferences(referenceImages)
     : refImageB64;
-  const raw = await callNamedEndpoint('scene_flow_generate', [sceneJson, references]);
+  const raw = await callNamedEndpoint('scene_flow_generate', [sceneJson, references], IMAGE_GENERATION_TIMEOUT_MS, telemetryRequestKey);
+  // The backend returns photos through a Gradio Image output so a completed
+  // multi-megabyte render is served as media instead of embedded in Textbox JSON.
+  // Keep compatibility with the older one-Textbox response during local rollout.
+  if (raw.length > 1) {
+    const image = raw[0];
+    const parsed = typeof raw[1] === 'string' ? JSON.parse(raw[1]) : (raw[1] || {});
+    let resultUrl = typeof image === 'string' ? image : (image?.url || image?.path || '');
+    resultUrl = resultUrl.replace(/^https?:\/\/127\.0\.0\.1:7860\/gradio_api/, '/gradio_api');
+    resultUrl = resultUrl.replace(/^https?:\/\/127\.0\.0\.1:7860/, '/gradio_api');
+    return resultUrl ? { ...parsed, result_url: resultUrl } : parsed;
+  }
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   return parsed; // { result_b64, result_url, content_type, status } or { error }
 }

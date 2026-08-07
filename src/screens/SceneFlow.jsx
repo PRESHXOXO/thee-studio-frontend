@@ -2,6 +2,7 @@ import React from 'react';
 import { sanitizeForOpenAI, sceneFlowChat, sceneFlowGenerate } from '../api/studio.js';
 import { Icon } from '../components/core/Icon.jsx';
 import { ReferenceImageTray } from '../components/director/ReferenceImageTray.jsx';
+import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 import { saveToLibrary } from '../lib/library.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../lib/creatorMemory.js';
 import { referencePromptBlock } from '../lib/directorReferences.js';
@@ -479,7 +480,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
   // Auto-scroll
   React.useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, thinking]);
+  }, [messages, thinking, generating]);
 
   async function send(text) {
     const msg = (text || input).trim();
@@ -585,9 +586,11 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
     setMessages(m => [...m, { role: 'assistant', text: genMsg }]);
 
     try {
+      const telemetryRequestKey = crypto.randomUUID();
       const generate = data => sceneFlowGenerate({
         sceneJson: JSON.stringify(data),
         referenceImages: generationReferences,
+        telemetryRequestKey,
       });
       let generationScene = requestedScene;
       let result;
@@ -618,13 +621,16 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
         }
       }
 
-      if (result.error) {
+      const generatedAsset = result?.result_b64 || result?.result_url;
+      if (result?.error) {
         const errorText = isContentPolicyError(result)
           ? policyRetryAttempted
             ? `The provider still blocked this request after the safe-language retry. The reference image itself may be triggering moderation. Detail: ${result.error}`
             : result.error
           : result.error;
         setMessages(m => [...m, { role: 'assistant', text: `⚠️ ${errorText}` }]);
+      } else if (!generatedAsset) {
+        throw new Error('The provider finished without returning an image. Please try Generate again.');
       } else {
         setMessages(m => [...m, {
           role: 'assistant',
@@ -634,10 +640,13 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
           contentType: result.content_type || outputType,
         }]);
         // Feed the result into the review pipeline (Library → Media Review)
-        if (outputType === 'photo' && result.result_b64) {
+        if (outputType === 'photo' && generatedAsset) {
           const originalScenePrompt = sceneData.full_prompt
             || [sceneData.setting, sceneData.wardrobe, sceneData.location, sceneData.vibe].filter(Boolean).join(' · ');
-          saveToLibrary(`data:image/png;base64,${result.result_b64}`, {
+          const librarySource = result.result_b64
+            ? `data:image/png;base64,${result.result_b64}`
+            : result.result_url;
+          saveToLibrary(librarySource, {
             source: 'scene_flow',
             prompt: generationScene.full_prompt
               || [generationScene.setting, generationScene.wardrobe, generationScene.location, generationScene.vibe].filter(Boolean).join(' · '),
@@ -657,8 +666,9 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
       }
     } catch (err) {
       setMessages(m => [...m, { role: 'assistant', text: `⚠️ Generation failed: ${err.message}` }]);
+    } finally {
+      setGenerating(false);
     }
-    setGenerating(false);
   }
 
   function reset() {
@@ -759,6 +769,13 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
                 <div style={S.bubble}><ThinkingDots /></div>
               </div>
             )}
+            <GenerationProgress
+              active={generating}
+              identityLocked={references.some(reference => reference.role === 'identity')}
+              engine={outputType === 'video' ? 'Higgsfield' : 'OpenAI'}
+              mode={outputType === 'video' ? 'video' : 'scene'}
+              style={{ width: 'min(520px, calc(100% - 38px))', marginLeft: 38 }}
+            />
             <div ref={bottomRef} />
           </div>
         )}

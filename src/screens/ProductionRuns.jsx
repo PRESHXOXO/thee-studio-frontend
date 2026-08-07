@@ -4,6 +4,7 @@ import { Icon } from '../components/core/Icon.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { EmptyState } from '../components/feedback/EmptyState.jsx';
 import { useProduction } from '../context/ProductionContext.jsx';
+import { MAX_GENERATION_ATTEMPTS } from '../production/PipelineService.js';
 
 const terminal = status => ['succeeded', 'failed', 'cancelled'].includes(status);
 
@@ -80,7 +81,8 @@ export function ProductionRuns() {
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               {['queued', 'running'].includes(run.status) && <Button variant="ghost" size="sm" loading={busy === run.id} onClick={event => { event.stopPropagation(); void act(run, () => repository.cancelProviderRun(run.id)); }}>Cancel</Button>}
-              {['failed', 'cancelled'].includes(run.status) && <Button variant="secondary" size="sm" loading={busy === run.id} onClick={event => { event.stopPropagation(); void act(run, () => pipeline.retryRun(run)); }}>Retry</Button>}
+              {['failed', 'cancelled'].includes(run.status) && Number(run.attempt || 1) < MAX_GENERATION_ATTEMPTS && <Button variant="secondary" size="sm" loading={busy === run.id} onClick={event => { event.stopPropagation(); void act(run, () => pipeline.retryRun(run)); }}>Retry</Button>}
+              {['failed', 'cancelled'].includes(run.status) && Number(run.attempt || 1) >= MAX_GENERATION_ATTEMPTS && <span title="Configured retry maximum reached" style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>Retry limit</span>}
               <span style={{ textTransform: 'capitalize', font: 'var(--text-xs)', color: terminal(run.status) ? 'var(--text-muted)' : 'var(--accent-deep)' }}>{run.status}</span>
             </span>
             <Icon name="chevron-down" size={16} style={{ transform: open === run.id ? 'rotate(180deg)' : 'none' }} />

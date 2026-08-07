@@ -4,6 +4,7 @@ import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { EmptyState } from '../components/feedback/EmptyState.jsx';
+import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 import { useProduction } from '../context/ProductionContext.jsx';
 import {
   MOTION_PRESETS,
@@ -254,17 +255,27 @@ function MotionModal({ onClose, onGenerate }) {
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', font: 'var(--text-sm)' }}><input name="vertical" type="checkbox" defaultChecked /> Vertical output</label>
         </div>
         <Button type="submit" variant="primary" loading={busy}>Generate restrained clip</Button>
+        <GenerationProgress active={busy} identityLocked engine="Higgsfield" mode="video" />
       </form>
     </Modal>
   );
 }
 
 function ShotCard({ shot, workspace, busy, onGenerate, onReview, onMotion, onExport }) {
-  const [count, setCount] = React.useState(1);
+  const [count, setCount] = React.useState(4);
+  const [generating, setGenerating] = React.useState(false);
   const assets = workspace.assets.filter(asset => asset.shot_id === shot.id);
   const selection = workspace.selections.find(item => item.shot_id === shot.id);
   const hero = assets.find(asset => asset.id === selection?.still_asset_id);
   const clips = workspace.clips.filter(clip => clip.shot_id === shot.id);
+  const generateCandidates = async () => {
+    setGenerating(true);
+    try {
+      await onGenerate(shot, count);
+    } finally {
+      setGenerating(false);
+    }
+  };
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '54px 1fr auto', gap: 16, padding: 22, alignItems: 'start' }}>
@@ -288,10 +299,18 @@ function ShotCard({ shot, workspace, busy, onGenerate, onReview, onMotion, onExp
         <Icon name="sparkles" size={17} color="var(--accent-deep)" />
         <span style={{ flex: 1, font: 'var(--text-sm)', color: 'var(--text-body)' }}>Generate candidate set</span>
         <select aria-label={`Candidate count for ${shot.title}`} value={count} onChange={event => setCount(Number(event.target.value))} style={{ ...INPUT, width: 'auto' }}>
-          {[1, 2, 4].map(value => <option key={value} value={value}>{value} {value === 1 ? 'frame' : 'frames'}</option>)}
+          {[2, 4, 6].map(value => <option key={value} value={value}>{value} frames</option>)}
         </select>
-        <Button variant={assets.length ? 'secondary' : 'primary'} size="sm" loading={busy} onClick={() => onGenerate(shot, count)}>{assets.length ? 'Regenerate' : 'Generate stills'}</Button>
+        <Button variant={assets.length ? 'secondary' : 'primary'} size="sm" loading={busy || generating} onClick={generateCandidates}>{assets.length ? 'Regenerate' : 'Generate stills'}</Button>
       </div>
+      <GenerationProgress
+        active={generating}
+        identityLocked
+        engine="Campaign pipeline"
+        mode="campaign"
+        batchSize={count}
+        style={{ margin: '0 18px 16px' }}
+      />
       {assets.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: 'var(--border)', borderTop: '1px solid var(--border)' }}>
           {assets.map((asset, index) => {

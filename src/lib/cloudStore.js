@@ -1,3 +1,5 @@
+import { createTelemetryRequestKey, trackStorageOperation } from '../api/usageTelemetry.js';
+
 export const SYNCED_KEYS = [
   'ts_characters',
   'ts_library',
@@ -52,12 +54,17 @@ export async function bootstrapCloudStore(db, userId) {
 
 async function writeDocument(key, value, sourceRuntime = runtime) {
   if (!sourceRuntime || runtime?.epoch !== sourceRuntime.epoch || !SYNCED_KEYS.includes(key)) return;
+  const telemetryKey = createTelemetryRequestKey();
   const { error } = await sourceRuntime.db.from('studio_documents').upsert({
     user_id: sourceRuntime.userId,
     document_key: key,
     payload: { value },
   }, { onConflict: 'user_id,document_key' });
-  if (error) throw new Error(`Could not save ${key} to the cloud: ${error.message}`);
+  if (error) {
+    await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_write', status: 'failed', bucket: 'studio_documents', objectType: key, failureReason: error.message });
+    throw new Error(`Could not save ${key} to the cloud: ${error.message}`);
+  }
+  await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_write', storageDeltaBytes: new Blob([JSON.stringify(value)]).size, bucket: 'studio_documents', objectType: key });
   announceSync('thee:cloud-sync-ok', { key });
 }
 
@@ -81,6 +88,7 @@ export function removeCloudDocument(key) {
 
 export async function persistCloudAsset(assetId, blob) {
   if (!runtime) return null;
+  const telemetryKey = createTelemetryRequestKey();
   const extension = {
     'image/jpeg': 'jpg',
     'image/png': 'png',
@@ -95,28 +103,39 @@ export async function persistCloudAsset(assetId, blob) {
     cacheControl: '31536000',
   });
   if (error) {
+    await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_write', status: 'failed', bucket: 'studio-assets', objectType: blob.type, failureReason: error.message });
     const failure = new Error(`Could not save the full-resolution asset: ${error.message}`);
     announceSync('thee:cloud-sync-error', { message: failure.message, assetId });
     void reportStudioError(failure, { assetId, operation: 'cloud_asset_write' });
     throw failure;
   }
+  await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_write', storageDeltaBytes: blob.size, bucket: 'studio-assets', objectType: blob.type });
   announceSync('thee:cloud-sync-ok', { assetId });
   return path;
 }
 
 export async function downloadCloudAsset(path) {
   if (!runtime || !path) return null;
+  const telemetryKey = createTelemetryRequestKey();
   const { data, error } = await runtime.db.storage.from('studio-assets').download(path);
-  if (error) throw new Error(`Could not retrieve the full-resolution asset: ${error.message}`);
+  if (error) {
+    await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_read', status: 'failed', bucket: 'studio-assets', objectType: 'library_asset', failureReason: error.message });
+    throw new Error(`Could not retrieve the full-resolution asset: ${error.message}`);
+  }
+  await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_read', storageDeltaBytes: data?.size || 0, bucket: 'studio-assets', objectType: data?.type || 'library_asset' });
   return data || null;
 }
 
 export async function removeCloudAsset(path) {
   if (!runtime || !path) return;
+  const telemetryKey = createTelemetryRequestKey();
   const { error } = await runtime.db.storage.from('studio-assets').remove([path]);
   if (error) {
+    await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_delete', status: 'failed', bucket: 'studio-assets', objectType: 'library_asset', failureReason: error.message });
     void reportStudioError(error, { path, operation: 'cloud_asset_delete' });
+    return;
   }
+  await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_delete', storageDeltaBytes: 0, bucket: 'studio-assets', objectType: 'library_asset' });
 }
 
 export function resetCloudStore() {

@@ -24,6 +24,25 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const [syncError, setSyncError] = React.useState('');
+  const transitionRef = React.useRef(0);
+
+  const applySession = React.useCallback(async nextSession => {
+    const transition = ++transitionRef.current;
+    const normalized = normalizeSupabaseSession(nextSession);
+    if (normalized) {
+      try {
+        await bootstrapCloudStore(client, normalized.id);
+        if (transition === transitionRef.current) setSyncError('');
+      } catch (bootstrapError) {
+        if (transition === transitionRef.current) setSyncError('Cloud sync is unavailable.');
+        await reportStudioError(bootstrapError, { code: 'cloud_bootstrap_failed' });
+      }
+    } else {
+      resetCloudStore();
+    }
+    if (transition === transitionRef.current) setSession(normalized);
+    return transition === transitionRef.current ? normalized : null;
+  }, [client]);
 
   React.useEffect(() => installGlobalErrorTelemetry(), []);
   React.useEffect(() => {
@@ -44,23 +63,6 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
       return undefined;
     }
     let active = true;
-    const applySession = async nextSession => {
-      if (!active) return;
-      const normalized = normalizeSupabaseSession(nextSession);
-      if (normalized) {
-        try {
-          await bootstrapCloudStore(client, normalized.id);
-          setSyncError('');
-        } catch (bootstrapError) {
-          setSyncError('Cloud sync is unavailable.');
-          await reportStudioError(bootstrapError, { code: 'cloud_bootstrap_failed' });
-        }
-      } else {
-        resetCloudStore();
-      }
-      if (active) setSession(normalized);
-    };
-
     client.auth.getSession().then(async ({ data, error: sessionError }) => {
       if (!active) return;
       if (sessionError) setError('Your session could not be restored. Sign in again.');
@@ -75,7 +77,7 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
       active = false;
       data.subscription.unsubscribe();
     };
-  }, [client]);
+  }, [applySession, client]);
 
   const signIn = React.useCallback(async ({ email, password }) => {
     if (!client) throw new Error('Staging connection is not configured.');
@@ -91,11 +93,8 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
       setError(safe);
       throw new Error(safe);
     }
-    const next = normalizeSupabaseSession(data.session);
-    if (next) await bootstrapCloudStore(client, next.id);
-    setSession(next);
-    return next;
-  }, [client]);
+    return applySession(data.session);
+  }, [applySession, client]);
 
   const signUp = React.useCallback(async ({ name, email, password }) => {
     if (!client) throw new Error('Staging connection is not configured.');
@@ -115,13 +114,9 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
       setError(safe);
       throw new Error(safe);
     }
-    const next = normalizeSupabaseSession(data.session);
-    if (next) {
-      await bootstrapCloudStore(client, next.id);
-      setSession(next);
-    }
+    const next = data.session ? await applySession(data.session) : null;
     return { session: next, confirmationRequired: !next };
-  }, [client]);
+  }, [applySession, client]);
 
   const requestPasswordReset = React.useCallback(async email => {
     if (!client) throw new Error('Staging connection is not configured.');
@@ -150,9 +145,8 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
 
   const signOut = React.useCallback(async () => {
     if (client) await client.auth.signOut();
-    setSession(null);
-    resetCloudStore();
-  }, [client]);
+    await applySession(null);
+  }, [applySession, client]);
 
   const value = React.useMemo(() => ({
     client,

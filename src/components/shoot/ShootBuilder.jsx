@@ -6,7 +6,9 @@ import { GenerationProgress } from '../feedback/GenerationProgress.jsx';
 import { ImageLightbox } from '../feedback/ImageLightbox.jsx';
 import { Select } from '../forms/Select.jsx';
 import { ReferenceImageTray } from '../director/ReferenceImageTray.jsx';
-import { characterGenerate, generateImage } from '../../api/studio.js';
+import { castQuickShootPlain, characterGenerate, generateImage } from '../../api/studio.js';
+import { hasSupabaseConfig } from '../../lib/supabase.js';
+import { canonicalCreatorId } from '../../lib/cloudCreators.js';
 import { buildCharacterPrompt } from '../../lib/characterPrompt.js';
 import { saveToLibrary } from '../../lib/library.js';
 import { compressImage } from '../../lib/imageUtils.js';
@@ -255,20 +257,28 @@ export function ShootBuilder({
               : allImages,
             mode: identityMode,
             batchSize,
+            creatorId: canonicalCreatorId(creator),
           });
           images = result.images || [];
         } else {
           // No reference photo — nothing to identity-lock against, but the
           // built prompt is still a valid text-to-image prompt.
-          const result = await generateImage({
-            engine: 'OpenAI Image',
-            positivePrompt,
-            negativePrompt: STANDARD_NEGATIVE,
-            imageSize: 'Vertical 9:16',
-            quality: 'High',
-            performanceMode: 'Balanced',
-            imageStyle: 'Lifestyle Creator',
-          });
+          const result = hasSupabaseConfig()
+            ? await castQuickShootPlain({
+                positivePrompt,
+                negativePrompt: STANDARD_NEGATIVE,
+                batchSize,
+                creatorId: canonicalCreatorId(creator),
+              })
+            : await generateImage({
+                engine: 'OpenAI Image',
+                positivePrompt,
+                negativePrompt: STANDARD_NEGATIVE,
+                imageSize: 'Vertical 9:16',
+                quality: 'High',
+                performanceMode: 'Balanced',
+                imageStyle: 'Lifestyle Creator',
+              });
           images = result.images || [];
         }
         images.forEach(url => saveToLibrary(url, {

@@ -10,6 +10,7 @@ import {
   isLocalStudioServiceEnabled,
   LOCAL_ACTION_UNAVAILABLE,
 } from '../api/studio.js';
+import { hasSupabaseConfig } from '../lib/supabase.js';
 import { saveToLibrary, loadLibrary } from '../lib/library.js';
 import { compressImage, normalizeImageForVision } from '../lib/imageUtils.js';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
@@ -317,7 +318,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     if (initialImportRequest) setImportOpen(true);
   }, [initialImportRequest]);
 
-  const analyzeReferenceSet = async (imageDataUrls) => {
+  const analyzeReferenceSet = async (imageDataUrls, creatorId = null) => {
     const images = Array.isArray(imageDataUrls) ? imageDataUrls : [imageDataUrls];
     // Do not pass normalizeImageForVision directly to map: map's index would
     // become maxPx, shrinking the first five references to 1–4 pixels.
@@ -325,6 +326,14 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
       images.filter(Boolean).slice(0, 5).map(image => normalizeImageForVision(image))
     );
     if (!visionImages.length) throw new Error('Add at least one creator reference.');
+
+    // Cloud mode: analyzeCharacterReferences already folds identity-anchor
+    // extraction into the same call (one billable vision request instead of
+    // two) and returns it as `.faceAnchor`.
+    if (hasSupabaseConfig()) {
+      const result = await analyzeCharacterReferences(visionImages, { creatorId });
+      return { result, faceAnchor: result.faceAnchor || '' };
+    }
 
     const [result, faceAnchor] = await Promise.all([
       analyzeCharacterReferences(visionImages),
@@ -337,7 +346,12 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     setAnalyzing(true);
     setAnalyzeError('');
     try {
-      const { result, faceAnchor } = await analyzeReferenceSet(imageDataUrls);
+      // Only a creator that has already been saved (has an id, i.e. we're
+      // re-analyzing via handleEdit/activeId) can be resolved server-side;
+      // an in-progress/unsaved draft sends its freshly-uploaded reference
+      // images directly instead (see analyzeReferenceSet).
+      const creatorId = active ? canonicalCreatorId(active) : null;
+      const { result, faceAnchor } = await analyzeReferenceSet(imageDataUrls, creatorId);
       setEditing(ed => ({
         ...(ed || currentEditing),
         faceAnchor: faceAnchor || ed?.faceAnchor || '',
@@ -580,7 +594,8 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
         f.personality && `Energy: ${f.personality}`,
       ].filter(Boolean).join('. ');
 
-      const result = await generateReferenceSet({ characterDesc, count });
+      const creatorId = active ? canonicalCreatorId(active) : null;
+      const result = await generateReferenceSet({ characterDesc, count, creatorId });
       const newImages = result.images || [];
       if (!newImages.length) throw new Error('No images generated.');
 
@@ -610,6 +625,11 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
 
   const showPanel = !!(editing || activeId != null);
   const localServicesEnabled = isLocalStudioServiceEnabled();
+  // All four Cast AI actions (Analyze, face anchor, Build Reference Set,
+  // Quick Shoot) now have cloud equivalents — only show the blanket warning
+  // when neither a local dev backend nor a configured Supabase cloud project
+  // is available at all.
+  const castActionsUnavailable = !localServicesEnabled && !hasSupabaseConfig();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
@@ -658,7 +678,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
         </div>
       </div>
 
-      {!localServicesEnabled && (
+      {castActionsUnavailable && (
         <Card variant="rose" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Icon name="clock" size={16} />
           <span style={{ font: 'var(--text-sm)', color: 'var(--text-body)' }}>{LOCAL_ACTION_UNAVAILABLE} Uploads and manual creator editing remain available.</span>

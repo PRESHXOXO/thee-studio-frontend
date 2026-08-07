@@ -1,5 +1,31 @@
 import { serializeDirectorReferences } from '../lib/directorReferences.js';
 import { finishUsageTelemetry, startUsageTelemetry } from './usageTelemetry.js';
+import { getSupabase, hasSupabaseConfig } from '../lib/supabase.js';
+
+// Cast (Analyze Complete Set, Build Reference Set, Cast Quick Shoot) has cloud
+// equivalents of its local-Gradio calls — see supabase/functions/cast-* in the
+// backend repo. Same convention as stagingGeneration.js: cloud mode is "a
+// Supabase project is configured", not a separate flag threaded through here.
+async function invokeCastFunction(name, body) {
+  const idempotencyKey = crypto.randomUUID();
+  const { data, error } = await getSupabase().functions.invoke(name, {
+    body,
+    headers: { 'idempotency-key': idempotencyKey },
+  });
+  if (error) throw new Error(error.message || `${name} failed.`);
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+async function signCastAssets(bucket, assets, pathKey = 'storagePath') {
+  return Promise.all((assets || []).map(async asset => {
+    const { data: signed, error: signError } = await getSupabase().storage
+      .from(bucket)
+      .createSignedUrl(asset[pathKey], 3600);
+    if (signError || !signed?.signedUrl) throw new Error('Could not open a generated image.');
+    return signed.signedUrl;
+  }));
+}
 
 const BASE = '/gradio_api';
 const GRADIO_CONFIG_URL = '/config'; // Gradio 6.x serves config at /config, not /gradio_api/config
@@ -242,7 +268,19 @@ function relativizeUrl(url) {
 }
 
 // Uses /run/analyze_character — in Gradio 6.x the URL path IS the api_name.
-export async function characterGenerate({ engineId, positivePrompt, negativePrompt, characterImage, anchorImages = [], mode = 'lifestyle', imageSize = 'Vertical 9:16', batchSize = 1 }) {
+export async function characterGenerate({ engineId, positivePrompt, negativePrompt, characterImage, anchorImages = [], mode = 'lifestyle', imageSize = 'Vertical 9:16', batchSize = 1, creatorId = null }) {
+  if (hasSupabaseConfig()) {
+    const data = await invokeCastFunction('cast-quick-shoot', {
+      creatorId,
+      prompt: positivePrompt,
+      negativePrompt,
+      characterImage,
+      anchorImages,
+      batchSize,
+    });
+    const images = await signCastAssets('generation-assets', data.assets);
+    return { images, summary: data.summary || '' };
+  }
   const raw = await callNamedEndpoint('character_generate', [
     JSON.stringify({ engineId, positivePrompt, negativePrompt, imageSize, batchSize, anchorImages, mode }),
     characterImage,
@@ -257,6 +295,21 @@ export async function characterGenerate({ engineId, positivePrompt, negativeProm
   return parsed;
 }
 
+// Cast Quick Shoot's no-reference fallback. Deliberately separate from the
+// general-purpose generateImage() below (used by other, out-of-scope
+// screens) so this Cast migration doesn't reroute unrelated call sites.
+export async function castQuickShootPlain({ positivePrompt, negativePrompt, batchSize = 1, creatorId = null }) {
+  const data = await invokeCastFunction('cast-quick-shoot', {
+    creatorId,
+    prompt: positivePrompt,
+    negativePrompt,
+    characterImage: null,
+    batchSize,
+  });
+  const images = await signCastAssets('generation-assets', data.assets);
+  return { images, summary: data.summary || '' };
+}
+
 export async function analyzeCharacterImage(imageDataUrl) {
   const raw = await callNamedEndpoint('analyze_character', [imageDataUrl]);
   const jsonStr = raw[0] || '{}';
@@ -265,20 +318,30 @@ export async function analyzeCharacterImage(imageDataUrl) {
   return parsed;
 }
 
-export async function analyzeCharacterReferences(imageDataUrls) {
+export async function analyzeCharacterReferences(imageDataUrls, { creatorId = null } = {}) {
   const references = (imageDataUrls || []).slice(0, 5).map((image, index) => ({
     role: index === 0 ? 'identity' : 'supporting',
     image,
   }));
-  if (!references.length) throw new Error('Add at least one creator reference.');
+  if (!creatorId && !references.length) throw new Error('Add at least one creator reference.');
 
-  const raw = await callNamedEndpoint('analyze_character', [JSON.stringify({
-    version: 2,
-    references,
-  })]);
-  const jsonStr = raw[0] || '{}';
-  const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
-  if (parsed.error) throw new Error(parsed.error);
+  let parsed;
+  let faceAnchor = '';
+  if (hasSupabaseConfig()) {
+    // Combines Analyze Complete Set + face/identity anchor extraction in one
+    // billable call — the first reference is always identity-only, so it
+    // doubles as the anchor without a second OpenAI request.
+    const data = await invokeCastFunction('cast-analyze-references', creatorId
+      ? { creatorId }
+      : { references });
+    parsed = { ...data.profile };
+    faceAnchor = data.identityAnchor ? references[0]?.image ?? '' : '';
+  } else {
+    const raw = await callNamedEndpoint('analyze_character', [JSON.stringify({ version: 2, references })]);
+    const jsonStr = raw[0] || '{}';
+    parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+    if (parsed.error) throw new Error(parsed.error);
+  }
   // Defense in depth while older backends roll over: a headshot plus one
   // supporting photo is still not enough evidence to define a wardrobe.
   if (references.length < 3) parsed.wardrobe = '';
@@ -290,6 +353,7 @@ export async function analyzeCharacterReferences(imageDataUrls) {
   if (![parsed.face, parsed.hair, parsed.tone].some(value => typeof value === 'string' && value.trim())) {
     throw new Error('The analysis finished but could not read the creator’s identity. Check that the first image clearly shows their face, then try again.');
   }
+  parsed.faceAnchor = faceAnchor;
   return parsed;
 }
 
@@ -301,8 +365,18 @@ export async function generateCharacterSeed(params) {
   return parsed; // { image, faceAnchor }
 }
 
-export async function generateReferenceSet(params) {
-  const raw = await callNamedEndpoint('generate_reference_set', [JSON.stringify(params)], REFERENCE_SET_TIMEOUT_MS);
+export async function generateReferenceSet({ characterDesc, count, creatorId = null } = {}) {
+  if (hasSupabaseConfig()) {
+    if (!creatorId) throw new Error('Save this creator before building a reference set.');
+    const data = await invokeCastFunction('cast-generate-reference-set', {
+      creatorId,
+      characterDescription: characterDesc,
+      count,
+    });
+    const images = await signCastAssets('creator-references', data.references);
+    return { images };
+  }
+  const raw = await callNamedEndpoint('generate_reference_set', [JSON.stringify({ characterDesc, count })], REFERENCE_SET_TIMEOUT_MS);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
   if (parsed.error) throw new Error(parsed.error);
   return parsed; // { images: [...], errors: [...] }
@@ -335,6 +409,10 @@ export async function describeOutfitImage(imageDataUrl) {
 }
 
 export async function extractFaceAnchor(imageDataUrl) {
+  // Cloud mode folds identity-anchor extraction into analyzeCharacterReferences
+  // (one billable vision call instead of two) — callers in cloud mode should
+  // read `.faceAnchor` off that result instead of calling this separately.
+  if (hasSupabaseConfig()) return '';
   const raw = await callNamedEndpoint('face_anchor_extract', [imageDataUrl]);
   const jsonStr = raw[0] || '{}';
   const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;

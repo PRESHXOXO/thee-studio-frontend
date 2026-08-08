@@ -5,21 +5,11 @@ import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 import { PromptLab } from './PromptLab.jsx';
 import { SceneFlow } from './SceneFlow.jsx';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
-import { persistCloudDocument } from '../lib/cloudStore.js';
 import { isLocalStudioServiceEnabled, LOCAL_ACTION_UNAVAILABLE } from '../api/studio.js';
+import { loadCharacters, saveCharacters } from '../lib/creatorCache.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', margin: 0 };
-
-function loadCharacters() {
-  try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
-}
-function saveCharacters(list) {
-  try {
-    const value = JSON.stringify(list);
-    localStorage.setItem('ts_characters', value);
-    void persistCloudDocument('ts_characters', value).catch(() => undefined);
-  } catch {}
-}
 function getCharacterImage(char) {
   return char?.refImages?.[0] || char?.image || null;
 }
@@ -140,6 +130,20 @@ export function TheeDirector({
   // Escape hatch out of the "pick a creator" gate — build a subject with raw
   // attributes instead. Skips the gate entirely once a creator is chosen.
   const [buildWithoutCreator, setBuildWithoutCreator] = React.useState(false);
+
+  // The ts_characters cache itself is already cleared+repopulated per-user
+  // on sign-in (lib/creatorCache.js); this resets the in-memory roster and
+  // selection too, so switching accounts can't keep showing a stale creator.
+  const { session } = useAuth();
+  const directorSessionIdRef = React.useRef(session?.id ?? null);
+  React.useEffect(() => {
+    const nextId = session?.id ?? null;
+    if (directorSessionIdRef.current === nextId) return;
+    directorSessionIdRef.current = nextId;
+    const nextChars = loadCharacters();
+    setCharacters(nextChars);
+    setSelectedCharId(resolveActiveCreator(nextChars)?.id ?? null);
+  }, [session?.id]);
 
   // Persist the campaign's creator as the studio-wide active one too, once,
   // on arrival — mirrors selectCreator's side effects without re-firing on

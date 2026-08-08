@@ -13,6 +13,7 @@ import {
   SHOT_TYPES,
   emptyReviewScores,
 } from '../production/domain.js';
+import { loadCharacters } from '../lib/creatorCache.js';
 
 const FIELD = { display: 'flex', flexDirection: 'column', gap: 7 };
 const LABEL = {
@@ -356,8 +357,7 @@ function CampaignList({ repository, isCloud }) {
   const load = React.useCallback(async () => {
     setLoading(true); setError('');
     try {
-      let studioCreators = [];
-      try { studioCreators = JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch {}
+      const studioCreators = loadCharacters();
       await repository.syncStudioCreators?.(studioCreators);
       let creatorMemories = {};
       try { creatorMemories = JSON.parse(localStorage.getItem('ts_creator_memory_v1') || '{}'); } catch {}

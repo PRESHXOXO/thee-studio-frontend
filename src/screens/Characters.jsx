@@ -17,6 +17,8 @@ import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.
 import { persistCloudDocument } from '../lib/cloudStore.js';
 import { canonicalCreatorId } from '../lib/cloudCreators.js';
 import { linkCastCreatorToCloud } from '../lib/castCreatorSync.js';
+import { loadCharacters } from '../lib/creatorCache.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 import { useProduction } from '../context/ProductionContext.jsx';
@@ -44,9 +46,6 @@ const FIELD_DEFS = [
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6, display: 'block' };
 const INPUT_STYLE = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'var(--surface-inset)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', outline: 'none', fontFamily: 'inherit' };
 
-function loadCharacters() {
-  try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
-}
 function saveCharacters(list) {
   try {
     const value = JSON.stringify(list);
@@ -249,9 +248,27 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
 
 export function Characters({ initialCharacter, initialImportRequest, onCharacterChange, onNav }) {
   const { repository } = useProduction();
+  const { session } = useAuth();
   const [characters, setCharacters] = React.useState(loadCharacters);
   const [activeId, setActiveId]     = React.useState(() => resolveActiveCreator(loadCharacters())?.id ?? null);
   const [editing, setEditing]       = React.useState(null);
+
+  // Storage isolation across an account switch is already handled — auth
+  // bootstrap clears+repopulates the ts_characters cache for the new user
+  // before `session` updates in React (see lib/creatorCache.js). What's not
+  // automatic is this component's own in-memory state, read once at mount:
+  // without this, switching accounts in the same tab would keep showing the
+  // previous user's cast roster/selection/draft until a full remount.
+  const sessionIdRef = React.useRef(session?.id ?? null);
+  React.useEffect(() => {
+    const nextId = session?.id ?? null;
+    if (sessionIdRef.current === nextId) return;
+    sessionIdRef.current = nextId;
+    const nextCharacters = loadCharacters();
+    setCharacters(nextCharacters);
+    setActiveId(resolveActiveCreator(nextCharacters)?.id ?? null);
+    setEditing(null);
+  }, [session?.id]);
   const [importOpen, setImportOpen] = React.useState(false);
   const [importFilesError, setImportFilesError] = React.useState('');
   const [importReferences, setImportReferences] = React.useState([]);

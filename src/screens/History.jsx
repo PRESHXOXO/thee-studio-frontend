@@ -4,6 +4,8 @@ import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { ImageLightbox } from '../components/feedback/ImageLightbox.jsx';
 import { loadLibrary } from '../lib/library.js';
+import { loadCharacters } from '../lib/creatorCache.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
 // History is a chronological read of the same generations Library tracks —
 // Library is the review/status workspace, this is the "what did I make and
@@ -19,10 +21,7 @@ const SOURCE_LABELS = {
 };
 
 function loadCharacterNames() {
-  try {
-    const chars = JSON.parse(localStorage.getItem('ts_characters') || '[]');
-    return new Map(chars.map(c => [String(c.id), c.name]));
-  } catch { return new Map(); }
+  return new Map(loadCharacters().map(c => [String(c.id), c.name]));
 }
 
 function formatDate(iso) {
@@ -94,9 +93,12 @@ function HistoryCard({ entry, creatorName, onRerun, onOpenImage }) {
 }
 
 export function History({ onNav }) {
+  const { session } = useAuth();
   const [library, setLibrary] = React.useState(loadLibrary);
   const [lightboxSrc, setLightboxSrc] = React.useState(null);
-  const characterNames = React.useMemo(loadCharacterNames, [library]);
+  // Depends on session id too so switching accounts refreshes creator names
+  // from the (already account-scoped) cache, not just when library changes.
+  const characterNames = React.useMemo(loadCharacterNames, [library, session?.id]);
 
   React.useEffect(() => {
     const onFocus = () => setLibrary(loadLibrary());

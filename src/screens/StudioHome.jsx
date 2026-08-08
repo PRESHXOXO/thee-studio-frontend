@@ -2,10 +2,8 @@ import React from 'react';
 import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { loadLibrary } from '../lib/library.js';
-
-function loadCharacters() {
-  try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
-}
+import { loadCharacters } from '../lib/creatorCache.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const SHORTCUTS = [
   { icon: 'upload',       label: 'Import Creator', sub: 'Add to your cast', nav: 'characters', data: 'import' },
@@ -110,11 +108,14 @@ function cloudNextStep({ charCount, libCount, unreviewed }) {
 }
 
 export function StudioHome({ onNav, cloudMvp = false }) {
+  const { session } = useAuth();
   const [recent, setRecent]   = React.useState([]);
   const [charCount, setChars] = React.useState(0);
   const [libCount, setLib]    = React.useState(0);
   const [pipeline, setPipeline] = React.useState({ unreviewed: 0, approved: 0, needs_fix: 0 });
 
+  // Depends on session id so this recomputes from the (already account-
+  // scoped) cache on sign-in/account switch, not just on mount.
   React.useEffect(() => {
     const lib  = loadLibrary();
     const chars = loadCharacters();
@@ -127,7 +128,7 @@ export function StudioHome({ onNav, cloudMvp = false }) {
       if (s in p) p[s] += 1;
     }
     setPipeline(p);
-  }, []);
+  }, [session?.id]);
 
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 40, maxWidth: 'var(--content-max)', margin: '0 auto' }}>

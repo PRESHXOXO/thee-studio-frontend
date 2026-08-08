@@ -3,6 +3,7 @@ import { compressImage } from '../lib/imageUtils.js';
 import { saveActiveCreatorId } from '../lib/activeCreator.js';
 import { persistCloudDocument } from '../lib/cloudStore.js';
 import { reconcileCloudCreator } from '../lib/cloudCreators.js';
+import { loadCharacters } from '../lib/creatorCache.js';
 import {
   blankCreatorDraft, touchDraft, composeDescription, composeBodyDescription, CREATOR_STATUS,
 } from '../lib/creatorIdentity.js';
@@ -362,7 +363,7 @@ export function ImageGenerator({
         },
         ...withoutSignedUrls(savedDraft),
       };
-      const existing = JSON.parse(localStorage.getItem('ts_characters') || '[]');
+      const existing = loadCharacters();
       const updated = reconcileCloudCreator(existing, newChar);
       const value = JSON.stringify(updated);
       localStorage.setItem('ts_characters', value);

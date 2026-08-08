@@ -12,6 +12,8 @@ import {
   saveCreatorMemory,
 } from '../lib/creatorMemory.js';
 import { resolveActiveCreator } from '../lib/activeCreator.js';
+import { loadCharacters } from '../lib/creatorCache.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const FIELD_META = [
   ['visualSignature', 'Visual signature', 'Editorial point of view, texture, energy, and recognizable finish.'],
@@ -23,11 +25,6 @@ const FIELD_META = [
   ['mustKeep', 'Always preserve', 'Signature traits or brand cues every generation must keep.'],
   ['avoid', 'Never generate', 'Looks, scenes, styling, colors, or visual clichés to reject.'],
 ];
-
-function loadCreators() {
-  try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); }
-  catch { return []; }
-}
 
 function SignalList({ title, items, empty }) {
   return (
@@ -47,12 +44,28 @@ function SignalList({ title, items, empty }) {
 }
 
 export function CreatorMemory({ onNav }) {
-  const creators = React.useMemo(loadCreators, []);
+  const { session } = useAuth();
+  // Depends on session id so the roster recomputes from the (already
+  // account-scoped) cache on sign-in/account switch, not just on mount.
+  const creators = React.useMemo(loadCharacters, [session?.id]);
   const active = resolveActiveCreator(creators);
   const [creatorId, setCreatorId] = React.useState(() => String(active?.id || creators[0]?.id || ''));
   const [memory, setMemory] = React.useState(() => getCreatorMemory(active?.id || creators[0]?.id));
   const [form, setForm] = React.useState(() => memory.preferences || EMPTY_BRAND_DNA);
   const [saved, setSaved] = React.useState(false);
+
+  const memorySessionIdRef = React.useRef(session?.id ?? null);
+  React.useEffect(() => {
+    const nextId = session?.id ?? null;
+    if (memorySessionIdRef.current === nextId) return;
+    memorySessionIdRef.current = nextId;
+    const nextActive = resolveActiveCreator(creators);
+    const nextId2 = nextActive?.id || creators[0]?.id || '';
+    setCreatorId(String(nextId2));
+    const nextMemory = getCreatorMemory(nextId2);
+    setMemory(nextMemory);
+    setForm(nextMemory.preferences || EMPTY_BRAND_DNA);
+  }, [session?.id, creators]);
 
   const rebuild = React.useCallback(id => {
     const next = learnCreatorMemory(id, loadLibrary()) || getCreatorMemory(id);

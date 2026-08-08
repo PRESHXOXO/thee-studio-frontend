@@ -6,6 +6,8 @@ import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { Card } from '../components/surfaces/Card.jsx';
 import { loadLibrary } from '../lib/library.js';
+import { loadCharacters } from '../lib/creatorCache.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const KEY = 'ts_campaigns';
 
@@ -33,10 +35,6 @@ function loadCampaigns() {
 
 function saveCampaigns(list) {
   try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {}
-}
-
-function loadCharacters() {
-  try { return JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch { return []; }
 }
 
 /* ── Create/Edit Modal ───────────────────────────────────────── */
@@ -405,13 +403,26 @@ function CampaignDetail({ campaign, characters, library, onBack, onEdit, onNav }
 
 /* ── Main Screen ─────────────────────────────────────────────── */
 export function Campaigns({ onNav }) {
+  const { session } = useAuth();
   const [campaigns, setCampaigns] = React.useState(loadCampaigns);
-  const [characters]              = React.useState(loadCharacters);
+  const [characters, setCharacters] = React.useState(loadCharacters);
   const [library]                 = React.useState(loadLibrary);
   const [modal, setModal]         = React.useState(null); // null | { mode: 'create'|'edit', campaign? }
   const [confirm, setConfirm]     = React.useState(null);
   const [filter, setFilter]       = React.useState('all');
   const [detailId, setDetailId]   = React.useState(null);
+
+  // ts_characters is already cleared+repopulated per-user on sign-in
+  // (lib/creatorCache.js); this just re-reads it into this screen's own
+  // state so an account switch doesn't keep showing the previous user's
+  // creator names against campaigns.
+  const campaignsSessionIdRef = React.useRef(session?.id ?? null);
+  React.useEffect(() => {
+    const nextId = session?.id ?? null;
+    if (campaignsSessionIdRef.current === nextId) return;
+    campaignsSessionIdRef.current = nextId;
+    setCharacters(loadCharacters());
+  }, [session?.id]);
 
   const save = (updated) => {
     setCampaigns(updated);

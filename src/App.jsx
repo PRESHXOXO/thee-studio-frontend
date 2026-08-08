@@ -19,6 +19,7 @@ import { AdminTelemetry } from './screens/AdminTelemetry.jsx';
 import { fetchAdminAccess } from './api/adminTelemetry.js';
 import { loadLibrary } from './lib/library.js';
 import { resolveActiveCreator } from './lib/activeCreator.js';
+import { loadCharacters } from './lib/creatorCache.js';
 import { StudioErrorBoundary } from './components/system/StudioErrorBoundary.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import { ProductionProvider } from './context/ProductionContext.jsx';
@@ -188,10 +189,20 @@ function StudioApp({ access }) {
   const [pendingImages,    setPendingImages]    = React.useState(null);
   const [activeCharacter,  setActiveCharacter]  = React.useState(() => {
     try {
-      const chars = JSON.parse(localStorage.getItem('ts_characters') || '[]');
-      return resolveActiveCreator(chars);
+      return resolveActiveCreator(loadCharacters());
     } catch { return null; }
   });
+  // Read once at mount; the underlying ts_characters cache is already
+  // cleared+repopulated per-user on sign-in (see lib/creatorCache.js), but
+  // this in-memory Sidebar state needs its own reset or it keeps showing the
+  // previous account's active creator until a full page reload.
+  const activeCharacterSessionRef = React.useRef(authSession?.id ?? null);
+  React.useEffect(() => {
+    const nextId = authSession?.id ?? null;
+    if (activeCharacterSessionRef.current === nextId) return;
+    activeCharacterSessionRef.current = nextId;
+    setActiveCharacter(resolveActiveCreator(loadCharacters()));
+  }, [authSession?.id]);
   const [libCount, setLibCount]               = React.useState(() => loadLibrary().length);
   const [pendingImportRequest, setPendingImportRequest] = React.useState(false);
   const [adminAccess, setAdminAccess] = React.useState({ allowed: false, role: null, checked: auth.mode !== 'cloud' });

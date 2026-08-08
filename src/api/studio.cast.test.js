@@ -25,7 +25,7 @@ afterAll(() => {
   global.fetch = originalFetch;
 });
 
-import { analyzeCharacterReferences, characterGenerate, generateReferenceSet, castQuickShootPlain, extractFaceAnchor } from './studio.js';
+import { analyzeCharacterReferences, characterGenerate, generateReferenceSet, castQuickShootPlain, extractFaceAnchor, pollCastQuickShootStatus } from './studio.js';
 
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/6ZcmWQAAAABJRU5ErkJggg==';
 
@@ -54,13 +54,63 @@ describe('Cast cloud workflows never call local Gradio', () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it('characterGenerate calls cast-quick-shoot, signs storage paths, never Gradio', async () => {
-    invoke.mockResolvedValueOnce({ data: { assets: [{ storagePath: 'user/creator/quick-shoot/job/0.png' }], summary: 'ok' }, error: null });
+  it('characterGenerate calls cast-quick-shoot and signs assets when the job is already complete (resumed)', async () => {
+    invoke.mockResolvedValueOnce({ data: { status: 'succeeded', assets: [{ storagePath: 'user/creator/quick-shoot/job/0.png' }], summary: 'ok' }, error: null });
     const result = await characterGenerate({ positivePrompt: 'p', characterImage: PIXEL, creatorId: 'creator-1' });
     expect(invoke).toHaveBeenCalledWith('cast-quick-shoot', expect.objectContaining({ body: expect.objectContaining({ creatorId: 'creator-1', characterImage: PIXEL }) }));
     expect(createSignedUrl).toHaveBeenCalledWith('user/creator/quick-shoot/job/0.png', 3600);
+    expect(result.status).toBe('succeeded');
     expect(result.images).toEqual(['https://signed.example/asset.png']);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  // Regression: identity-locked Quick Shoot is async in cloud mode — the
+  // initial submit must never return images directly, only a pending job id.
+  it('characterGenerate returns a pending job, not images, for a fresh identity-locked submit', async () => {
+    invoke.mockResolvedValueOnce({ data: { status: 'pending', jobId: 'job-123' }, error: null });
+    const result = await characterGenerate({ positivePrompt: 'p', characterImage: PIXEL, creatorId: 'creator-1' });
+    expect(result.status).toBe('pending');
+    expect(result.jobId).toBe('job-123');
+    expect(result.images).toEqual([]);
+    expect(createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('characterGenerate surfaces a failed job as an error, never as an empty success', async () => {
+    invoke.mockResolvedValueOnce({ data: { status: 'failed', error: 'blocked by content policy' }, error: null });
+    await expect(characterGenerate({ positivePrompt: 'p', characterImage: PIXEL, creatorId: 'creator-1' }))
+      .rejects.toThrow('blocked by content policy');
+  });
+
+  describe('pollCastQuickShootStatus', () => {
+    it('reports pending without ever creating a provider request', async () => {
+      invoke.mockResolvedValueOnce({ data: { status: 'pending' }, error: null });
+      const result = await pollCastQuickShootStatus('job-123');
+      expect(invoke).toHaveBeenCalledWith('cast-quick-shoot-status', expect.objectContaining({ body: { jobId: 'job-123' } }));
+      expect(result).toEqual({ status: 'pending' });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('signs and returns images once the job succeeds', async () => {
+      invoke.mockResolvedValueOnce({ data: { status: 'succeeded', assets: [{ storagePath: 'user/creator/quick-shoot/job/0.png' }], summary: 'ok' }, error: null });
+      const result = await pollCastQuickShootStatus('job-123');
+      expect(result.status).toBe('succeeded');
+      expect(result.images).toEqual(['https://signed.example/asset.png']);
+    });
+
+    it('reports failed without throwing, carrying the server error message', async () => {
+      invoke.mockResolvedValueOnce({ data: { status: 'failed', error: 'Provider terminal status: cancelled' }, error: null });
+      const result = await pollCastQuickShootStatus('job-123');
+      expect(result).toEqual({ status: 'failed', error: 'Provider terminal status: cancelled' });
+    });
+
+    it('repeated polling of the same job never calls fetch (no gradio/localhost/provider leak from the client)', async () => {
+      invoke.mockResolvedValue({ data: { status: 'pending' }, error: null });
+      await pollCastQuickShootStatus('job-123');
+      await pollCastQuickShootStatus('job-123');
+      await pollCastQuickShootStatus('job-123');
+      expect(invoke).toHaveBeenCalledTimes(3);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
   });
 
   it('castQuickShootPlain works without a creatorId (no-creator-selected path)', async () => {

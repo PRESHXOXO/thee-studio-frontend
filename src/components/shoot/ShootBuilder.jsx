@@ -6,7 +6,7 @@ import { GenerationProgress } from '../feedback/GenerationProgress.jsx';
 import { ImageLightbox } from '../feedback/ImageLightbox.jsx';
 import { Select } from '../forms/Select.jsx';
 import { ReferenceImageTray } from '../director/ReferenceImageTray.jsx';
-import { castQuickShootPlain, characterGenerate, generateImage } from '../../api/studio.js';
+import { castQuickShootPlain, characterGenerate, generateImage, pollCastQuickShootStatus } from '../../api/studio.js';
 import { hasSupabaseConfig } from '../../lib/supabase.js';
 import { canonicalCreatorId } from '../../lib/cloudCreators.js';
 import { buildCharacterPrompt } from '../../lib/characterPrompt.js';
@@ -23,6 +23,52 @@ import {
 } from '../../lib/promptData.js';
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 };
+
+// Identity-locked Quick Shoot submits are asynchronous (background provider
+// job) — the result comes back as { status: 'pending', jobId } and must be
+// polled. These helpers own that loop plus the localStorage handoff that
+// lets a browser refresh resume polling an already-owned pending job instead
+// of losing it (and never resubmit — polling is always a read).
+const QUICK_SHOOT_POLL_INTERVAL_MS = 2500;
+const QUICK_SHOOT_POLL_TIMEOUT_MS = 5 * 60 * 1000;
+
+function pendingQuickShootKey(creatorId) {
+  return `thee-studio:quick-shoot-pending:${creatorId || 'no-creator'}`;
+}
+
+function savePendingQuickShootJob(creatorId, jobId) {
+  try { window.localStorage.setItem(pendingQuickShootKey(creatorId), jobId); } catch { /* storage unavailable — resume just won't work */ }
+}
+
+function clearPendingQuickShootJob(creatorId) {
+  try { window.localStorage.removeItem(pendingQuickShootKey(creatorId)); } catch { /* no-op */ }
+}
+
+function loadPendingQuickShootJob(creatorId) {
+  try { return window.localStorage.getItem(pendingQuickShootKey(creatorId)); } catch { return null; }
+}
+
+// Resolves a characterGenerate()/castQuickShootPlain() result to its final
+// images. Synchronous results (status !== 'pending') pass through
+// immediately. Pending results are polled — each poll is a read-only status
+// check that can never submit another generation, so calling this
+// concurrently or after a refresh (which resumes with the same jobId) is safe.
+async function awaitCastQuickShootResult(result, creatorId) {
+  if (result.status !== 'pending') return result;
+  savePendingQuickShootJob(creatorId, result.jobId);
+  const deadline = Date.now() + QUICK_SHOOT_POLL_TIMEOUT_MS;
+  try {
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, QUICK_SHOOT_POLL_INTERVAL_MS));
+      const polled = await pollCastQuickShootStatus(result.jobId);
+      if (polled.status === 'succeeded') return polled;
+      if (polled.status === 'failed') throw new Error(polled.error || 'Generation failed.');
+    }
+    throw new Error('Generation is taking longer than expected. It may still finish — check back shortly.');
+  } finally {
+    clearPendingQuickShootJob(creatorId);
+  }
+}
 
 // Editorial section wrapper — turns the old flat wall of uppercase labels into
 // grouped, titled blocks with an icon chip and a hairline divider, so the form
@@ -147,6 +193,24 @@ export function ShootBuilder({
     setShotReferences([]);
   }, [creator?.id]);
 
+  // Resume an owned pending Quick Shoot job after a page refresh (or when
+  // switching back to a creator with one in flight) instead of losing it.
+  // Reading localStorage and polling never submits a new generation.
+  React.useEffect(() => {
+    if (!hasSupabaseConfig()) return;
+    const creatorId = canonicalCreatorId(creator);
+    const pendingJobId = loadPendingQuickShootJob(creatorId);
+    if (!pendingJobId) return;
+    let cancelled = false;
+    setGenerating(true);
+    setGenError('');
+    awaitCastQuickShootResult({ status: 'pending', jobId: pendingJobId }, creatorId)
+      .then(result => { if (!cancelled) setGenImages(result.images || []); })
+      .catch(error => { if (!cancelled) setGenError(error.message || 'Generation failed.'); })
+      .finally(() => { if (!cancelled) setGenerating(false); });
+    return () => { cancelled = true; };
+  }, [creator?.id]);
+
   const rawPhysiqueOptions  = getPhysiqueOptions(rawGender);
   const rawHairStyleOptions = getHairStyleOptions(rawGender);
   const rawClothingOptions  = getClothingOptions(rawGender);
@@ -244,7 +308,8 @@ export function ShootBuilder({
             { startsAfterIdentity: true }
           );
           if (referenceBlock) positivePrompt += `\n\n${referenceBlock}`;
-          const result = await characterGenerate({
+          const identityCreatorId = canonicalCreatorId(creator);
+          const submitted = await characterGenerate({
             engineId: engine,
             positivePrompt,
             negativePrompt: STANDARD_NEGATIVE,
@@ -257,8 +322,9 @@ export function ShootBuilder({
               : allImages,
             mode: identityMode,
             batchSize,
-            creatorId: canonicalCreatorId(creator),
+            creatorId: identityCreatorId,
           });
+          const result = await awaitCastQuickShootResult(submitted, identityCreatorId);
           images = result.images || [];
         } else {
           // No reference photo — nothing to identity-lock against, but the
@@ -302,7 +368,7 @@ export function ShootBuilder({
         if (referenceBlock) positivePrompt += `\n\n${referenceBlock}`;
         const referenceImages = shotReferences.map(reference => reference.dataUrl);
         const result = referenceImages.length
-          ? await characterGenerate({
+          ? await awaitCastQuickShootResult(await characterGenerate({
               engineId: engine,
               positivePrompt,
               negativePrompt: STANDARD_NEGATIVE,
@@ -310,7 +376,7 @@ export function ShootBuilder({
               anchorImages: referenceImages.slice(1),
               mode: identityMode,
               batchSize,
-            })
+            }), null)
           : await generateImage({
               engine: 'OpenAI Image',
               positivePrompt,

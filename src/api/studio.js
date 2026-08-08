@@ -268,6 +268,12 @@ function relativizeUrl(url) {
 }
 
 // Uses /run/analyze_character — in Gradio 6.x the URL path IS the api_name.
+// Identity-locked Quick Shoot is asynchronous in cloud mode: the initial
+// submit only starts a background provider job and returns { status:
+// 'pending', jobId } — it never returns images directly. Callers must poll
+// pollCastQuickShootStatus(jobId) until status is 'succeeded' or 'failed'.
+// (Not renamed to keep the local-Gradio call signature/behavior below
+// unchanged — that path is still synchronous.)
 export async function characterGenerate({ engineId, positivePrompt, negativePrompt, characterImage, anchorImages = [], mode = 'lifestyle', imageSize = 'Vertical 9:16', batchSize = 1, creatorId = null }) {
   if (hasSupabaseConfig()) {
     const data = await invokeCastFunction('cast-quick-shoot', {
@@ -278,8 +284,15 @@ export async function characterGenerate({ engineId, positivePrompt, negativeProm
       anchorImages,
       batchSize,
     });
-    const images = await signCastAssets('generation-assets', data.assets);
-    return { images, summary: data.summary || '' };
+    if (data.status === 'succeeded') {
+      const images = await signCastAssets('generation-assets', data.assets);
+      return { status: 'succeeded', images, summary: data.summary || '' };
+    }
+    if (data.status === 'failed' || data.status === 'cancelled') {
+      throw new Error(data.error || 'Generation failed.');
+    }
+    // status: 'pending' — background job submitted or resumed, no image yet.
+    return { status: 'pending', jobId: data.jobId, images: [] };
   }
   const raw = await callNamedEndpoint('character_generate', [
     JSON.stringify({ engineId, positivePrompt, negativePrompt, imageSize, batchSize, anchorImages, mode }),
@@ -292,7 +305,29 @@ export async function characterGenerate({ engineId, positivePrompt, negativeProm
   parsed.images = (parsed.images || []).map(url =>
     url.startsWith('data:') ? url : url.replace(/^https?:\/\/127\.0\.0\.1:\d+\/gradio_api/, '/gradio_api')
   );
+  parsed.status = 'succeeded';
   return parsed;
+}
+
+// Polls an async cast-quick-shoot job started by characterGenerate() in
+// cloud mode. Always a plain GET-equivalent invoke — can never submit a new
+// generation, so it's safe to call repeatedly (a timer loop, a duplicate
+// call, or resuming after a page refresh).
+export async function pollCastQuickShootStatus(jobId) {
+  // Not invokeCastFunction: a 'failed' status is a legitimate structured
+  // response here (the job failed, the poll call itself succeeded) — that
+  // helper's generic `if (data.error) throw` would turn an expected failed
+  // status into an unhandled exception instead of a normal poll result.
+  const { data, error } = await getSupabase().functions.invoke('cast-quick-shoot-status', { body: { jobId } });
+  if (error) throw new Error(error.message || 'cast-quick-shoot-status failed.');
+  if (data.status === 'succeeded') {
+    const images = await signCastAssets('generation-assets', data.assets);
+    return { status: 'succeeded', images, summary: data.summary || '' };
+  }
+  if (data.status === 'failed' || data.status === 'cancelled') {
+    return { status: 'failed', error: data.error || 'Generation failed.' };
+  }
+  return { status: 'pending' };
 }
 
 // Cast Quick Shoot's no-reference fallback. Deliberately separate from the
@@ -307,7 +342,7 @@ export async function castQuickShootPlain({ positivePrompt, negativePrompt, batc
     batchSize,
   });
   const images = await signCastAssets('generation-assets', data.assets);
-  return { images, summary: data.summary || '' };
+  return { status: 'succeeded', images, summary: data.summary || '' };
 }
 
 export async function analyzeCharacterImage(imageDataUrl) {

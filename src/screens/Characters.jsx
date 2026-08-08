@@ -19,6 +19,7 @@ import { canonicalCreatorId } from '../lib/cloudCreators.js';
 import { linkCastCreatorToCloud } from '../lib/castCreatorSync.js';
 import { loadCharacters } from '../lib/creatorCache.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { buildEditingDraft, resolveEditingDraft } from '../lib/creatorEditingDraft.js';
 import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 import { useProduction } from '../context/ProductionContext.jsx';
@@ -487,11 +488,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
   };
 
   const handleEdit = (char) => {
-    // Migrate legacy single image to refImages array
-    const refImages = char.refImages?.length
-      ? char.refImages
-      : char.image ? [char.image] : [];
-    setEditing({ name: char.name, refImages, faceAnchor: char.faceAnchor || '', fields: { ...char.fields } });
+    setEditing(buildEditingDraft(char));
     setActiveId(char.id);
     setAnalyzeError('');
     setSaveError('');
@@ -571,6 +568,13 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     });
   };
 
+  // `ed` is null whenever an upload is triggered while viewing a saved
+  // creator that isn't in edit mode yet (an empty reference slot is
+  // clickable directly from the view — see RefImageSlot below, which isn't
+  // gated by `editing` the way the primary-portrait click is). resolveEditingDraft
+  // never returns null: it seeds from the active saved creator (preserving
+  // its existing references) so this transparently enters edit mode instead
+  // of crashing on `ed.refImages` or silently discarding the upload.
   const handlePrimaryUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -578,10 +582,10 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     reader.onload = async ev => {
       const original = ev.target.result;
       const compressed = await compressImage(original);
-      setEditing(ed => ({
-        ...ed,
-        refImages: [compressed, ...(ed.refImages || []).slice(1)],
-      }));
+      setEditing(ed => {
+        const base = resolveEditingDraft(ed, active);
+        return { ...base, refImages: [compressed, ...(base.refImages || []).slice(1)] };
+      });
       // Deliberately do not analyze here. Users add the whole reference set,
       // then explicitly analyze it once; a lone headshot must not fill fields.
     };
@@ -594,9 +598,10 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     reader.onload = async ev => {
       const compressed = await compressImage(ev.target.result);
       setEditing(ed => {
-        const imgs = [...(ed.refImages || [])];
+        const base = resolveEditingDraft(ed, active);
+        const imgs = [...(base.refImages || [])];
         imgs[index] = compressed;
-        return { ...ed, refImages: imgs };
+        return { ...base, refImages: imgs };
       });
     };
     reader.readAsDataURL(file);
@@ -609,9 +614,10 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
       confirmLabel: 'Remove',
       onConfirm: () => {
         setEditing(ed => {
-          const imgs = [...(ed.refImages || [])];
+          const base = resolveEditingDraft(ed, active);
+          const imgs = [...(base.refImages || [])];
           imgs.splice(index, 1);
-          return { ...ed, refImages: imgs };
+          return { ...base, refImages: imgs };
         });
         setConfirm(null);
       },

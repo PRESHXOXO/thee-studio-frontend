@@ -16,8 +16,10 @@ import { compressImage, normalizeImageForVision } from '../lib/imageUtils.js';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
 import { persistCloudDocument } from '../lib/cloudStore.js';
 import { canonicalCreatorId } from '../lib/cloudCreators.js';
+import { linkCastCreatorToCloud } from '../lib/castCreatorSync.js';
 import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
+import { useProduction } from '../context/ProductionContext.jsx';
 
 // Starter archetypes for the empty-cast state — no fake portraits to seed
 // with, so these hand off to New Creator with niche/energy pre-filled
@@ -246,6 +248,7 @@ function CreatorCard({ char, selected, onClick, onDelete }) {
 }
 
 export function Characters({ initialCharacter, initialImportRequest, onCharacterChange, onNav }) {
+  const { repository } = useProduction();
   const [characters, setCharacters] = React.useState(loadCharacters);
   const [activeId, setActiveId]     = React.useState(() => resolveActiveCreator(loadCharacters())?.id ?? null);
   const [editing, setEditing]       = React.useState(null);
@@ -318,7 +321,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     if (initialImportRequest) setImportOpen(true);
   }, [initialImportRequest]);
 
-  const analyzeReferenceSet = async (imageDataUrls, creatorId = null) => {
+  const analyzeReferenceSet = async (imageDataUrls) => {
     const images = Array.isArray(imageDataUrls) ? imageDataUrls : [imageDataUrls];
     // Do not pass normalizeImageForVision directly to map: map's index would
     // become maxPx, shrinking the first five references to 1–4 pixels.
@@ -329,9 +332,16 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
 
     // Cloud mode: analyzeCharacterReferences already folds identity-anchor
     // extraction into the same call (one billable vision request instead of
-    // two) and returns it as `.faceAnchor`.
+    // two) and returns it as `.faceAnchor`. `creatorId` is accepted but
+    // deliberately unused here: passing it switches the cloud function to a
+    // server-resolve-by-creatorId mode that reads creator_reference_assets —
+    // Cast's own reference images are never uploaded there (they live in the
+    // local characters array / studio_documents blob), so that path would
+    // find nothing and fail with "no saved reference images yet" even though
+    // the user just uploaded them. Always analyze the images the user
+    // actually supplied.
     if (hasSupabaseConfig()) {
-      const result = await analyzeCharacterReferences(visionImages, { creatorId });
+      const result = await analyzeCharacterReferences(visionImages);
       return { result, faceAnchor: result.faceAnchor || '' };
     }
 
@@ -346,12 +356,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     setAnalyzing(true);
     setAnalyzeError('');
     try {
-      // Only a creator that has already been saved (has an id, i.e. we're
-      // re-analyzing via handleEdit/activeId) can be resolved server-side;
-      // an in-progress/unsaved draft sends its freshly-uploaded reference
-      // images directly instead (see analyzeReferenceSet).
-      const creatorId = active ? canonicalCreatorId(active) : null;
-      const { result, faceAnchor } = await analyzeReferenceSet(imageDataUrls, creatorId);
+      const { result, faceAnchor } = await analyzeReferenceSet(imageDataUrls);
       setEditing(ed => ({
         ...(ed || currentEditing),
         faceAnchor: faceAnchor || ed?.faceAnchor || '',
@@ -475,7 +480,7 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     setSaveError('');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editing) return;
     setSaveError('');
     // Require a real name — blocks the old "New Creator" placeholder from
@@ -515,6 +520,23 @@ export function Characters({ initialCharacter, initialImportRequest, onCharacter
     setEditing(null);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+
+    // Best-effort: link this Cast creator to a real cloud `creators` row so
+    // Quick Shoot / Build Reference Set / future cloud workflows have a
+    // genuine ownable UUID instead of the local Date.now() id. Never blocks
+    // or unwinds the local save above, which has already committed.
+    try {
+      const linked = await linkCastCreatorToCloud(repository, updated, savedId);
+      if (linked && linked.id !== updated.find(c => c.id === savedId)?.cloudCreatorId) {
+        setCharacters(current => {
+          const relinked = current.map(c => c.id === savedId ? { ...c, cloudCreatorId: linked.id } : c);
+          saveCharacters(relinked);
+          return relinked;
+        });
+      }
+    } catch (error) {
+      console.warn('Cloud creator link failed — Cast creator remains usable locally:', error);
+    }
   };
 
   const handleDelete = (id) => {

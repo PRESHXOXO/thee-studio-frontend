@@ -641,6 +641,11 @@ export function ShootBuilder({
           <Icon name="zap" size={15} /> {generating ? 'Generating…' : 'Build + Generate'}
         </Button>
         <GenerationProgress active={generating} identityLocked={!!creator?.locked} engine={engine} batchSize={batchSize} />
+        {creator && hasSupabaseConfig() && !canonicalCreatorId(creator) && (
+          <p style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', margin: 0 }}>
+            This creator isn't cloud-linked yet, so this shoot won't be saved to their profile history.
+          </p>
+        )}
       </div>
 
       {genError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>}

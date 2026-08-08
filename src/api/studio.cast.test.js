@@ -82,4 +82,19 @@ describe('Cast cloud workflows never call local Gradio', () => {
     expect(result.images).toEqual(['https://signed.example/asset.png']);
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  // Regression for the 2026-08-08 staging incident: a Cast Quick Shoot
+  // request appeared in telemetry shortly after an Analyze Complete Set
+  // call. analyzeCharacterReferences() must never call cast-quick-shoot
+  // (or any other Cast function) — it is the only Cast workflow function
+  // Characters.jsx's "Analyze Complete Set" button invokes.
+  it('analyzeCharacterReferences never invokes cast-quick-shoot or any other Cast function', async () => {
+    invoke.mockResolvedValueOnce({ data: { profile: { face: 'x' }, identityAnchor: 'A description with spaces.' }, error: null });
+    await analyzeCharacterReferences([PIXEL]);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith('cast-analyze-references', expect.anything());
+    const calledFunctionNames = invoke.mock.calls.map(call => call[0]);
+    expect(calledFunctionNames).not.toContain('cast-quick-shoot');
+    expect(calledFunctionNames).not.toContain('cast-generate-reference-set');
+  });
 });

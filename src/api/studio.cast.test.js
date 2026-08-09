@@ -25,7 +25,7 @@ afterAll(() => {
   global.fetch = originalFetch;
 });
 
-import { analyzeCharacterReferences, characterGenerate, generateReferenceSet, castQuickShootPlain, extractFaceAnchor, pollCastQuickShootStatus } from './studio.js';
+import { analyzeCharacterReferences, characterGenerate, generateReferenceSet, castQuickShootPlain, extractFaceAnchor, pollCastQuickShootStatus, preflightCastReferences } from './studio.js';
 
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/6ZcmWQAAAABJRU5ErkJggg==';
 
@@ -134,6 +134,15 @@ describe('Cast cloud workflows never call local Gradio', () => {
     const result = await castQuickShootPlain({ positivePrompt: 'p' });
     expect(invoke).toHaveBeenCalledWith('cast-quick-shoot', expect.objectContaining({ body: expect.objectContaining({ creatorId: null, characterImage: null }) }));
     expect(result.images.length).toBe(1);
+  });
+
+  it('preflightCastReferences calls cast-reference-preflight and never touches OpenAI/gradio', async () => {
+    const sanitizedReport = { references: [{ index: 0, mime: 'image/png', byteLength: 100, width: 1, height: 1, valid: true, reason: null }], dedupedCount: 1, cappedCount: 1, allValid: true };
+    invoke.mockResolvedValueOnce({ data: sanitizedReport, error: null });
+    const result = await preflightCastReferences([PIXEL], 'creator-1');
+    expect(invoke).toHaveBeenCalledWith('cast-reference-preflight', expect.objectContaining({ body: { creatorId: 'creator-1', references: [PIXEL] } }));
+    expect(result).toEqual(sanitizedReport);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('generateReferenceSet requires a saved creatorId in cloud mode', async () => {

@@ -6,7 +6,7 @@ import { GenerationProgress } from '../feedback/GenerationProgress.jsx';
 import { ImageLightbox } from '../feedback/ImageLightbox.jsx';
 import { Select } from '../forms/Select.jsx';
 import { ReferenceImageTray } from '../director/ReferenceImageTray.jsx';
-import { castQuickShootPlain, characterGenerate, generateImage, pollCastQuickShootStatus } from '../../api/studio.js';
+import { castQuickShootPlain, characterGenerate, generateImage, pollCastQuickShootStatus, preflightCastReferences } from '../../api/studio.js';
 import { hasSupabaseConfig } from '../../lib/supabase.js';
 import { canonicalCreatorId } from '../../lib/cloudCreators.js';
 import { buildCharacterPrompt } from '../../lib/characterPrompt.js';
@@ -178,8 +178,27 @@ export function ShootBuilder({
   const [genError, setGenError]     = React.useState('');
   const [lightboxSrc, setLightboxSrc] = React.useState(null);
   const [anchorSaved, setAnchorSaved] = React.useState(false);
+  const [preflightResult, setPreflightResult] = React.useState(null);
+  const [preflighting, setPreflighting] = React.useState(false);
 
   const allImages = getAllImages(creator);
+
+  // Staging debug tool: validates the currently-selected reference images
+  // (MIME/signature/size/dimensions) without ever calling OpenAI. Lets a
+  // suspect reference be diagnosed before spending a real provider request.
+  async function runReferencePreflight() {
+    if (!hasSupabaseConfig() || !allImages.length) return;
+    setPreflighting(true);
+    setPreflightResult(null);
+    try {
+      const result = await preflightCastReferences(allImages, canonicalCreatorId(creator));
+      setPreflightResult(result);
+    } catch (error) {
+      setPreflightResult({ error: error.message || 'Preflight failed.' });
+    } finally {
+      setPreflighting(false);
+    }
+  }
 
   const creatorIdRef = React.useRef(creator?.id ?? null);
 
@@ -649,6 +668,18 @@ export function ShootBuilder({
       </div>
 
       {genError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>}
+      {import.meta.env.DEV && hasSupabaseConfig() && allImages.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <Button variant="secondary" onClick={runReferencePreflight} loading={preflighting} disabled={preflighting}>
+            Check References (staging debug — no provider call)
+          </Button>
+          {preflightResult && (
+            <pre style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', whiteSpace: 'pre-wrap', margin: 0 }}>
+              {JSON.stringify(preflightResult, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
       {anchorSaved && (
         <div style={{ font: 'var(--text-sm)', color: 'var(--accent-deep)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <Icon name="check" size={14} /> Saved as anchor photo!

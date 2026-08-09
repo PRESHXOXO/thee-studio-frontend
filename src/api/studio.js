@@ -337,6 +337,14 @@ export async function pollCastQuickShootStatus(jobId) {
   return { status: 'pending' };
 }
 
+// Validates reference images WITHOUT ever calling a provider — same
+// dedupe/cap/decoding rules cast-quick-shoot applies, plus MIME/signature/
+// dimension checks. Staging debug tool for diagnosing a Quick Shoot
+// identity call before spending a real provider request on it.
+export async function preflightCastReferences(references, creatorId = null) {
+  return invokeCastFunction('cast-reference-preflight', { creatorId, references });
+}
+
 // Cast Quick Shoot's no-reference fallback. Deliberately separate from the
 // general-purpose generateImage() below (used by other, out-of-scope
 // screens) so this Cast migration doesn't reroute unrelated call sites.

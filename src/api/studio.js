@@ -325,7 +325,14 @@ export async function pollCastQuickShootStatus(jobId) {
     return { status: 'succeeded', images, summary: data.summary || '' };
   }
   if (data.status === 'failed' || data.status === 'cancelled') {
-    return { status: 'failed', error: data.error || 'Generation failed.' };
+    // The backend now always returns a normalized, sanitized message — never
+    // raw provider JSON. Fall back to an honest "no reason given" string
+    // rather than a generic one if somehow neither is present.
+    return {
+      status: 'failed',
+      error: data.error || 'Image generation failed. The provider did not return a specific reason.',
+      errorCategory: data.errorCategory || 'unknown',
+    };
   }
   return { status: 'pending' };
 }

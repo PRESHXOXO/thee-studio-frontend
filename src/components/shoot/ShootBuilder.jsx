@@ -62,7 +62,7 @@ async function awaitCastQuickShootResult(result, creatorId) {
       await new Promise(resolve => setTimeout(resolve, QUICK_SHOOT_POLL_INTERVAL_MS));
       const polled = await pollCastQuickShootStatus(result.jobId);
       if (polled.status === 'succeeded') return polled;
-      if (polled.status === 'failed') throw new Error(polled.error || 'Generation failed.');
+      if (polled.status === 'failed') throw new Error(polled.error || 'Image generation failed. The provider did not return a specific reason.');
     }
     throw new Error('Generation is taking longer than expected. It may still finish — check back shortly.');
   } finally {

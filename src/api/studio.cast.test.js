@@ -97,10 +97,26 @@ describe('Cast cloud workflows never call local Gradio', () => {
       expect(result.images).toEqual(['https://signed.example/asset.png']);
     });
 
-    it('reports failed without throwing, carrying the server error message', async () => {
-      invoke.mockResolvedValueOnce({ data: { status: 'failed', error: 'Provider terminal status: cancelled' }, error: null });
+    it('reports failed without throwing, carrying the server error message and category', async () => {
+      invoke.mockResolvedValueOnce({ data: { status: 'failed', error: 'Image generation was blocked by content safety review.', errorCategory: 'safety_moderation' }, error: null });
       const result = await pollCastQuickShootStatus('job-123');
-      expect(result).toEqual({ status: 'failed', error: 'Provider terminal status: cancelled' });
+      expect(result).toEqual({ status: 'failed', error: 'Image generation was blocked by content safety review.', errorCategory: 'safety_moderation' });
+    });
+
+    // Regression: never fabricate a specific-sounding reason when the
+    // provider gave none — the honest unknown-failure fallback must show.
+    it('falls back to the honest unknown-failure message when the server omits error/errorCategory entirely', async () => {
+      invoke.mockResolvedValueOnce({ data: { status: 'failed' }, error: null });
+      const result = await pollCastQuickShootStatus('job-123');
+      expect(result.error).toBe('Image generation failed. The provider did not return a specific reason.');
+      expect(result.errorCategory).toBe('unknown');
+    });
+
+    it('never surfaces raw provider JSON to the caller — only the normalized message string', async () => {
+      invoke.mockResolvedValueOnce({ data: { status: 'failed', error: 'The provider had an internal error.', errorCategory: 'provider_internal' }, error: null });
+      const result = await pollCastQuickShootStatus('job-123');
+      expect(typeof result.error).toBe('string');
+      expect(result.error).not.toContain('{');
     });
 
     it('repeated polling of the same job never calls fetch (no gradio/localhost/provider leak from the client)', async () => {

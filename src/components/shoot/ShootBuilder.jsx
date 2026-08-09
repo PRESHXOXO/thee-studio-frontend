@@ -7,7 +7,8 @@ import { ImageLightbox } from '../feedback/ImageLightbox.jsx';
 import { Select } from '../forms/Select.jsx';
 import { ReferenceImageTray } from '../director/ReferenceImageTray.jsx';
 import { castQuickShootPlain, characterGenerate, generateImage, pollCastQuickShootStatus, preflightCastReferences } from '../../api/studio.js';
-import { hasSupabaseConfig } from '../../lib/supabase.js';
+import { hasSupabaseConfig, isStagingSupabaseProject } from '../../lib/supabase.js';
+import { fetchAdminAccess } from '../../api/adminTelemetry.js';
 import { canonicalCreatorId } from '../../lib/cloudCreators.js';
 import { buildCharacterPrompt } from '../../lib/characterPrompt.js';
 import { saveToLibrary } from '../../lib/library.js';
@@ -180,12 +181,27 @@ export function ShootBuilder({
   const [anchorSaved, setAnchorSaved] = React.useState(false);
   const [preflightResult, setPreflightResult] = React.useState(null);
   const [preflighting, setPreflighting] = React.useState(false);
+  const [canPreflight, setCanPreflight] = React.useState(false);
 
   const allImages = getAllImages(creator);
 
-  // Staging debug tool: validates the currently-selected reference images
-  // (MIME/signature/size/dimensions) without ever calling OpenAI. Lets a
-  // suspect reference be diagnosed before spending a real provider request.
+  // Owner-only staging diagnostic: server-authoritative admin check (never
+  // trust a client-side role flag) gated additionally on this build actually
+  // being wired to the staging Supabase project — never production, never a
+  // customer account, regardless of environment.
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!hasSupabaseConfig() || !isStagingSupabaseProject()) return;
+    fetchAdminAccess().then(access => {
+      if (!cancelled) setCanPreflight(access.allowed);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Staging owner-only debug tool: validates the currently-selected
+  // reference images (MIME/signature/size/dimensions) without ever calling
+  // OpenAI. Lets a suspect reference be diagnosed before spending a real
+  // provider request.
   async function runReferencePreflight() {
     if (!hasSupabaseConfig() || !allImages.length) return;
     setPreflighting(true);
@@ -668,7 +684,7 @@ export function ShootBuilder({
       </div>
 
       {genError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>}
-      {import.meta.env.DEV && hasSupabaseConfig() && allImages.length > 0 && (
+      {canPreflight && allImages.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <Button variant="secondary" onClick={runReferencePreflight} loading={preflighting} disabled={preflighting}>
             Check References (staging debug — no provider call)

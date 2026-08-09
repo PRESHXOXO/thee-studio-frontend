@@ -25,6 +25,18 @@ export function hasSupabaseConfig() {
   return supabaseConfig.configured;
 }
 
+// Staging project ref, extracted from the standard Supabase URL shape
+// (https://<ref>.supabase.co). Used to gate staging-only diagnostic UI —
+// stronger than a hostname check since it verifies which Supabase *backend*
+// this build is actually wired to, not just where the page happens to be
+// served from.
+const STAGING_PROJECT_REF = 'qkrmkoixgznvxbcljmsx';
+
+export function isStagingSupabaseProject(env = import.meta.env) {
+  const { url } = readSupabaseConfig(env);
+  return url.includes(`${STAGING_PROJECT_REF}.supabase.co`);
+}
+
 export function getSupabase() {
   if (!supabase) throw new Error('Missing browser-safe Supabase configuration.');
   return supabase;

@@ -1,7 +1,8 @@
-// Downscale + re-encode an image as JPEG to keep payload sizes sane.
-// Generated images can be same-origin URLs, not only data URLs. Fetch those
-// into a blob first so canvas export cannot hang on a SecurityError.
-export async function compressImage(src, maxPx = 768, quality = 0.92) {
+// Downscale + re-encode an image as JPEG to keep browser/cache payload sizes
+// bounded without throwing away generation-critical identity detail. Creator
+// references feed 1024×1536 image edits, so a 768px ceiling made legacy Cast
+// photos behave like thumbnails and could produce visibly soft results.
+export async function compressImage(src, maxPx = 1536, quality = 0.95) {
   let imageSrc = src;
   let objectUrl = null;
 

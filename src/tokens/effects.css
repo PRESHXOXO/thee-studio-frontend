@@ -1,30 +1,25 @@
-/* Thee Studio™ — Shadows, transitions, focus (Miami Sunset) */
+/* Thee Studio™ — Shadows, transitions, focus */
 :root {
-  /* ---- Shadows — deep, soft, cinematic ---- */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.40);
-  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.50);
-  --shadow-lg: 0 22px 56px rgba(0, 0, 0, 0.60);
-  --shadow-coral: 0 8px 26px rgba(255, 46, 126, 0.32); /* hot pink glow */
-  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  /* Quiet editorial depth: surfaces separate by material and spacing first,
+     shadows second. Nothing should look like a floating SaaS card stack. */
+  --shadow-xs: 0 1px 2px rgba(31, 24, 20, 0.05);
+  --shadow-sm: 0 6px 18px rgba(31, 24, 20, 0.07);
+  --shadow-md: 0 16px 42px rgba(31, 24, 20, 0.10);
+  --shadow-lg: 0 28px 72px rgba(31, 24, 20, 0.13);
+  --shadow-xl: 0 36px 96px rgba(31, 24, 20, 0.16);
+  --shadow-coral: 0 12px 34px rgba(233, 74, 114, 0.18);
+  --shadow-inset: inset 0 1px 2px rgba(31, 24, 20, 0.06);
 
-  /* ---- Transitions ---- */
-  --ease: cubic-bezier(0.22, 0.61, 0.36, 1); /* @kind other */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* @kind other */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --t-fast: 120ms var(--ease);
   --t-base: 200ms var(--ease);
   --t-slow: 360ms var(--ease-out);
 
-  /* ---- Focus ring — hot pink ---- */
-  --focus-ring: 0 0 0 3px rgba(255, 46, 126, 0.40);
+  --focus-ring: 0 0 0 3px rgba(255, 98, 62, 0.16);
 
-  /* ---- Card depth by content type ----
-     Image-forward content (creator photos, reference thumbnails, library
-     media) gets resting depth that steps up on select/hover. Data/nav
-     surfaces (stat pills, quick actions, picker containers) stay flat —
-     the contrast is deliberate, not an oversight. */
-  --depth-media-rest:  var(--shadow-xs);
+  --depth-media-rest:   var(--shadow-xs);
   --depth-media-active: var(--shadow-sm);
-  --depth-media-hover: var(--shadow-md);
+  --depth-media-hover:  var(--shadow-md);
   --depth-flat: none;
 }

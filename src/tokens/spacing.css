@@ -1,6 +1,5 @@
 /* Thee Studio™ — Spacing, radii, layout tokens */
 :root {
-  /* ---- Spacing scale (4px base) ---- */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -12,25 +11,21 @@
   --space-9: 56px;
   --space-10: 72px;
 
-  /* ---- Radii — rounded but not bubbly ---- */
-  --radius-sm: 8px;   /* chips, small controls */
-  --radius-md: 12px;  /* buttons, inputs */
-  --radius-lg: 16px;  /* cards */
-  --radius-xl: 22px;  /* feature cards, panels */
+  /* Premier UI uses restrained rounding: soft where content is tactile,
+     squarer where a panel should read like studio architecture. */
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
   --radius-pill: 999px;
   --radius-round: 50%;
 
-  /* ---- Layout ---- */
-  --sidebar-w: 248px;
-  --topbar-h: 64px;
-  --content-max: 1180px;
-  --gutter: 28px;
+  /* Wider creative canvas, narrower command rail. */
+  --sidebar-w: 224px;
+  --topbar-h: 68px;
+  --content-max: 1440px;
+  --gutter: 36px;
 
-  /* ---- Card grid gaps — one scale, by content density, not per-screen ----
-     Standard content-card grids (Scenes, Campaigns, Quick Actions,
-     pipeline tiles) share one gap so rhythm doesn't drift screen to
-     screen. Media grids (Library, Cast roster) run slightly looser since
-     the cards themselves carry more visual weight. */
-  --grid-gap-card: var(--space-5);   /* 20px */
-  --grid-gap-media: var(--space-5);  /* 20px */
+  --grid-gap-card: var(--space-6);
+  --grid-gap-media: var(--space-6);
 }

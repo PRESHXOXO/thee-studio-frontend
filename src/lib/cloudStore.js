@@ -39,6 +39,7 @@ async function migrateLegacyCastReferences(db, userId, epoch) {
     return;
   }
   if (!Array.isArray(creators) || !creators.length) return;
+
   const legacyWithImages = creators.filter(creator =>
     creator && (
       (Array.isArray(creator.refImages) && creator.refImages.some(image => typeof image === 'string' && image.startsWith('data:image/')))
@@ -51,13 +52,36 @@ async function migrateLegacyCastReferences(db, userId, epoch) {
     const repository = new SupabasePipelineRepository(db, userId);
     await repository.syncStudioCreators(creators);
     const cloudCreators = await repository.listCreators();
+    const cloudBySavedId = new Map();
+
     for (const source of legacyWithImages) {
       if (runtime?.epoch !== epoch || runtime?.userId !== userId) return;
       const cloudCreator = cloudCreators.find(item => String(item.studio_source_id) === String(source.id))
         || cloudCreators.find(item => item.name?.trim().toLowerCase() === source.name?.trim().toLowerCase());
       if (!cloudCreator) continue;
       await syncCastReferencesToCloud(repository, source, cloudCreator, source.id);
+      cloudBySavedId.set(String(source.id), cloudCreator.id);
     }
+
+    // Canonical storage is only half the migration: legacy Cast objects must
+    // also learn their real UUID or downstream generation continues treating
+    // them as anonymous legacy creators. Persist this mapping back into the
+    // account-scoped ts_characters cloud document so every browser/device
+    // resolves the same creator after the first successful self-heal.
+    let mappingChanged = false;
+    const reconciledCreators = creators.map(creator => {
+      const cloudCreatorId = cloudBySavedId.get(String(creator.id));
+      if (!cloudCreatorId || creator.cloudCreatorId === cloudCreatorId) return creator;
+      mappingChanged = true;
+      return { ...creator, cloudCreatorId };
+    });
+
+    if (mappingChanged && runtime?.epoch === epoch && runtime?.userId === userId) {
+      const value = JSON.stringify(reconciledCreators);
+      localStorage.setItem('ts_characters', value);
+      await writeDocument('ts_characters', value, runtime);
+    }
+
     announceSync('thee:cloud-sync-ok', { key: 'creator_reference_assets' });
   } catch (error) {
     // Migration is a background self-heal and must never block authentication.

@@ -1,10 +1,14 @@
 import React from 'react';
 
 // Premier surface system: static panels read like studio architecture rather
-// than floating dashboard cards. Interactive/media cards keep a restrained
-// lift so there is still clear affordance where something can be opened.
+// than floating dashboard cards. Generation Canvas/Output cards become a dark
+// proofing stage so imagery — not UI chrome — carries the visual hierarchy.
 export function Card({ children, variant = 'default', style, onClick, className }) {
   const interactive = Boolean(onClick);
+  const childArray = React.Children.toArray(children);
+  const firstChildText = childArray[0]?.props?.children;
+  const isProofStage = !interactive && (firstChildText === 'Canvas' || firstChildText === 'Output');
+
   const variants = {
     default: {
       background: 'var(--surface-card)',
@@ -27,7 +31,23 @@ export function Card({ children, variant = 'default', style, onClick, className 
       boxShadow: 'none',
     },
   };
-  const cls = [interactive ? 'ts-card' : 'ts-static-card', className].filter(Boolean).join(' ') || undefined;
+
+  const proofStageStyle = isProofStage ? {
+    background: 'linear-gradient(155deg, #1D1921 0%, #121014 100%)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    boxShadow: '0 28px 70px rgba(27,20,28,0.18)',
+    '--text-strong': '#FFFFFF',
+    '--text-body': 'rgba(255,255,255,0.78)',
+    '--text-muted': 'rgba(255,255,255,0.56)',
+    '--text-faint': 'rgba(255,255,255,0.36)',
+    '--border': 'rgba(255,255,255,0.11)',
+    '--border-strong': 'rgba(255,255,255,0.18)',
+    '--surface-sunken': 'rgba(255,255,255,0.055)',
+    '--surface-inset': 'rgba(255,255,255,0.055)',
+    '--white': 'rgba(255,255,255,0.06)',
+  } : null;
+
+  const cls = [interactive ? 'ts-card' : 'ts-static-card', isProofStage ? 'ts-proof-stage' : null, className].filter(Boolean).join(' ') || undefined;
   return (
     <div
       onClick={onClick}
@@ -37,6 +57,7 @@ export function Card({ children, variant = 'default', style, onClick, className 
         padding: 24,
         cursor: interactive ? 'pointer' : 'default',
         ...variants[variant] || variants.default,
+        ...proofStageStyle,
         ...style,
       }}
     >

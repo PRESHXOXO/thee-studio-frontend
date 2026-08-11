@@ -32,11 +32,29 @@ import { ForgotPassword } from './screens/ForgotPassword.jsx';
 import { ResetPassword } from './screens/ResetPassword.jsx';
 import { Plans } from './screens/Plans.jsx';
 
+function useMediaQuery(query) {
+  const read = React.useCallback(() => (
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia(query).matches
+      : false
+  ), [query]);
+  const [matches, setMatches] = React.useState(read);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener?.('change', update);
+    return () => media.removeEventListener?.('change', update);
+  }, [query]);
+
+  return matches;
+}
+
 function RequireAuth({ children }) {
   const auth = useAuth();
-  if (auth.loading) {
-    return <AccessScreen title="Opening your studio…" loading />;
-  }
+  if (auth.loading) return <AccessScreen title="Opening your studio…" loading />;
   if (!auth.session) return <Navigate to="/login" replace state={{ from: `${window.location.pathname}${window.location.search}` }} />;
   return children;
 }
@@ -46,6 +64,7 @@ function RequireProductAccess({ children }) {
   const accessState = useStudioAccess(auth.session?.raw ?? null, auth.client);
   const location = useLocation();
   const view = accessView(accessState.access, accessState.error);
+
   React.useEffect(() => {
     if (new URLSearchParams(location.search).get('checkout') !== 'success' || view.state === 'allowed') return undefined;
     let checks = 0;
@@ -72,11 +91,6 @@ function RequireProductAccess({ children }) {
   return children(accessState.access);
 }
 
-// URL slug -> internal screen id. Accepts both the friendly label form used in
-// the UI (cast, new-creator, engine-library) and the raw nav id, so direct
-// navigation and refresh resolve to the right screen instead of the landing
-// page. Screens are state-switched (no per-screen route existed before), so
-// these slugs are what makes them deep-linkable.
 const SLUG_TO_ID = {
   home: 'home', studio: 'home',
   cast: 'characters', characters: 'characters',
@@ -102,11 +116,7 @@ function slugToScreenId(slug) {
   return SLUG_TO_ID[String(slug).toLowerCase()] || null;
 }
 
-const DIRECTOR_MODE_TO_SLUG = {
-  guided: 'guided',
-  describe: 'describe-it',
-  talk: 'scene-flow',
-};
+const DIRECTOR_MODE_TO_SLUG = { guided: 'guided', describe: 'describe-it', talk: 'scene-flow' };
 
 function directorModeFromSlug(slug) {
   const value = String(slug || '').toLowerCase();
@@ -120,26 +130,14 @@ function directorModePath(mode) {
   return `/studio/director/${DIRECTOR_MODE_TO_SLUG[mode] || 'guided'}`;
 }
 
-// Fallback for unknown paths: a bare app slug (e.g. /cast) redirects into the
-// studio shell; anything genuinely unknown falls through to the landing page.
 function UnknownRoute() {
   const location = useLocation();
   const segments = location.pathname.split('/').filter(Boolean);
-  const seg = segments[0];
-  const id = slugToScreenId(seg);
+  const id = slugToScreenId(segments[0]);
   if (id) return <Navigate to={`/studio/${segments.join('/')}`} replace />;
   return <Navigate to="/" replace />;
 }
 
-// Prompt Lab and Scene Flow are no longer top-level nav destinations — both
-// are now input modes ("Describe It" / "Talk It Through") on the unified
-// Thee Director screen, alongside "Guided". Their screen components are
-// unchanged and still exist at src/screens/{PromptLab,SceneFlow}.jsx,
-// rendered directly by TheeDirector.jsx.
-// Nav order follows the workflow: check your Cast first, add a New Creator
-// if you need one, then shoot with Thee Director. "Creator" no longer
-// appears in two different destination names — Cast is roster/management,
-// New Creator is the identity-creation wizard, Thee Director is generation.
 const BASE_NAV = [
   { section: 'Create' },
   { id: 'home',       label: 'Studio',          icon: 'layout-dashboard' },
@@ -154,7 +152,7 @@ const BASE_NAV = [
   { id: 'library',    label: 'Library',         icon: 'folder-open' },
   { id: 'history',    label: 'History',         icon: 'history' },
   { id: 'exports',    label: 'Exports',         icon: 'download' },
-  { id: 'runs',       label: 'Jobs',             icon: 'activity' },
+  { id: 'runs',       label: 'Jobs',            icon: 'activity' },
   { id: 'settings',   label: 'Generation Settings', icon: 'settings' },
 ];
 
@@ -182,20 +180,19 @@ function StudioApp({ access }) {
   const auth = useAuth();
   const authSession = auth.session;
   const cloudMvp = isCloudMvpEnabled(import.meta.env);
+  const isMobile = useMediaQuery('(max-width: 767px)');
   const initialNav = slugToScreenId(screenSlug) || 'home';
-  const [activeNav, setActiveNav]             = React.useState(initialNav);
+
+  const [activeNav, setActiveNav] = React.useState(initialNav);
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [pendingCharacter, setPendingCharacter] = React.useState(null);
-  const [pendingDirector,  setPendingDirector]  = React.useState(null);
-  const [pendingImages,    setPendingImages]    = React.useState(null);
-  const [activeCharacter,  setActiveCharacter]  = React.useState(() => {
-    try {
-      return resolveActiveCreator(loadCharacters());
-    } catch { return null; }
+  const [pendingDirector, setPendingDirector] = React.useState(null);
+  const [pendingImages, setPendingImages] = React.useState(null);
+  const [activeCharacter, setActiveCharacter] = React.useState(() => {
+    try { return resolveActiveCreator(loadCharacters()); }
+    catch { return null; }
   });
-  // Read once at mount; the underlying ts_characters cache is already
-  // cleared+repopulated per-user on sign-in (see lib/creatorCache.js), but
-  // this in-memory Sidebar state needs its own reset or it keeps showing the
-  // previous account's active creator until a full page reload.
+
   const activeCharacterSessionRef = React.useRef(authSession?.id ?? null);
   React.useEffect(() => {
     const nextId = authSession?.id ?? null;
@@ -203,7 +200,23 @@ function StudioApp({ access }) {
     activeCharacterSessionRef.current = nextId;
     setActiveCharacter(resolveActiveCreator(loadCharacters()));
   }, [authSession?.id]);
-  const [libCount, setLibCount]               = React.useState(() => loadLibrary().length);
+
+  React.useEffect(() => {
+    if (!isMobile) setMobileMenuOpen(false);
+  }, [isMobile]);
+
+  React.useEffect(() => {
+    if (!isMobile || !mobileMenuOpen) return undefined;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, [isMobile, mobileMenuOpen]);
+
+  React.useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  const [libCount, setLibCount] = React.useState(() => loadLibrary().length);
   const [pendingImportRequest, setPendingImportRequest] = React.useState(false);
   const [adminAccess, setAdminAccess] = React.useState({ allowed: false, role: null, checked: auth.mode !== 'cloud' });
   const routeDirectorMode = activeNav === 'director'
@@ -213,47 +226,38 @@ function StudioApp({ access }) {
   React.useEffect(() => {
     let active = true;
     if (auth.mode !== 'cloud') return undefined;
-    fetchAdminAccess().then(access => { if (active) setAdminAccess({ ...access, checked: true }); });
+    fetchAdminAccess().then(result => { if (active) setAdminAccess({ ...result, checked: true }); });
     return () => { active = false; };
   }, [auth.mode, authSession?.user?.id]);
 
-  // Refresh library count whenever user navigates (catches new saves)
   const handleNav = React.useCallback((id, data) => {
+    setMobileMenuOpen(false);
     setLibCount(loadLibrary().length);
-    // data === 'import' is a sentinel from "Import Creator" entry points
-    // (Studio Home) — distinct from the AI-builder handoff object, which
-    // carries {name, image, ...} and goes through pendingCharacter instead.
     if (id === 'characters' && data === 'import') setPendingImportRequest(true);
     else if (id === 'characters' && data) setPendingCharacter(data);
-    if (id === 'director'   && data) setPendingDirector(data);
-    if (id === 'images'     && data) setPendingImages(data);
+    if (id === 'director' && data) setPendingDirector(data);
+    if (id === 'images' && data) setPendingImages(data);
     if (id !== 'characters' || data !== 'import') setPendingImportRequest(false);
     if (id !== 'characters' || !data || data === 'import') setPendingCharacter(null);
-    if (id !== 'director'  || !data) setPendingDirector(null);
-    if (id !== 'images'    || !data) setPendingImages(null);
+    if (id !== 'director' || !data) setPendingDirector(null);
+    if (id !== 'images' || !data) setPendingImages(null);
     setActiveNav(id);
-    // Keep the URL in sync so deep-links, refresh, and back/forward work.
+
     const query = id === 'library' && data?.filter
       ? `?filter=${encodeURIComponent(data.filter)}`
       : '';
     const target = id === 'director'
-      ? directorModePath(
-          directorModeFromSlug(data?.mode || data?.settings?.workflow) || 'guided'
-        )
+      ? directorModePath(directorModeFromSlug(data?.mode || data?.settings?.workflow) || 'guided')
       : `/studio/${id}${query}`;
     navigate(target, { replace: false });
   }, [navigate]);
 
-  // Back/forward or a hand-typed /studio/<slug> changes the param — mirror it
-  // into activeNav so the rendered screen follows the URL.
   React.useEffect(() => {
     const id = slugToScreenId(screenSlug);
     if (id && id !== activeNav) setActiveNav(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screenSlug]);
 
-  // Canonical Director URLs give every input mode a refresh-safe link while
-  // retaining friendly legacy aliases such as /studio/prompt-lab.
   React.useEffect(() => {
     if (activeNav !== 'director') return;
     const canonical = directorModePath(routeDirectorMode);
@@ -273,43 +277,38 @@ function StudioApp({ access }) {
 
   const Screen = SCREENS[activeNav]?.component || StudioHome;
   const screenLabel = SCREENS[activeNav]?.label || 'Studio Home';
+  const screenProps = {
+    onNav: handleNav,
+    cloudMvp: activeNav === 'images' ? cloudMvp : false,
+    mobile: isMobile,
+  };
 
-  // Cloud mode stays enabled for New Creator's private upload workflow, but
-  // no longer shrinks the approved application shell or Studio home.
-  const screenProps = { onNav: handleNav, cloudMvp: activeNav === 'images' ? cloudMvp : false };
   if (activeNav === 'characters' && pendingCharacter) screenProps.initialCharacter = pendingCharacter;
   if (activeNav === 'characters' && pendingImportRequest) screenProps.initialImportRequest = true;
   if (activeNav === 'characters') screenProps.onCharacterChange = setActiveCharacter;
-  if (activeNav === 'library') {
-    screenProps.initialFilter = new URLSearchParams(location.search).get('filter') || 'all';
-  }
+  if (activeNav === 'library') screenProps.initialFilter = new URLSearchParams(location.search).get('filter') || 'all';
   if (activeNav === 'admin-telemetry') {
     screenProps.authorized = adminAccess.allowed;
     screenProps.accessChecked = adminAccess.checked;
     screenProps.adminRole = adminAccess.role;
   }
   if (activeNav === 'settings') screenProps.access = access;
-  if (activeNav === 'images'     && pendingImages) {
-    screenProps.initialCreatorId   = pendingImages.creatorId   || null;
-    screenProps.initialName        = pendingImages.name        || '';
-    screenProps.initialNiche       = pendingImages.niche       || '';
-    screenProps.initialVision      = pendingImages.vision      || '';
+  if (activeNav === 'images' && pendingImages) {
+    screenProps.initialCreatorId = pendingImages.creatorId || null;
+    screenProps.initialName = pendingImages.name || '';
+    screenProps.initialNiche = pendingImages.niche || '';
+    screenProps.initialVision = pendingImages.vision || '';
     screenProps.initialDescription = pendingImages.description || '';
   }
-  // Same setter as Characters' onCharacterChange — Director can change the
-  // active creator too, and the sidebar chip needs to reflect it without
-  // waiting for a nav/remount to Characters.
   if (activeNav === 'director') {
     screenProps.onActiveCreatorChange = setActiveCharacter;
     screenProps.initialMode = routeDirectorMode;
     screenProps.onModeChange = mode => navigate(directorModePath(mode), { replace: false });
   }
-  if (activeNav === 'director'   && pendingDirector) {
-    screenProps.initialScene  = pendingDirector.scene  || 'None';
+  if (activeNav === 'director' && pendingDirector) {
+    screenProps.initialScene = pendingDirector.scene || 'None';
     screenProps.initialVision = pendingDirector.vision || '';
-    screenProps.initialMode = directorModeFromSlug(
-      pendingDirector.mode || pendingDirector.settings?.workflow
-    ) || routeDirectorMode;
+    screenProps.initialMode = directorModeFromSlug(pendingDirector.mode || pendingDirector.settings?.workflow) || routeDirectorMode;
     screenProps.initialSettings = pendingDirector.settings || null;
     if (pendingDirector.campaignId) {
       screenProps.initialCampaign = {
@@ -319,9 +318,6 @@ function StudioApp({ access }) {
         creatorId: pendingDirector.creatorId ?? null,
       };
     } else if (pendingDirector.creatorId != null) {
-      // Re-run/fork handoffs (e.g. from History) carry a creator without a
-      // campaign context — pre-select it the same way, just without the
-      // pinned-campaign banner.
       screenProps.initialCreatorId = pendingDirector.creatorId;
     }
   }
@@ -331,10 +327,26 @@ function StudioApp({ access }) {
     navigate('/login', { replace: true });
   };
 
+  const topbarOffset = isMobile
+    ? 'calc(var(--topbar-h, 56px) + env(safe-area-inset-top))'
+    : 'var(--topbar-h, 56px)';
+
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--surface)' }}>
-      <Sidebar items={navItems} active={activeNav} onNavigate={handleNav} activeCharacter={activeCharacter} creatorDestination="characters" />
-      <div style={{ marginLeft: 'var(--sidebar-w, 248px)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <div style={{ minHeight: '100dvh', background: 'var(--surface)', overflowX: 'hidden' }}>
+      <Sidebar
+        items={navItems}
+        active={activeNav}
+        onNavigate={handleNav}
+        activeCharacter={activeCharacter}
+        creatorDestination="characters"
+        mobile={isMobile}
+        mobileOpen={mobileMenuOpen}
+        onMobileClose={() => setMobileMenuOpen(false)}
+      />
+      <div style={{
+        marginLeft: isMobile ? 0 : 'var(--sidebar-w, 248px)',
+        display: 'flex', flexDirection: 'column', minHeight: '100dvh', minWidth: 0,
+      }}>
         <Topbar
           context={screenLabel}
           onNav={handleNav}
@@ -343,15 +355,15 @@ function StudioApp({ access }) {
           onSignOut={handleSignOut}
           allowedNavIds={null}
           showSettings
+          mobile={isMobile}
+          onMenuClick={() => setMobileMenuOpen(true)}
           actions={
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div title="Internal access with usage tracking" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--accent-indigo-soft)', border: '1px solid var(--border)', font: '600 0.75rem/1 var(--font-ui)', color: 'var(--accent-indigo)' }}>
                 <span>✦</span>{accessBadgeLabel(access)}
               </div>
               <div title="Connected" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--cream-deep)', border: '1px solid var(--border)', font: '500 0.75rem/1 var(--font-ui)', color: 'var(--text-muted)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                <span style={{
-                  width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0,
-                }} />
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
                 Connected
               </div>
             </div>
@@ -359,7 +371,14 @@ function StudioApp({ access }) {
         />
         <main
           key={activeNav}
-          style={{ marginTop: 'var(--topbar-h, 56px)', padding: '32px', flex: 1, animation: 'screen-in 0.18s ease-out both' }}
+          style={{
+            marginTop: topbarOffset,
+            padding: isMobile
+              ? '16px 14px max(24px, env(safe-area-inset-bottom))'
+              : '32px',
+            flex: 1, minWidth: 0, width: '100%', boxSizing: 'border-box',
+            animation: 'screen-in 0.18s ease-out both',
+          }}
         >
           <StudioErrorBoundary resetKey={`${activeNav}:${routeDirectorMode || ''}`} onReset={() => handleNav('home')}>
             <Screen {...screenProps} />
@@ -382,6 +401,7 @@ export default function App() {
       </RequireProductAccess>
     </RequireAuth>
   );
+
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
@@ -394,8 +414,6 @@ export default function App() {
       <Route path="/studio" element={protectedStudio} />
       <Route path="/studio/:screen" element={protectedStudio} />
       <Route path="/studio/:screen/:projectId" element={protectedStudio} />
-      {/* Unknown paths: a bare app slug (/cast) redirects into the shell;
-          anything else falls through to the landing page. */}
       <Route path="*" element={<UnknownRoute />} />
     </Routes>
   );

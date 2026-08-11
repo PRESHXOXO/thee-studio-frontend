@@ -86,26 +86,14 @@ export function ReferenceImageTray({
 
   const addControls = (
     <div style={{
-      display: 'flex', alignItems: compact ? 'stretch' : 'center', gap: compact ? 5 : 8,
+      display: 'flex', alignItems: compact ? 'stretch' : 'center', gap: compact ? 6 : 10,
       flexDirection: compact ? 'column' : 'row', flexWrap: compact ? 'nowrap' : 'wrap',
-      flex: compact ? '0 0 150px' : 'initial', justifyContent: 'center',
+      flex: compact ? '0 0 156px' : 'initial',
+      padding: compact ? 0 : '12px 14px',
+      border: compact ? 'none' : '1px dashed var(--border-strong)',
+      borderRadius: compact ? 0 : 'var(--radius-lg)',
+      background: compact ? 'transparent' : 'rgba(255,254,252,0.34)',
     }}>
-      <select
-        aria-label="Role for new references"
-        value={nextRole}
-        onChange={event => setNextRole(event.target.value)}
-        disabled={disabled || !available}
-        style={{
-          minHeight: compact ? 30 : 36, padding: compact ? '0 7px' : '0 10px',
-          border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-          background: 'var(--surface-card)', color: 'var(--text-body)',
-          font: `500 ${compact ? 11 : 12}px/1 var(--font-ui)`, fontFamily: 'inherit',
-        }}
-      >
-        {DIRECTOR_REFERENCE_ROLES.map(role => (
-          <option key={role.id} value={role.id}>{role.label}</option>
-        ))}
-      </select>
       <input
         ref={inputRef}
         type="file"
@@ -119,52 +107,73 @@ export function ReferenceImageTray({
         onClick={() => inputRef.current?.click()}
         disabled={disabled || reading || !available}
         style={{
-          minHeight: compact ? 30 : 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-          padding: compact ? '0 8px' : '0 12px', borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--border)', background: 'var(--surface-card)',
-          color: 'var(--accent-deep)', cursor: disabled || reading || !available ? 'not-allowed' : 'pointer',
-          opacity: disabled || reading || !available ? 0.55 : 1,
+          minHeight: compact ? 32 : 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          padding: compact ? '0 10px' : '0 14px', borderRadius: 9,
+          border: '1px solid var(--plum)', background: 'var(--plum)',
+          color: 'var(--text-on-dark)', cursor: disabled || reading || !available ? 'not-allowed' : 'pointer',
+          opacity: disabled || reading || !available ? 0.48 : 1,
+          font: `600 ${compact ? 11 : 12}px/1 var(--font-ui)`, fontFamily: 'inherit',
+          boxShadow: '0 8px 18px rgba(23,20,27,0.10)',
+        }}
+      >
+        <Icon name="plus" size={compact ? 12 : 14} />
+        {reading ? 'Reading…' : available ? 'Add images' : 'Reference limit reached'}
+      </button>
+      <select
+        aria-label="Role for new references"
+        value={nextRole}
+        onChange={event => setNextRole(event.target.value)}
+        disabled={disabled || !available}
+        style={{
+          minHeight: compact ? 32 : 40, padding: compact ? '0 8px' : '0 11px',
+          border: '1px solid var(--border)', borderRadius: 9,
+          background: 'rgba(255,254,252,0.72)', color: 'var(--text-body)',
           font: `600 ${compact ? 11 : 12}px/1 var(--font-ui)`, fontFamily: 'inherit',
         }}
       >
-        <Icon name="images" size={compact ? 12 : 14} />
-        {reading ? 'Reading…' : available ? `Add image${available > 1 ? 's' : ''}` : 'Reference limit reached'}
-      </button>
+        {DIRECTOR_REFERENCE_ROLES.map(role => (
+          <option key={role.id} value={role.id}>{role.label}</option>
+        ))}
+      </select>
       {!compact && available > 0 && (
-        <span style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>
-          Select up to {available} at once
+        <span style={{ font: '500 0.72rem/1.35 var(--font-ui)', color: 'var(--text-faint)', marginLeft: 2 }}>
+          Assign a role before adding · {available} slot{available === 1 ? '' : 's'} open
         </span>
       )}
     </div>
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 6 : 10 }}>
-      <div>
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-          font: 'var(--label)', letterSpacing: 'var(--label-spacing)',
-          textTransform: 'uppercase', color: 'var(--text-muted)',
-        }}>
-          <span>{title}</span>
-          <span style={{ color: 'var(--text-faint)' }}>{references.length}/{maxReferences}</span>
-        </div>
-        {!compact && description && (
-          <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.45, marginTop: 4 }}>
-            {description}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 8 : 12 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18 }}>
+        <div>
+          <div style={{ font: '600 0.86rem/1.15 var(--font-ui)', letterSpacing: '-0.01em', color: 'var(--text-strong)' }}>
+            {title}
           </div>
-        )}
+          {!compact && description && (
+            <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.5, marginTop: 5, maxWidth: 640 }}>
+              {description}
+            </div>
+          )}
+        </div>
+        <span style={{
+          flexShrink: 0, font: '700 0.62rem/1 var(--font-mono)', letterSpacing: '0.08em',
+          color: 'var(--text-faint)', paddingTop: 2,
+        }}>
+          {references.length}/{maxReferences}
+        </span>
       </div>
 
-      {(references.length > 0 || compact) && (
-        <div style={{ display: 'flex', gap: compact ? 7 : 10, overflowX: 'auto', padding: '2px 2px 5px', alignItems: 'stretch' }}>
+      {references.length > 0 && (
+        <div style={{ display: 'flex', gap: compact ? 8 : 12, overflowX: 'auto', padding: '2px 2px 6px', alignItems: 'stretch' }}>
           {references.map((reference, index) => (
             <div
               key={reference.id}
               style={{
-                width: compact ? 84 : 104, flex: `0 0 ${compact ? 84 : 104}px`, padding: compact ? 5 : 7,
+                width: compact ? 90 : 118, flex: `0 0 ${compact ? 90 : 118}px`,
+                padding: 0, overflow: 'hidden',
                 border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
-                background: 'var(--surface-inset)',
+                background: 'rgba(255,254,252,0.74)', boxShadow: 'var(--shadow-xs)',
               }}
             >
               <div style={{ position: 'relative' }}>
@@ -172,52 +181,61 @@ export function ReferenceImageTray({
                   src={reference.dataUrl}
                   alt={`${referenceRoleLabel(reference.role)} reference ${index + 1}`}
                   style={{
-                    width: '100%', height: compact ? 56 : 78, objectFit: 'cover', display: 'block',
-                    borderRadius: 'var(--radius-md)', border: '1px solid var(--border)',
+                    width: '100%', height: compact ? 68 : 96, objectFit: 'cover', display: 'block',
+                    border: 'none', borderBottom: '1px solid var(--border)',
                   }}
                 />
+                <span style={{
+                  position: 'absolute', left: 7, bottom: 7, padding: '4px 6px', borderRadius: 6,
+                  background: 'rgba(19,16,21,0.72)', backdropFilter: 'blur(6px)', color: '#fff',
+                  font: '700 0.56rem/1 var(--font-ui)', letterSpacing: '0.08em', textTransform: 'uppercase',
+                }}>
+                  {referenceRoleLabel(reference.role)}
+                </span>
                 <button
                   type="button"
                   aria-label={`Remove ${reference.name}`}
                   onClick={() => removeReference(reference.id)}
                   disabled={disabled}
                   style={{
-                    position: 'absolute', top: 4, right: 4, width: compact ? 18 : 22, height: compact ? 18 : 22,
+                    position: 'absolute', top: 6, right: 6, width: compact ? 20 : 24, height: compact ? 20 : 24,
                     display: 'grid', placeItems: 'center', padding: 0, cursor: 'pointer',
-                    border: 'none', borderRadius: '50%', color: '#fff',
-                    background: 'rgba(24, 18, 23, 0.72)',
+                    border: '1px solid rgba(255,255,255,0.16)', borderRadius: '50%', color: '#fff',
+                    background: 'rgba(19,16,21,0.68)', backdropFilter: 'blur(6px)',
                   }}
                 >
                   <Icon name="x" size={12} />
                 </button>
               </div>
-              <select
-                aria-label={`Role for ${reference.name}`}
-                value={reference.role}
-                onChange={event => changeRole(reference.id, event.target.value)}
-                disabled={disabled}
-                style={{
-                  width: '100%', marginTop: compact ? 4 : 7, padding: compact ? '4px 3px' : '6px 5px',
-                  border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-                  background: 'var(--surface-card)', color: 'var(--text-body)',
-                  font: `600 ${compact ? 10 : 11}px/1 var(--font-ui)`, fontFamily: 'inherit',
-                }}
-              >
-                {DIRECTOR_REFERENCE_ROLES.map(role => (
-                  <option key={role.id} value={role.id}>{role.label}</option>
-                ))}
-              </select>
-              {!compact && (
-                <div
-                  title={reference.name}
+              <div style={{ padding: compact ? 6 : 8 }}>
+                <select
+                  aria-label={`Role for ${reference.name}`}
+                  value={reference.role}
+                  onChange={event => changeRole(reference.id, event.target.value)}
+                  disabled={disabled}
                   style={{
-                    marginTop: 5, overflow: 'hidden', textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap', font: 'var(--text-xs)', color: 'var(--text-faint)',
+                    width: '100%', padding: compact ? '5px 4px' : '6px 6px',
+                    border: '1px solid var(--border)', borderRadius: 8,
+                    background: 'var(--surface-inset)', color: 'var(--text-body)',
+                    font: `600 ${compact ? 10 : 11}px/1 var(--font-ui)`, fontFamily: 'inherit',
                   }}
                 >
-                  {reference.name}
-                </div>
-              )}
+                  {DIRECTOR_REFERENCE_ROLES.map(role => (
+                    <option key={role.id} value={role.id}>{role.label}</option>
+                  ))}
+                </select>
+                {!compact && (
+                  <div
+                    title={reference.name}
+                    style={{
+                      marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap', font: '500 0.66rem/1 var(--font-ui)', color: 'var(--text-faint)',
+                    }}
+                  >
+                    {reference.name}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
           {compact && addControls}
@@ -225,6 +243,7 @@ export function ReferenceImageTray({
       )}
 
       {!compact && addControls}
+      {compact && references.length === 0 && addControls}
 
       {error && (
         <div role="alert" style={{ font: 'var(--text-xs)', color: 'var(--cherry)' }}>{error}</div>

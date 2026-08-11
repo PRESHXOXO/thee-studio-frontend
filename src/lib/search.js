@@ -13,7 +13,7 @@ const SCREENS = [
   { id: 'history',    label: 'History' },
   { id: 'exports',    label: 'Exports' },
   { id: 'runs',       label: 'Jobs' },
-  { id: 'settings',   label: 'Generation Settings' },
+  { id: 'settings',   label: 'Usage & Credits' },
 ];
 
 function loadJSON(key) {
@@ -72,9 +72,6 @@ export function buildSearchIndex() {
       label: entry.prompt ? entry.prompt.slice(0, 60) : `${entry.source || 'Shot'} · ${entry.scene || 'shot'}`,
       sublabel: creator ? `Library shot · ${creator}` : 'Library shot',
       icon: 'folder-open', navId: 'library', navData: undefined,
-      // Full searchable text — the whole prompt (not just the 60-char label),
-      // plus scene, source, and creator — so a location or word buried in the
-      // prompt body still surfaces the shot.
       haystack: [
         entry.prompt,
         entry.scene,

@@ -57,9 +57,12 @@ export function Button({ children, variant = 'primary', size = 'md', icon, iconR
       }}
     >
       {stagingDebug ? (
-        loading
-          ? <Icon name="loader" size={14} strokeWidth={2} style={{ animation: 'spin 1s linear infinite' }} />
-          : <Icon name="activity" size={14} strokeWidth={1.9} />
+        <>
+          {loading
+            ? <Icon name="loader" size={14} strokeWidth={2} style={{ animation: 'spin 1s linear infinite' }} />
+            : <Icon name="activity" size={14} strokeWidth={1.9} />}
+          <span className="ts-visually-hidden">Check References</span>
+        </>
       ) : (
         <>
           {icon && !loading && <Icon name={icon} size={sizes.icon} strokeWidth={2.1} />}

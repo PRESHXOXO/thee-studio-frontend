@@ -1,5 +1,6 @@
 import React from 'react';
 import { sanitizeForOpenAI, sceneFlowChat, sceneFlowGenerate } from '../api/studio.js';
+import { generateSceneFlowVideo } from '../api/sceneFlowVideo.js';
 import { Icon } from '../components/core/Icon.jsx';
 import { ReferenceImageTray } from '../components/director/ReferenceImageTray.jsx';
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
@@ -50,7 +51,6 @@ const S = {
     flexDirection: 'column',
     gap: 16,
   },
-  // Welcome state
   welcome: {
     flex: 1,
     minHeight: 0,
@@ -73,16 +73,13 @@ const S = {
   },
   welcomeTitle: { font: '600 20px/1.3 var(--font-display)', color: 'var(--text-body)', margin: 0 },
   welcomeSub: { font: '400 14px/1.6 var(--font-ui)', color: 'var(--text-muted)', maxWidth: 380, margin: 0 },
-  welcomeHints: {
-    display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 8,
-  },
+  welcomeHints: { display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 8 },
   hint: {
     padding: '6px 14px', borderRadius: 'var(--radius-pill)',
     background: 'var(--cream-deep)', border: '1px solid var(--border)',
     font: '400 13px/1 var(--font-ui)', color: 'var(--text-muted)',
     cursor: 'pointer', transition: 'border-color 0.15s, color 0.15s',
   },
-  // Chat bubbles
   bubbleRow: { display: 'flex', gap: 10, alignItems: 'flex-end' },
   bubbleRowUser: { flexDirection: 'row-reverse' },
   bubbleAvatar: {
@@ -108,14 +105,8 @@ const S = {
     border: '1px solid var(--accent)',
     color: '#fff',
   },
-  bubbleImg: {
-    maxWidth: 320, borderRadius: 12,
-    border: '1px solid var(--border)',
-    display: 'block', marginTop: 8,
-  },
-  bubbleThinking: {
-    display: 'flex', gap: 4, alignItems: 'center', padding: '4px 0',
-  },
+  bubbleImg: { maxWidth: 320, borderRadius: 12, border: '1px solid var(--border)', display: 'block', marginTop: 8 },
+  bubbleThinking: { display: 'flex', gap: 4, alignItems: 'center', padding: '4px 0' },
   dot: {
     width: 7, height: 7, borderRadius: '50%',
     background: 'var(--text-muted)',
@@ -134,7 +125,6 @@ const S = {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     font: '500 12px/1 var(--font-ui)', color: 'var(--text-muted)',
   },
-  // Input bar
   inputBar: {
     display: 'flex',
     flexDirection: 'column',
@@ -167,16 +157,12 @@ const S = {
   },
   refPreview: {
     display: 'flex', alignItems: 'center', gap: 10,
-    padding: '8px 12px',
-    background: 'var(--surface-inset)',
-    borderRadius: 'var(--radius-lg)',
-    border: '1px solid var(--border)',
+    padding: '8px 12px', background: 'var(--surface-inset)',
+    borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)',
   },
   refThumb: { width: 40, height: 40, borderRadius: 8, objectFit: 'cover' },
   refLabel: { flex: 1, font: '400 13px/1 var(--font-ui)', color: 'var(--text-muted)' },
-  outputRow: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-  },
+  outputRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   outputLabel: {
     font: '600 11px/1 var(--font-ui)', letterSpacing: '0.08em',
     textTransform: 'uppercase', color: 'var(--text-muted)',
@@ -196,12 +182,10 @@ const S = {
   inputRow: { display: 'flex', gap: 8, alignItems: 'flex-end' },
   attachBtn: {
     width: 40, height: 40, borderRadius: 'var(--radius-lg)',
-    border: '1px solid var(--border)',
-    background: 'var(--surface-inset)',
+    border: '1px solid var(--border)', background: 'var(--surface-inset)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'pointer', color: 'var(--text-muted)',
-    transition: 'border-color 0.15s, color 0.15s',
-    flexShrink: 0,
+    transition: 'border-color 0.15s, color 0.15s', flexShrink: 0,
   },
   textarea: {
     flex: 1,
@@ -211,46 +195,24 @@ const S = {
     background: 'var(--surface-inset)',
     font: '400 14px/1.5 var(--font-ui)',
     color: 'var(--text-body)',
-    resize: 'none',
-    outline: 'none',
+    resize: 'none', outline: 'none',
     minHeight: 42, maxHeight: 120,
-    transition: 'border-color 0.15s',
-    fontFamily: 'inherit',
+    transition: 'border-color 0.15s', fontFamily: 'inherit',
   },
   sendBtn: {
     width: 40, height: 40, borderRadius: 'var(--radius-lg)',
-    background: 'var(--accent)',
-    border: 'none',
+    background: 'var(--accent)', border: 'none',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', color: '#fff',
-    transition: 'opacity 0.15s',
-    flexShrink: 0,
+    cursor: 'pointer', color: '#fff', transition: 'opacity 0.15s', flexShrink: 0,
   },
 };
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// Strip SCENE_READY:... from display text
 function cleanReply(text) {
-  return text
-    .replace(/(?:SCENE_DRAFT|GENERATE_SCENE|SCENE_READY):[\s\S]*$/, '')
-    .trim();
+  return text.replace(/(?:SCENE_DRAFT|GENERATE_SCENE|SCENE_READY):[\s\S]*$/, '').trim();
 }
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
 function ThinkingDots() {
-  return (
-    <div style={S.bubbleThinking}>
-      {[0, 1, 2].map(i => (
-        <div key={i} style={{ ...S.dot, animationDelay: `${i * 0.2}s` }} />
-      ))}
-    </div>
-  );
+  return <div style={S.bubbleThinking}>{[0, 1, 2].map(i => <div key={i} style={{ ...S.dot, animationDelay: `${i * 0.2}s` }} />)}</div>;
 }
 
 function Bubble({ role, text, imageB64, imageUrl, contentType = 'photo', isThinking }) {
@@ -259,40 +221,22 @@ function Bubble({ role, text, imageB64, imageUrl, contentType = 'photo', isThink
   const isVideo = contentType === 'video';
   return (
     <div style={{ ...S.bubbleRow, ...(isUser ? S.bubbleRowUser : {}) }}>
-      <div style={{ ...S.bubbleAvatar, ...(isUser ? S.bubbleAvatarUser : {}) }}>
-        {isUser ? 'You' : 'S'}
-      </div>
+      <div style={{ ...S.bubbleAvatar, ...(isUser ? S.bubbleAvatarUser : {}) }}>{isUser ? 'You' : 'S'}</div>
       <div style={{ ...S.bubble, ...(isUser ? S.bubbleUser : {}) }}>
         {isThinking ? <ThinkingDots /> : cleanReply(text)}
-        {mediaSrc && (
-          <div style={S.resultCard}>
-            {isVideo ? (
-              <video src={mediaSrc} controls playsInline style={S.resultCardImg}>
-                Your browser does not support video playback.
-              </video>
-            ) : (
-              <img src={mediaSrc} alt="Generated" style={S.resultCardImg} />
-            )}
-            <div style={S.resultCardFooter}>
-              <span>{isVideo ? 'Video generated' : 'Scene generated'}</span>
-              <a
-                href={mediaSrc}
-                download={isVideo ? 'scene.mp4' : 'scene.png'}
-                style={{ color: 'var(--accent)', textDecoration: 'none' }}
-              >
-                Save ↓
-              </a>
-            </div>
+        {mediaSrc && <div style={S.resultCard}>
+          {isVideo
+            ? <video src={mediaSrc} controls playsInline style={S.resultCardImg}>Your browser does not support video playback.</video>
+            : <img src={mediaSrc} alt="Generated" style={S.resultCardImg} />}
+          <div style={S.resultCardFooter}>
+            <span>{isVideo ? 'Video generated' : 'Scene generated'}</span>
+            <a href={mediaSrc} download={isVideo ? 'scene.mp4' : 'scene.png'} style={{ color: 'var(--accent)', textDecoration: 'none' }}>Save ↓</a>
           </div>
-        )}
+        </div>}
       </div>
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 
 const HINTS = [
   'Help me brainstorm a scene',
@@ -324,44 +268,30 @@ function isContentPolicyError(value) {
   return /content policy|safety system|safety filter|moderation|blocked.*policy|policy.*blocked|image generation blocked/i.test(text);
 }
 
+// Kept for a future explicit retry action. It is intentionally not called
+// automatically: every fresh generation must be initiated by the user.
 function sanitizeSceneForPolicyRetry(sceneData) {
   const rawText = JSON.stringify(sceneData || {});
-  // Retry false positives only. Never rewrite age-sensitive or clearly
-  // explicit requests into different content to get around moderation.
   const retrySafetyText = rawText
     .replace(/\b(no|not|without)\s+(nudity|sexual content|explicit content)\b/gi, '')
     .replace(/\bnon[- ]sexual(?:ized)?\b/gi, '');
-  if (/\b(child|kid|minor|teen(?:ager)?|underage|schoolgirl|schoolboy|nude|nudity|erotic|porn(?:ographic)?|genitals?|sexual act|graphic violence)\b/i.test(retrySafetyText)) {
-    return null;
-  }
-
+  if (/\b(child|kid|minor|teen(?:ager)?|underage|schoolgirl|schoolboy|nude|nudity|erotic|porn(?:ographic)?|genitals?|sexual act|graphic violence)\b/i.test(retrySafetyText)) return null;
   const sanitizeValue = value => {
     if (typeof value === 'string') return sanitizeForOpenAI(value);
     if (Array.isArray(value)) return value.map(sanitizeValue);
-    if (value && typeof value === 'object') {
-      return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, sanitizeValue(child)]));
-    }
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, sanitizeValue(child)]));
     return value;
   };
-
   const sanitized = sanitizeValue(sceneData);
-  const prompt = sanitized.full_prompt
-    || [sanitized.setting, sanitized.wardrobe, sanitized.location, sanitized.vibe].filter(Boolean).join('. ');
-  sanitized.full_prompt = sanitizeForOpenAI(
-    `All depicted people are adults age 25 or older. Family-safe, fully clothed editorial lifestyle photography. ${prompt}`
-  );
+  const prompt = sanitized.full_prompt || [sanitized.setting, sanitized.wardrobe, sanitized.location, sanitized.vibe].filter(Boolean).join('. ');
+  sanitized.full_prompt = sanitizeForOpenAI(`All depicted people are adults age 25 or older. Family-safe, fully clothed editorial lifestyle photography. ${prompt}`);
   return sanitized;
 }
 
 function buildLivedInScenePrompt(sceneData, outputType, hasIdentityReference) {
   const originalPrompt = sceneData.full_prompt
     || [sceneData.setting, sceneData.wardrobe, sceneData.location, sceneData.vibe].filter(Boolean).join('. ');
-  const sceneText = [
-    originalPrompt,
-    sceneData.setting,
-    sceneData.location,
-    sceneData.vibe,
-  ].filter(Boolean).join(' ').toLowerCase();
+  const sceneText = [originalPrompt, sceneData.setting, sceneData.location, sceneData.vibe].filter(Boolean).join(' ').toLowerCase();
 
   const promptSections = [
     originalPrompt,
@@ -417,39 +347,23 @@ function buildLivedInScenePrompt(sceneData, outputType, hasIdentityReference) {
       'Door and seat occlusion, window reflections, directional window light, cabin color spill, and contact shadows must make the subject physically occupy the vehicle.',
     ].join(' '));
   } else if (/\b(rooftop|terrace|balcony|outdoor|street)\b/.test(sceneText)) {
-    promptSections.push([
-      'OUTDOOR INTEGRATION:',
-      'Wind, ambient sky color, surface bounce, atmospheric depth, and grounded foot or hand contact must affect subject and location consistently.',
-    ].join(' '));
+    promptSections.push('OUTDOOR INTEGRATION: Wind, ambient sky color, surface bounce, atmospheric depth, and grounded foot or hand contact must affect subject and location consistently.');
   } else if (/\b(kitchen|restaurant|cafe|table|counter)\b/.test(sceneText)) {
-    promptSections.push([
-      'ACTIVITY INTEGRATION:',
-      'Use believable hand contact with the counter, table, glassware, food, or nearby objects and let foreground items overlap the subject naturally.',
-    ].join(' '));
+    promptSections.push('ACTIVITY INTEGRATION: Use believable hand contact with the counter, table, glassware, food, or nearby objects and let foreground items overlap the subject naturally.');
   }
 
   if (outputType === 'video') {
-    promptSections.push(
-      'MOTION CONTINUITY: Use one continuous, motivated action with stable identity, consistent lighting, coherent reflections, and persistent spatial relationships throughout the shot.'
-    );
+    promptSections.push('MOTION CONTINUITY: Use one continuous, motivated action with stable identity, consistent lighting, coherent reflections, and persistent spatial relationships throughout the shot.');
   }
 
-  return {
-    ...sceneData,
-    full_prompt: promptSections.filter(Boolean).join('\n\n'),
-  };
+  return { ...sceneData, full_prompt: promptSections.filter(Boolean).join('\n\n') };
 }
 
-// campaignId / initialVision / creator thread the Director's session context
-// (pinned campaign, re-run vision, selected creator) into this tab so the
-// global banner + creator selector are honest here too — not Guided-only.
 export function SceneFlow({ campaignId = null, initialVision = '', initialSettings = null, creator = null }) {
   const restored = initialSettings?.workflow === 'talk' ? initialSettings : {};
-  const [messages, setMessages] = React.useState([]); // { role, text, imageB64, imageUrl }
-  const [history, setHistory]   = React.useState([]); // OpenAI message history
+  const [messages, setMessages] = React.useState([]);
+  const [history, setHistory]   = React.useState([]);
   const [input, setInput]       = React.useState(restored.input || initialVision || '');
-  // Pre-attach the session creator as the identity reference, then let the
-  // user add independent outfit/background/makeup/hair/pose references.
   const [references, setReferences] = React.useState(() => creatorReferences(creator));
   const [thinking, setThinking] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
@@ -461,8 +375,6 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
   const textRef   = React.useRef(null);
   const creatorIdRef = React.useRef(creator?.id ?? null);
 
-  // A creator switch changes the identity of the entire conversation. Start a
-  // clean Scene Flow session with the new creator instead of mixing identities.
   React.useEffect(() => {
     const nextCreatorId = creator?.id ?? null;
     if (creatorIdRef.current === nextCreatorId) return;
@@ -477,7 +389,6 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
     setSessionStarted(false);
   }, [creator?.id, creator, initialVision]);
 
-  // Auto-scroll
   React.useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, thinking, generating]);
@@ -489,79 +400,46 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
     if (thinking || generating) return;
 
     const userText = msg || `(${referencesToSend.length} reference image${referencesToSend.length === 1 ? '' : 's'} attached)`;
-    const roleSummary = referencesToSend
-      .map(reference => reference.role)
-      .join(', ');
-    const backendMessage = msg || (
-      referencesToSend.length
-        ? `I attached ${referencesToSend.length} visual reference image${referencesToSend.length === 1 ? '' : 's'} for these roles: ${roleSummary}. Acknowledge how you will use each role, then ask what I want to create.`
-        : ''
-    );
-    // Output format belongs to UI state and is applied at generation time.
-    // Sending it as prose made the assistant narrate internal state back to
-    // users ("still photo is locked") instead of having a natural conversation.
+    const roleSummary = referencesToSend.map(reference => reference.role).join(', ');
+    const backendMessage = msg || (referencesToSend.length
+      ? `I attached ${referencesToSend.length} visual reference image${referencesToSend.length === 1 ? '' : 's'} for these roles: ${roleSummary}. Acknowledge how you will use each role, then ask what I want to create.`
+      : '');
     const conversationMessage = backendMessage;
-    if (userText) {
-      setMessages(m => [...m, { role: 'user', text: userText }]);
-    }
+    if (userText) setMessages(m => [...m, { role: 'user', text: userText }]);
     if (referencesToSend.length) {
-      setMessages(m => [
-        ...m,
-        ...referencesToSend.map(reference => ({
-          role: 'user',
-          text: reference.role,
-          imageUrl: reference.dataUrl,
-        })),
-      ]);
+      setMessages(m => [...m, ...referencesToSend.map(reference => ({ role: 'user', text: reference.role, imageUrl: reference.dataUrl }))]);
     }
     setInput('');
     setThinking(true);
     setSessionStarted(true);
 
     try {
-      const result = await sceneFlowChat({
-        messagesJson: JSON.stringify(history),
-        userMessage: conversationMessage,
-        referenceImages: referencesToSend,
-      });
-
+      const result = await sceneFlowChat({ messagesJson: JSON.stringify(history), userMessage: conversationMessage, referenceImages: referencesToSend });
       const rawReply = (result.reply || '').trim();
       const aiReply = rawReply.includes('insufficient_quota') || rawReply.includes('exceeded your current quota')
         ? "⚠️ OpenAI credits are empty — add billing at platform.openai.com to activate me."
-        : rawReply || (
-          referencesToSend.length
-            ? 'References received. What kind of scene would you like to create with them?'
-            : 'I missed that. Tell me what kind of scene you want to create.'
-        );
+        : rawReply || (referencesToSend.length
+          ? 'References received. What kind of scene would you like to create with them?'
+          : 'I missed that. Tell me what kind of scene you want to create.');
       const newHistory = result.history?.length ? result.history : [
         ...history,
         { role: 'user', content: conversationMessage },
         { role: 'assistant', content: aiReply },
       ];
       const sceneData = result.scene && Object.keys(result.scene).length ? result.scene : null;
-      const nextScene = sceneData
-        ? { ...(scene || {}), ...sceneData, content_type: outputType }
-        : null;
+      const nextScene = sceneData ? { ...(scene || {}), ...sceneData, content_type: outputType } : null;
 
       setHistory(newHistory);
       setThinking(false);
       setMessages(m => [...m, { role: 'assistant', text: aiReply }]);
-      // Keep every reference for generation, but only send newly attached or
-      // re-labeled images back through conversational vision.
       if (referencesToSend.length) {
         const deliveredIds = new Set(referencesToSend.map(reference => reference.id));
-        setReferences(current => current.map(reference =>
-          deliveredIds.has(reference.id) ? { ...reference, pending: false } : reference
-        ));
+        setReferences(current => current.map(reference => deliveredIds.has(reference.id) ? { ...reference, pending: false } : reference));
       }
 
       if (sceneData) {
         setScene(nextScene);
-        // New backend requires explicit intent. Undefined keeps compatibility
-        // with an older server during rolling deployment.
-        if (result.generate === true || result.generate == null) {
-          await runGeneration(nextScene, references);
-        }
+        if (result.generate === true || result.generate == null) await runGeneration(nextScene, references);
       }
     } catch (err) {
       setThinking(false);
@@ -582,55 +460,46 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
     const memory = creator ? getCreatorMemory(creator.id) : null;
     const memoryBlock = creatorMemoryPrompt(memory);
     if (memoryBlock) requestedScene.full_prompt += `\n\n${memoryBlock}`;
-    const genMsg = `Generating your ${outputType === 'video' ? 'video' : 'image'} now — give me a moment... ✨`;
-    setMessages(m => [...m, { role: 'assistant', text: genMsg }]);
+    setMessages(m => [...m, { role: 'assistant', text: `Generating your ${outputType === 'video' ? 'video' : 'image'} now — give me a moment... ✨` }]);
 
     try {
-      const telemetryRequestKey = crypto.randomUUID();
-      const generate = data => sceneFlowGenerate({
-        sceneJson: JSON.stringify(data),
-        referenceImages: generationReferences,
-        telemetryRequestKey,
-      });
-      let generationScene = requestedScene;
+      const generationRequestKey = crypto.randomUUID();
       let result;
-      let policyRetryAttempted = false;
 
-      try {
-        result = await generate(generationScene);
-      } catch (err) {
-        if (!isContentPolicyError(err)) throw err;
-        result = { error: err.message };
-      }
+      if (outputType === 'video') {
+        // Scene Flow video is a deliberate two-stage managed workflow: first
+        // create the identity-aware keyframe in Thee Studio, then animate that
+        // exact persisted frame. The keys are separate so each billable stage
+        // is independently idempotent and observable.
+        const keyframeScene = { ...requestedScene, content_type: 'photo' };
+        const keyframe = await sceneFlowGenerate({
+          sceneJson: JSON.stringify(keyframeScene),
+          referenceImages: generationReferences,
+          telemetryRequestKey: `${generationRequestKey}-keyframe`,
+        });
+        if (keyframe?.error) throw new Error(keyframe.error);
+        if (!keyframe?.result_url) throw new Error('The video keyframe finished without a usable image.');
 
-      if (isContentPolicyError(result)) {
-        const sanitizedScene = sanitizeSceneForPolicyRetry(requestedScene);
-        if (sanitizedScene) {
-          policyRetryAttempted = true;
-          generationScene = sanitizedScene;
-          setMessages(m => [...m, {
-            role: 'assistant',
-            text: 'The provider flagged safe wording. Retrying once with policy-safe phrasing…',
-          }]);
-          try {
-            result = await generate(generationScene);
-          } catch (err) {
-            if (!isContentPolicyError(err)) throw err;
-            result = { error: err.message };
-          }
-        }
+        result = await generateSceneFlowVideo({
+          sourceUrl: keyframe.result_url,
+          prompt: requestedScene.full_prompt,
+          durationSeconds: requestedScene.durationSeconds || requestedScene.duration_seconds || 5,
+          verticalOutput: requestedScene.verticalOutput !== false && requestedScene.vertical_output !== false,
+          requestKey: `${generationRequestKey}-video`,
+        });
+      } else {
+        result = await sceneFlowGenerate({
+          sceneJson: JSON.stringify(requestedScene),
+          referenceImages: generationReferences,
+          telemetryRequestKey: generationRequestKey,
+        });
       }
 
       const generatedAsset = result?.result_b64 || result?.result_url;
       if (result?.error) {
-        const errorText = isContentPolicyError(result)
-          ? policyRetryAttempted
-            ? `The provider still blocked this request after the safe-language retry. The reference image itself may be triggering moderation. Detail: ${result.error}`
-            : result.error
-          : result.error;
-        setMessages(m => [...m, { role: 'assistant', text: `⚠️ ${errorText}` }]);
+        throw new Error(result.error);
       } else if (!generatedAsset) {
-        throw new Error('The provider finished without returning an image. Please try Generate again.');
+        throw new Error(`The provider finished without returning a ${outputType === 'video' ? 'video' : 'photo'}. Please try Generate again.`);
       } else {
         setMessages(m => [...m, {
           role: 'assistant',
@@ -639,17 +508,15 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
           imageUrl: result.result_url || null,
           contentType: result.content_type || outputType,
         }]);
-        // Feed the result into the review pipeline (Library → Media Review)
-        if (outputType === 'photo' && generatedAsset) {
+
+        if (outputType === 'photo') {
           const originalScenePrompt = sceneData.full_prompt
             || [sceneData.setting, sceneData.wardrobe, sceneData.location, sceneData.vibe].filter(Boolean).join(' · ');
-          const librarySource = result.result_b64
-            ? `data:image/png;base64,${result.result_b64}`
-            : result.result_url;
+          const librarySource = result.result_b64 ? `data:image/png;base64,${result.result_b64}` : result.result_url;
           saveToLibrary(librarySource, {
             source: 'scene_flow',
-            prompt: generationScene.full_prompt
-              || [generationScene.setting, generationScene.wardrobe, generationScene.location, generationScene.vibe].filter(Boolean).join(' · '),
+            prompt: requestedScene.full_prompt
+              || [requestedScene.setting, requestedScene.wardrobe, requestedScene.location, requestedScene.vibe].filter(Boolean).join(' · '),
             campaign: campaignId || undefined,
             character: creator?.id,
             mediaType: 'photo',
@@ -665,7 +532,10 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
         }
       }
     } catch (err) {
-      setMessages(m => [...m, { role: 'assistant', text: `⚠️ Generation failed: ${err.message}` }]);
+      const policyMessage = isContentPolicyError(err)
+        ? 'The provider blocked this generation during safety review. Nothing was retried automatically; adjust the scene or references and press Generate when you want another attempt.'
+        : err.message;
+      setMessages(m => [...m, { role: 'assistant', text: `⚠️ Generation failed: ${policyMessage}` }]);
     } finally {
       setGenerating(false);
     }
@@ -691,12 +561,8 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
 
   const isEmpty = messages.length === 0;
   const canSend = !!input.trim() || references.some(reference => reference.pending);
-  const hasGeneratedAsset = messages.some(message =>
-    message.role === 'assistant' && (message.imageB64 || message.imageUrl)
-  );
-  const sceneSummary = scene
-    ? [scene.setting, scene.wardrobe, scene.location, scene.vibe].filter(Boolean).join(' · ')
-    : '';
+  const hasGeneratedAsset = messages.some(message => message.role === 'assistant' && (message.imageB64 || message.imageUrl));
+  const sceneSummary = scene ? [scene.setting, scene.wardrobe, scene.location, scene.vibe].filter(Boolean).join(' · ') : '';
 
   return (
     <>
@@ -708,71 +574,30 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
       `}</style>
 
       <div style={S.root}>
-        {/* Header */}
         <div style={S.header}>
           <div style={S.headerAvatar}>S</div>
           <div style={S.headerText}>
             <p style={S.headerTitle}>Scene Flow</p>
             <p style={S.headerSub}>Your conversational creative director</p>
           </div>
-          {sessionStarted && (
-            <button
-              onClick={reset}
-              style={{
-                padding: '6px 14px', borderRadius: 'var(--radius-pill)',
-                border: '1px solid var(--border)', background: 'none',
-                font: '500 12px/1 var(--font-ui)', color: 'var(--text-muted)',
-                cursor: 'pointer',
-              }}
-            >
-              New chat
-            </button>
-          )}
+          {sessionStarted && <button onClick={reset} style={{ padding: '6px 14px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border)', background: 'none', font: '500 12px/1 var(--font-ui)', color: 'var(--text-muted)', cursor: 'pointer' }}>New chat</button>}
         </div>
 
-        {/* Messages / Welcome */}
         {isEmpty ? (
           <div style={S.welcome}>
             <div style={S.welcomeOrb}>S</div>
             <p style={S.welcomeTitle}>What are we creating?</p>
-            <p style={S.welcomeSub}>
-              Talk through a rough idea, ask for creative direction, attach a reference,
-              or refine a scene for as many turns as you need.
-            </p>
-            <div style={S.welcomeHints}>
-              {HINTS.map(h => (
-                <button
-                  key={h}
-                  style={S.hint}
-                  onClick={() => { setInput(h); textRef.current?.focus(); }}
-                >
-                  {h}
-                </button>
-              ))}
-            </div>
+            <p style={S.welcomeSub}>Talk through a rough idea, ask for creative direction, attach a reference, or refine a scene for as many turns as you need.</p>
+            <div style={S.welcomeHints}>{HINTS.map(h => <button key={h} style={S.hint} onClick={() => { setInput(h); textRef.current?.focus(); }}>{h}</button>)}</div>
           </div>
         ) : (
           <div style={S.messages}>
-            {messages.map((m, i) => (
-              <Bubble
-                key={i}
-                role={m.role}
-                text={m.text}
-                imageB64={m.imageB64}
-                imageUrl={m.imageUrl}
-                contentType={m.contentType}
-              />
-            ))}
-            {thinking && (
-              <div style={S.bubbleRow}>
-                <div style={S.bubbleAvatar}>S</div>
-                <div style={S.bubble}><ThinkingDots /></div>
-              </div>
-            )}
+            {messages.map((m, i) => <Bubble key={i} role={m.role} text={m.text} imageB64={m.imageB64} imageUrl={m.imageUrl} contentType={m.contentType} />)}
+            {thinking && <div style={S.bubbleRow}><div style={S.bubbleAvatar}>S</div><div style={S.bubble}><ThinkingDots /></div></div>}
             <GenerationProgress
               active={generating}
               identityLocked={references.some(reference => reference.role === 'identity')}
-              engine={outputType === 'video' ? 'Higgsfield' : 'OpenAI'}
+              engine={outputType === 'video' ? 'Managed Video' : 'OpenAI'}
               mode={outputType === 'video' ? 'video' : 'scene'}
               style={{ width: 'min(520px, calc(100% - 38px))', marginLeft: 38 }}
             />
@@ -780,32 +605,15 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
           </div>
         )}
 
-        {/* Input bar */}
         <div style={S.inputBar}>
-          {scene && (
-            <div style={S.draftBar}>
-              <Icon name="sparkles" size={15} />
-              <div style={S.draftText} title={sceneSummary}>
-                <strong style={{ color: 'var(--text-strong)' }}>Scene draft</strong>
-                {sceneSummary ? ` · ${sceneSummary}` : ' · Ready to refine'}
-              </div>
-              <button
-                type="button"
-                style={{
-                  ...S.generateBtn,
-                  opacity: generating ? 0.6 : 1,
-                  cursor: generating ? 'wait' : 'pointer',
-                }}
-                onClick={() => runGeneration(scene, references)}
-                disabled={thinking || generating}
-              >
-                <Icon name={outputType === 'video' ? 'video' : 'image'} size={13} />
-                {generating
-                  ? 'Generating…'
-                  : `${hasGeneratedAsset ? 'Regenerate' : 'Generate'} ${outputType === 'video' ? 'video' : 'photo'}`}
-              </button>
-            </div>
-          )}
+          {scene && <div style={S.draftBar}>
+            <Icon name="sparkles" size={15} />
+            <div style={S.draftText} title={sceneSummary}><strong style={{ color: 'var(--text-strong)' }}>Scene draft</strong>{sceneSummary ? ` · ${sceneSummary}` : ' · Ready to refine'}</div>
+            <button type="button" style={{ ...S.generateBtn, opacity: generating ? 0.6 : 1, cursor: generating ? 'wait' : 'pointer' }} onClick={() => runGeneration(scene, references)} disabled={thinking || generating}>
+              <Icon name={outputType === 'video' ? 'video' : 'image'} size={13} />
+              {generating ? 'Generating…' : `${hasGeneratedAsset ? 'Regenerate' : 'Generate'} ${outputType === 'video' ? 'video' : 'photo'}`}
+            </button>
+          </div>}
           <ReferenceImageTray
             references={references}
             onChange={setReferences}
@@ -824,48 +632,16 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
                 { id: 'video', label: 'Video', icon: 'video' },
               ].map(option => {
                 const active = outputType === option.id;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    disabled={thinking || generating}
-                    onClick={() => setOutputType(option.id)}
-                    style={{
-                      ...S.outputButton,
-                      background: active ? 'var(--accent)' : 'transparent',
-                      color: active ? '#fff' : 'var(--text-muted)',
-                      cursor: thinking || generating ? 'not-allowed' : 'pointer',
-                      opacity: thinking || generating ? 0.6 : 1,
-                    }}
-                  >
-                    <Icon name={option.icon} size={13} />
-                    {option.label}
-                  </button>
-                );
+                return <button key={option.id} type="button" role="radio" aria-checked={active} disabled={thinking || generating} onClick={() => setOutputType(option.id)} style={{ ...S.outputButton, background: active ? 'var(--accent)' : 'transparent', color: active ? '#fff' : 'var(--text-muted)', cursor: thinking || generating ? 'not-allowed' : 'pointer', opacity: thinking || generating ? 0.6 : 1 }}><Icon name={option.icon} size={13} />{option.label}</button>;
               })}
             </div>
           </div>
+          {outputType === 'video' && <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.4 }}>
+            Video first creates one identity-aware keyframe, then animates that frame. Both stages use generation credits; failed safety checks are never retried automatically.
+          </div>}
           <div style={S.inputRow}>
-            <textarea
-              ref={textRef}
-              style={S.textarea}
-              placeholder="Message Scene Flow — Describe the vibe, ask anything, or refine the scene…"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={1}
-              disabled={thinking || generating}
-            />
-            <button
-              style={{ ...S.sendBtn, opacity: (thinking || generating || !canSend) ? 0.4 : 1 }}
-              onClick={() => send()}
-              disabled={thinking || generating || !canSend}
-              title="Send"
-            >
-              <Icon name="arrow-up" size={16} />
-            </button>
+            <textarea ref={textRef} style={S.textarea} placeholder="Message Scene Flow — Describe the vibe, ask anything, or refine the scene…" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} rows={1} disabled={thinking || generating} />
+            <button style={{ ...S.sendBtn, opacity: (thinking || generating || !canSend) ? 0.4 : 1 }} onClick={() => send()} disabled={thinking || generating || !canSend} title="Send"><Icon name="arrow-up" size={16} /></button>
           </div>
         </div>
       </div>

@@ -5,7 +5,6 @@ import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 import { PromptLab } from './PromptLab.jsx';
 import { SceneFlow } from './SceneFlow.jsx';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
-import { isLocalStudioServiceEnabled } from '../api/studio.js';
 import { loadCharacters, saveCharacters } from '../lib/creatorCache.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -79,13 +78,11 @@ function CharacterSelector({ characters, selectedId, onSelect }) {
   );
 }
 
-// Three ways into the same generate pipeline. Guided (ShootBuilder) and
-// Describe It (Prompt Lab) both already call generateImage/characterGenerate
-// under the hood, so folding them in here is a real pipeline merge — no
-// behavior change to either. Talk It Through (Scene Flow) is nested as-is,
-// deliberately cosmetic: it still runs its own conversational backend pair
-// (sceneFlowChat/sceneFlowGenerate), a genuinely different pipeline that
-// wasn't rewired per an explicit product call — see the Phase 3 summary.
+// Three ways into the same cloud-capable generation system. Guided uses the
+// structured ShootBuilder, Describe It uses Prompt Lab, and Talk It Through
+// uses Scene Flow's conversational planning before handing photo generation
+// to the same managed image pipeline. Local services remain only a dev
+// fallback when Supabase cloud is not configured.
 const MODES = [
   { id: 'guided',   label: 'Guided',            icon: 'sliders-horizontal', help: 'Dial in a shot with structured controls, built around your creator’s locked identity.' },
   { id: 'describe', label: 'Describe It',        icon: 'flask-conical',      help: 'Describe the image in plain words — AI engineers a cinema-grade prompt, then generates it here.' },
@@ -182,7 +179,6 @@ export function TheeDirector({
   };
 
   const gated = characters.length > 0 && !selectedCharId && !buildWithoutCreator;
-  const localServicesEnabled = isLocalStudioServiceEnabled();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
@@ -195,15 +191,6 @@ export function TheeDirector({
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 520 }}>Shape content that connects. Dial in every detail. Let Thee Studio handle the rest.</p>
         </div>
       </div>
-
-      {!localServicesEnabled && mode !== 'guided' && (
-        <Card variant="rose" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Icon name="clock" size={16} />
-          <span style={{ font: 'var(--text-sm)', color: 'var(--text-body)' }}>
-            Describe It and Talk It Through still need local studio services in this build. Guided mode is cloud-enabled.
-          </span>
-        </Card>
-      )}
 
       {/* Pinned campaign context — visible across all three tabs since it's
           about the session, not just the Guided form. */}

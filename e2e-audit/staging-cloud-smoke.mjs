@@ -28,7 +28,7 @@ const forbiddenText = [
 ];
 
 const stamp = Date.now();
-const email = `release-smoke-${stamp}@example.invalid`;
+const email = `release-smoke-${stamp}@example.com`;
 const password = `Smoke-${crypto.randomUUID()}-A9!`;
 let stage = 'launch';
 const browser = await chromium.launch({ headless: true });
@@ -46,11 +46,16 @@ try {
   await page.locator('#auth-password').fill(password);
   await page.getByRole('button', { name: 'Create account' }).click();
 
-  const confirmation = page.getByText(/check your email and confirm your account/i);
-  await Promise.race([
-    page.waitForURL(url => url.pathname === '/plans', { timeout: 20_000 }),
-    confirmation.waitFor({ timeout: 20_000 }).then(() => { throw new Error('Staging requires email confirmation; headless release signup cannot continue.'); }),
-  ]);
+  await page.waitForURL(url => url.pathname === '/plans', { timeout: 15_000 }).catch(() => undefined);
+  if (new URL(page.url()).pathname !== '/plans') {
+    const bodyText = (await page.locator('body').innerText()).replace(/\s+/g, ' ').trim();
+    if (/check your email and confirm your account/i.test(bodyText)) {
+      throw new Error('Staging requires email confirmation; headless release signup cannot continue.');
+    }
+    const useful = bodyText.match(/(?:sign-in failed|authentication failed|unable to reach|account already exists|password[^.]*|rate limit[^.]*|email[^.]*invalid)[^.]*\.?/i)?.[0]
+      || bodyText.slice(0, 500);
+    throw new Error(`Public signup did not reach plan selection. UI detail: ${useful}`);
+  }
 
   stage = 'free plan';
   await page.getByRole('button', { name: 'Choose Free' }).click();

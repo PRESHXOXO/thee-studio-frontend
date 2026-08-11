@@ -351,7 +351,7 @@ export function ImageGenerator({
         refImages: previews,
         image: previews[0] || null,
         referenceAssets: previewSources.map(({ url: _url, ...reference }) => reference),
-        locked: false,
+        locked: true,
         fields: {
           tone: savedDraft.coreIdentity.skinTone !== 'Unspecified' ? savedDraft.coreIdentity.skinTone : '',
           hair: savedDraft.hairIdentity.style !== 'Unspecified' ? savedDraft.hairIdentity.style : '',

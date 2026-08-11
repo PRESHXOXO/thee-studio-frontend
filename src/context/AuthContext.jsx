@@ -13,6 +13,7 @@ export function safeAuthMessage(error) {
   const message = String(error?.message || '').toLowerCase();
   if (message.includes('invalid login credentials')) return 'Email or password is incorrect.';
   if (message.includes('email not confirmed')) return 'Confirm your email before signing in.';
+  if (message.includes('email address') && message.includes('invalid') || message.includes('invalid email')) return 'Enter a valid email address.';
   if (message.includes('network') || message.includes('fetch')) return 'Unable to reach the sign-in service.';
   if (message.includes('already registered')) return 'An account already exists for this email.';
   if (message.includes('password')) return 'Use a password with at least 8 characters.';

@@ -28,10 +28,10 @@ export function Topbar({
         height: mobile ? 'calc(var(--topbar-h) + env(safe-area-inset-top))' : 'var(--topbar-h)',
         paddingTop: mobile ? 'env(safe-area-inset-top)' : 0,
         flex: 'none', boxSizing: 'border-box',
-        display: 'flex', alignItems: 'center', gap: mobile ? 8 : 16,
-        paddingLeft: mobile ? 10 : 28, paddingRight: mobile ? 10 : 28,
-        borderBottom: '1px solid var(--border)', background: 'var(--surface-app-translucent)',
-        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        display: 'flex', alignItems: 'center', gap: mobile ? 8 : 18,
+        paddingLeft: mobile ? 10 : 32, paddingRight: mobile ? 10 : 32,
+        borderBottom: '1px solid rgba(125,111,102,0.12)', background: 'var(--surface-app-translucent)',
+        backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
         position: 'fixed', top: 0, left: mobile ? 0 : 'var(--sidebar-w)', right: 0, zIndex: 99,
         ...style,
       }}>
@@ -51,13 +51,14 @@ export function Topbar({
         )}
 
         <span style={{
-          font: mobile ? '600 0.875rem/1 var(--font-ui)' : '500 0.8125rem/1 var(--font-ui)',
+          font: mobile ? '600 0.875rem/1 var(--font-ui)' : '600 0.72rem/1 var(--font-ui)',
+          letterSpacing: mobile ? 0 : '0.08em', textTransform: mobile ? 'none' : 'uppercase',
           color: mobile ? 'var(--text-strong)' : 'var(--text-muted)',
           display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 1,
           minWidth: 0, maxWidth: mobile ? '34vw' : undefined,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
-          {!mobile && <Icon name="command" size={14} />}
+          {!mobile && <span style={{ width: 20, height: 1, background: 'var(--accent-deep)', display: 'inline-block' }} />}
           {context}
         </span>
 
@@ -67,21 +68,22 @@ export function Topbar({
           onClick={() => setSearchOpen(true)}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: mobile ? 'center' : 'flex-start',
-            gap: 8, padding: mobile ? 0 : '7px 12px',
-            width: mobile ? 42 : '100%', height: mobile ? 42 : undefined,
-            minWidth: mobile ? 42 : 0, maxWidth: mobile ? 42 : 280,
+            gap: 8, padding: mobile ? 0 : '8px 11px',
+            width: mobile ? 42 : 230, height: mobile ? 42 : 36,
+            minWidth: mobile ? 42 : 180,
             marginLeft: mobile ? 'auto' : 12,
-            borderRadius: mobile ? 'var(--radius-md)' : 'var(--radius-pill)',
-            border: '1px solid var(--border)', background: 'var(--surface-inset)', cursor: 'pointer',
-            color: 'var(--text-faint)', font: '500 0.8rem/1 var(--font-ui)', fontFamily: 'inherit',
+            borderRadius: 10,
+            border: '1px solid rgba(125,111,102,0.16)', background: 'rgba(255,254,252,0.54)', cursor: 'pointer',
+            color: 'var(--text-faint)', font: '500 0.77rem/1 var(--font-ui)', fontFamily: 'inherit',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.52)',
           }}
         >
-          <Icon name="search" size={15} strokeWidth={1.75} />
-          {!mobile && <span style={{ flex: 1, textAlign: 'left' }}>Search…</span>}
-          {!mobile && <span style={{ font: '500 0.68rem/1 var(--font-ui)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 5px' }}>⌘K</span>}
+          <Icon name="search" size={14} strokeWidth={1.7} />
+          {!mobile && <span style={{ flex: 1, textAlign: 'left' }}>Search studio</span>}
+          {!mobile && <span style={{ font: '600 0.62rem/1 var(--font-ui)', color: 'var(--text-faint)', letterSpacing: '0.04em' }}>⌘K</span>}
         </button>
 
-        <div style={{ marginLeft: mobile ? 0 : 'auto', display: 'flex', alignItems: 'center', gap: mobile ? 4 : 10, minWidth: 0 }}>
+        <div style={{ marginLeft: mobile ? 0 : 'auto', display: 'flex', alignItems: 'center', gap: mobile ? 4 : 9, minWidth: 0 }}>
           {!mobile && actions}
           <NotificationsMenu onNav={onNav} />
           <ProfileMenu user={user} userEmail={userEmail} userSrc={userSrc} onNav={onNav} onSignOut={onSignOut} showSettings={showSettings} />

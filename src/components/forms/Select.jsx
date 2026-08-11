@@ -2,19 +2,6 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { Icon } from '../core/Icon.jsx';
 
-// Custom combobox replacing the native <select>. Drop-in: same
-// {value,onChange,options,placeholder,disabled,label,style} interface every
-// caller already uses, so New Creator's fields, the Fine-Tune Appearance
-// panel, and the Scene selector (Cast + Thee Director, both via ShootBuilder)
-// all pick this up with no import changes.
-//
-// Why hand-rolled instead of Radix/Headless: this codebase has zero UI-lib
-// deps and styles everything inline; an unstyled primitive would still need
-// all the styling below plus a network install. Built accessible here —
-// keyboard nav, ARIA listbox roles, a document.body portal so the menu is
-// never clipped by a card's overflow, and viewport collision detection so it
-// flips upward / caps its height rather than running off-screen.
-
 function normalize(options) {
   return options.map(o => (typeof o === 'string' ? { value: o, label: o } : o));
 }
@@ -26,7 +13,7 @@ export function Select({ value, onChange, options = [], placeholder, disabled, l
   const opts = React.useMemo(() => normalize(options), [options]);
   const [open, setOpen] = React.useState(false);
   const [highlight, setHighlight] = React.useState(-1);
-  const [menuRect, setMenuRect] = React.useState(null); // { left, top, width, maxHeight, dropUp }
+  const [menuRect, setMenuRect] = React.useState(null);
   const triggerRef = React.useRef(null);
   const menuRef = React.useRef(null);
   const listRef = React.useRef(null);
@@ -61,8 +48,6 @@ export function Select({ value, onChange, options = [], placeholder, disabled, l
   };
   const closeMenu = () => { setOpen(false); setHighlight(-1); };
 
-  // Reposition on scroll/resize while open (portal is position:fixed, so it
-  // must track the trigger). Capture-phase scroll catches scrolling ancestors.
   React.useEffect(() => {
     if (!open) return;
     position();
@@ -75,7 +60,6 @@ export function Select({ value, onChange, options = [], placeholder, disabled, l
     };
   }, [open, position]);
 
-  // Click-outside closes.
   React.useEffect(() => {
     if (!open) return;
     const onDown = (e) => {
@@ -86,7 +70,6 @@ export function Select({ value, onChange, options = [], placeholder, disabled, l
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
-  // Keep the highlighted row scrolled into view.
   React.useEffect(() => {
     if (!open || highlight < 0 || !listRef.current) return;
     const row = listRef.current.children[highlight];
@@ -117,7 +100,6 @@ export function Select({ value, onChange, options = [], placeholder, disabled, l
       case 'Escape':    e.preventDefault(); closeMenu(); triggerRef.current?.focus(); break;
       case 'Tab':       closeMenu(); break;
       default:
-        // Type-ahead: jump to the first option starting with typed chars.
         if (e.key.length === 1) {
           const now = Date.now();
           typeahead.current.str = (now - typeahead.current.at < 700 ? typeahead.current.str : '') + e.key.toLowerCase();
@@ -140,22 +122,24 @@ export function Select({ value, onChange, options = [], placeholder, disabled, l
         disabled={disabled}
         onClick={() => (open ? closeMenu() : openMenu())}
         onKeyDown={handleKeyDown}
+        className="ts-select-trigger"
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-          font: 'var(--text-base)', textAlign: 'left',
-          color: selected ? 'var(--text-body)' : 'var(--text-faint)',
-          background: 'var(--white)',
-          border: `1px solid ${open ? 'var(--accent-deep)' : 'var(--border)'}`,
-          borderRadius: 'var(--radius-sm)', padding: '10px 12px 10px 13px',
+          font: '500 0.925rem/1.25 var(--font-ui)', textAlign: 'left',
+          color: selected ? 'var(--text-strong)' : 'var(--text-faint)',
+          background: 'transparent',
+          border: 0,
+          borderBottom: `1px solid ${open ? 'var(--text-strong)' : 'var(--border-strong)'}`,
+          borderRadius: 0, padding: '10px 2px 10px 0',
           cursor: disabled ? 'not-allowed' : 'pointer', outline: 'none', boxSizing: 'border-box',
           opacity: disabled ? 0.55 : 1, fontFamily: 'inherit',
-          transition: 'border-color var(--t-fast)',
+          transition: 'border-color var(--t-fast), color var(--t-fast)',
         }}
       >
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {selected ? selected.label : (placeholder || 'Select…')}
         </span>
-        <Icon name="chevron-down" size={16} style={{ color: 'var(--text-muted)', flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }} />
+        <Icon name="chevron-down" size={15} style={{ color: 'var(--text-muted)', flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }} />
       </button>
 
       {open && menuRect && ReactDOM.createPortal(
@@ -166,15 +150,15 @@ export function Select({ value, onChange, options = [], placeholder, disabled, l
             position: 'fixed', left: menuRect.left, width: menuRect.width,
             ...(menuRect.dropUp ? { bottom: menuRect.bottom } : { top: menuRect.top }),
             zIndex: 1200,
-            background: 'var(--white)', border: '1px solid var(--border-strong)',
-            borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
-            padding: 5, boxSizing: 'border-box',
+            background: 'rgba(255,254,252,0.985)', border: '1px solid var(--border-strong)',
+            borderRadius: 12, boxShadow: 'var(--shadow-lg)',
+            padding: 6, boxSizing: 'border-box',
             animation: 'select-menu-in 0.12s ease-out both',
           }}
         >
           <div
             ref={listRef}
-            style={{ maxHeight: menuRect.maxHeight - 10, overflowY: 'auto', overflowX: 'hidden' }}
+            style={{ maxHeight: menuRect.maxHeight - 12, overflowY: 'auto', overflowX: 'hidden' }}
           >
             {opts.map((o, i) => {
               const isSelected = o.value === value;
@@ -188,15 +172,15 @@ export function Select({ value, onChange, options = [], placeholder, disabled, l
                   onMouseDown={(e) => { e.preventDefault(); commit(i); }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '9px 11px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                    padding: '10px 11px', borderRadius: 8, cursor: 'pointer',
                     font: `${isSelected ? 600 : 500} 0.85rem/1.2 var(--font-ui)`,
-                    color: isSelected ? 'var(--accent-deep)' : 'var(--text-body)',
-                    background: isHi ? 'var(--blush)' : (isSelected ? 'var(--rose-deep)' : 'transparent'),
+                    color: isSelected ? 'var(--text-strong)' : 'var(--text-body)',
+                    background: isHi ? 'var(--surface-inset)' : (isSelected ? 'rgba(31,24,20,0.045)' : 'transparent'),
                     transition: 'background var(--t-fast)',
                   }}
                 >
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.label}</span>
-                  {isSelected && <Icon name="check" size={14} strokeWidth={2.5} style={{ color: 'var(--accent-deep)', flexShrink: 0 }} />}
+                  {isSelected && <Icon name="check" size={14} strokeWidth={2.4} style={{ color: 'var(--accent-deep)', flexShrink: 0 }} />}
                 </div>
               );
             })}

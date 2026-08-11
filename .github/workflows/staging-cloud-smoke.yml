@@ -1,0 +1,34 @@
+name: Staging Cloud Smoke
+
+on:
+  push:
+    branches:
+      - codex/reconcile-full-frontend
+  workflow_dispatch:
+
+concurrency:
+  group: staging-cloud-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      STAGING_BASE_URL: https://thee-studio-frontend-git-codex-recon-16c428-preshxoxos-projects.vercel.app
+      STAGING_CHECKOUT_EMAIL: ${{ secrets.STAGING_CHECKOUT_EMAIL }}
+      STAGING_CHECKOUT_PASSWORD: ${{ secrets.STAGING_CHECKOUT_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify required staging credentials exist
+        run: |
+          test -n "$STAGING_CHECKOUT_EMAIL" || (echo "Missing STAGING_CHECKOUT_EMAIL" && exit 1)
+          test -n "$STAGING_CHECKOUT_PASSWORD" || (echo "Missing STAGING_CHECKOUT_PASSWORD" && exit 1)
+      - name: Crawl authenticated cloud surfaces
+        run: node e2e-audit/staging-cloud-smoke.mjs

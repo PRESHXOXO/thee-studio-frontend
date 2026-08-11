@@ -10,6 +10,7 @@ export function Topbar({
   mobile = false, onMenuClick,
 }) {
   const [searchOpen, setSearchOpen] = React.useState(false);
+  const displayContext = context === 'Generation Settings' ? 'Usage & Credits' : context;
 
   React.useEffect(() => {
     function handleKeyDown(e) {
@@ -59,7 +60,7 @@ export function Topbar({
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {!mobile && <span style={{ width: 20, height: 1, background: 'var(--accent-deep)', display: 'inline-block' }} />}
-          {context}
+          {displayContext}
         </span>
 
         <button

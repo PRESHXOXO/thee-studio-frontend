@@ -1,7 +1,11 @@
 import { chromium } from '@playwright/test';
 
 const baseUrl = process.env.STAGING_BASE_URL;
-if (!baseUrl) throw new Error('STAGING_BASE_URL is required.');
+const email = process.env.STAGING_SMOKE_EMAIL;
+const password = process.env.STAGING_SMOKE_PASSWORD;
+if (!baseUrl || !email || !password) {
+  throw new Error('STAGING_BASE_URL, STAGING_SMOKE_EMAIL, and STAGING_SMOKE_PASSWORD are required.');
+}
 
 const routes = [
   ['home', 'Studio'],
@@ -27,39 +31,23 @@ const forbiddenText = [
   'Cloud video generation is not enabled in Scene Flow yet.',
 ];
 
-const stamp = Date.now();
-const email = `theestudio.release.smoke.${stamp}.${crypto.randomUUID().slice(0, 8)}@gmail.com`;
-const password = `Smoke-${crypto.randomUUID()}-A9!`;
 let stage = 'launch';
 const browser = await chromium.launch({ headless: true });
-
 try {
   const context = await browser.newContext({ viewport: { width: 1365, height: 900 } });
   const page = await context.newPage();
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(String(error?.message || error)));
 
-  stage = 'signup';
-  await page.goto(`${baseUrl}/signup`, { waitUntil: 'domcontentloaded' });
-  await page.getByLabel('Name').fill('Release Smoke');
+  stage = 'login';
+  await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
   await page.getByLabel('Email').fill(email);
   await page.locator('#auth-password').fill(password);
-  await page.getByRole('button', { name: 'Create account' }).click();
-
-  await page.waitForURL(url => url.pathname === '/plans', { timeout: 15_000 }).catch(() => undefined);
-  if (new URL(page.url()).pathname !== '/plans') {
-    const bodyText = (await page.locator('body').innerText()).replace(/\s+/g, ' ').trim();
-    if (/check your email and confirm your account/i.test(bodyText)) {
-      throw new Error('Public signup succeeded but email confirmation is required; automated route crawl needs a confirmed staging test identity.');
-    }
-    const useful = bodyText.match(/(?:sign-in failed|authentication failed|unable to reach|account already exists|enter a valid email address|password[^.]*|rate limit[^.]*|email[^.]*invalid)[^.]*\.?/i)?.[0]
-      || bodyText.slice(0, 500);
-    throw new Error(`Public signup did not reach plan selection. UI detail: ${useful}`);
+  await page.getByRole('button', { name: /sign in/i }).click();
+  await page.waitForURL(url => url.pathname.startsWith('/studio') || url.pathname === '/plans', { timeout: 20_000 });
+  if (new URL(page.url()).pathname === '/plans') {
+    throw new Error('Dedicated staging smoke account does not currently have Studio access.');
   }
-
-  stage = 'free plan';
-  await page.getByRole('button', { name: 'Choose Free' }).click();
-  await page.waitForURL(url => url.pathname.startsWith('/studio'), { timeout: 20_000 });
 
   stage = 'route crawl';
   for (const [route, label] of routes) {
@@ -91,13 +79,11 @@ try {
   }
 
   console.log('STAGING_CLOUD_SMOKE=passed');
-  console.log('SIGNUP=passed');
-  console.log('FREE_PLAN_SELECTION=passed');
   console.log(`ROUTES_CERTIFIED=${routes.length}`);
   console.log('SESSION_REFRESH=passed');
 } catch (error) {
   const safe = String(error?.message || error)
-    .replaceAll(email, '[generated-email]')
+    .replaceAll(email, '[smoke-email]')
     .replace(/https?:\/\/\S+/g, '[url]')
     .slice(0, 1200);
   console.error(`STAGING_CLOUD_SMOKE=failed stage=${stage} error=${safe}`);

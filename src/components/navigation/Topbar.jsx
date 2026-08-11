@@ -4,7 +4,11 @@ import { SearchPalette } from './SearchPalette.jsx';
 import { NotificationsMenu } from './NotificationsMenu.jsx';
 import { ProfileMenu } from './ProfileMenu.jsx';
 
-export function Topbar({ context = 'Studio', actions, user = 'Thee Studio', userEmail, userSrc, onNav, onSignOut, allowedNavIds, showSettings = true, style }) {
+export function Topbar({
+  context = 'Studio', actions, user = 'Thee Studio', userEmail, userSrc,
+  onNav, onSignOut, allowedNavIds, showSettings = true, style,
+  mobile = false, onMenuClick,
+}) {
   const [searchOpen, setSearchOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -20,38 +24,70 @@ export function Topbar({ context = 'Studio', actions, user = 'Thee Studio', user
 
   return (
     <>
-    <header style={{
-      height: 'var(--topbar-h)', flex: 'none', boxSizing: 'border-box',
-      display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px',
-      borderBottom: '1px solid var(--border)', background: 'var(--surface-app-translucent)',
-      backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-      position: 'fixed', top: 0, left: 'var(--sidebar-w)', right: 0, zIndex: 99, ...style,
-    }}>
-      <span style={{ font: '500 0.8125rem/1 var(--font-ui)', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        <Icon name="command" size={14} /> {context}
-      </span>
+      <header style={{
+        height: mobile ? 'calc(var(--topbar-h) + env(safe-area-inset-top))' : 'var(--topbar-h)',
+        paddingTop: mobile ? 'env(safe-area-inset-top)' : 0,
+        flex: 'none', boxSizing: 'border-box',
+        display: 'flex', alignItems: 'center', gap: mobile ? 8 : 16,
+        paddingLeft: mobile ? 10 : 28, paddingRight: mobile ? 10 : 28,
+        borderBottom: '1px solid var(--border)', background: 'var(--surface-app-translucent)',
+        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        position: 'fixed', top: 0, left: mobile ? 0 : 'var(--sidebar-w)', right: 0, zIndex: 99,
+        ...style,
+      }}>
+        {mobile && (
+          <button
+            type="button"
+            aria-label="Open navigation"
+            onClick={onMenuClick}
+            style={{
+              width: 44, height: 44, flexShrink: 0, display: 'grid', placeItems: 'center',
+              border: 0, borderRadius: 'var(--radius-md)', background: 'transparent',
+              color: 'var(--text-body)', cursor: 'pointer',
+            }}
+          >
+            <Icon name="menu" size={21} strokeWidth={1.9} />
+          </button>
+        )}
 
-      <button
-        onClick={() => setSearchOpen(true)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 'var(--radius-pill)',
-          border: '1px solid var(--border)', background: 'var(--surface-inset)', cursor: 'pointer',
-          color: 'var(--text-faint)', font: '500 0.8rem/1 var(--font-ui)', fontFamily: 'inherit',
-          maxWidth: 280, width: '100%', marginLeft: 12,
-        }}
-      >
-        <Icon name="search" size={14} strokeWidth={1.75} />
-        <span style={{ flex: 1, textAlign: 'left' }}>Search…</span>
-        <span style={{ font: '500 0.68rem/1 var(--font-ui)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 5px' }}>⌘K</span>
-      </button>
+        <span style={{
+          font: mobile ? '600 0.875rem/1 var(--font-ui)' : '500 0.8125rem/1 var(--font-ui)',
+          color: mobile ? 'var(--text-strong)' : 'var(--text-muted)',
+          display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 1,
+          minWidth: 0, maxWidth: mobile ? '34vw' : undefined,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          {!mobile && <Icon name="command" size={14} />}
+          {context}
+        </span>
 
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-        {actions}
-        <NotificationsMenu onNav={onNav} />
-        <ProfileMenu user={user} userEmail={userEmail} userSrc={userSrc} onNav={onNav} onSignOut={onSignOut} showSettings={showSettings} />
-      </div>
-    </header>
-    <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onNav={onNav} allowedNavIds={allowedNavIds} />
+        <button
+          type="button"
+          aria-label="Search Studio"
+          onClick={() => setSearchOpen(true)}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: mobile ? 'center' : 'flex-start',
+            gap: 8, padding: mobile ? 0 : '7px 12px',
+            width: mobile ? 42 : '100%', height: mobile ? 42 : undefined,
+            minWidth: mobile ? 42 : 0, maxWidth: mobile ? 42 : 280,
+            marginLeft: mobile ? 'auto' : 12,
+            borderRadius: mobile ? 'var(--radius-md)' : 'var(--radius-pill)',
+            border: '1px solid var(--border)', background: 'var(--surface-inset)', cursor: 'pointer',
+            color: 'var(--text-faint)', font: '500 0.8rem/1 var(--font-ui)', fontFamily: 'inherit',
+          }}
+        >
+          <Icon name="search" size={15} strokeWidth={1.75} />
+          {!mobile && <span style={{ flex: 1, textAlign: 'left' }}>Search…</span>}
+          {!mobile && <span style={{ font: '500 0.68rem/1 var(--font-ui)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 5px' }}>⌘K</span>}
+        </button>
+
+        <div style={{ marginLeft: mobile ? 0 : 'auto', display: 'flex', alignItems: 'center', gap: mobile ? 4 : 10, minWidth: 0 }}>
+          {!mobile && actions}
+          <NotificationsMenu onNav={onNav} />
+          <ProfileMenu user={user} userEmail={userEmail} userSrc={userSrc} onNav={onNav} onSignOut={onSignOut} showSettings={showSettings} />
+        </div>
+      </header>
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onNav={onNav} allowedNavIds={allowedNavIds} />
     </>
   );
 }

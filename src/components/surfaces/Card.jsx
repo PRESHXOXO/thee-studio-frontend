@@ -8,6 +8,10 @@ export function Card({ children, variant = 'default', style, onClick, className 
   const childArray = React.Children.toArray(children);
   const firstChildText = childArray[0]?.props?.children;
   const isProofStage = !interactive && (firstChildText === 'Canvas' || firstChildText === 'Output');
+  // ShootBuilder's split controls pass this exact flex contract. Treat that
+  // surface as a shoot sheet laid directly on the atelier canvas, not a giant
+  // rounded SaaS card surrounding the entire workflow.
+  const isShootSheet = !interactive && style?.flex === '1 1 460px';
 
   const variants = {
     default: {
@@ -45,9 +49,26 @@ export function Card({ children, variant = 'default', style, onClick, className 
     '--surface-sunken': 'rgba(255,255,255,0.055)',
     '--surface-inset': 'rgba(255,255,255,0.055)',
     '--white': 'rgba(255,255,255,0.06)',
+    position: 'relative',
   } : null;
 
-  const cls = [interactive ? 'ts-card' : 'ts-static-card', isProofStage ? 'ts-proof-stage' : null, className].filter(Boolean).join(' ') || undefined;
+  const shootSheetStyle = isShootSheet ? {
+    background: 'transparent',
+    border: 'none',
+    boxShadow: 'none',
+    borderRadius: 0,
+    padding: 0,
+    backdropFilter: 'none',
+    WebkitBackdropFilter: 'none',
+  } : null;
+
+  const cls = [
+    interactive ? 'ts-card' : 'ts-static-card',
+    isProofStage ? 'ts-proof-stage' : null,
+    isShootSheet ? 'ts-shoot-sheet' : null,
+    className,
+  ].filter(Boolean).join(' ') || undefined;
+
   return (
     <div
       onClick={onClick}
@@ -58,7 +79,9 @@ export function Card({ children, variant = 'default', style, onClick, className 
         cursor: interactive ? 'pointer' : 'default',
         ...variants[variant] || variants.default,
         ...proofStageStyle,
+        ...shootSheetStyle,
         ...style,
+        ...(isShootSheet ? shootSheetStyle : null),
       }}
     >
       {children}

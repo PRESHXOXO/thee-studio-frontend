@@ -24,7 +24,7 @@ function CharacterSelector({ characters, selectedId, onSelect }) {
   return (
     <div>
       <div style={{ ...LABEL, marginBottom: 12 }}>Active Creator</div>
-      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, WebkitOverflowScrolling: 'touch' }}>
         <button
           onClick={() => onSelect(null)}
           style={{
@@ -99,6 +99,7 @@ export function TheeDirector({
   initialCreatorId = null,
   initialMode = 'guided',
   initialSettings = null,
+  mobile = false,
 }) {
   const [mode, setMode] = React.useState(
     MODES.some(item => item.id === initialMode) ? initialMode : 'guided'
@@ -181,10 +182,10 @@ export function TheeDirector({
   const gated = characters.length > 0 && !selectedCharId && !buildWithoutCreator;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: mobile ? 18 : 24, maxWidth: 'var(--content-max)', margin: '0 auto' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
         <div>
           <div style={{ font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--accent-deep)', marginBottom: 10 }}>Thee Director</div>
           <h1 style={{ font: 'var(--display-lg)', color: 'var(--text-strong)', letterSpacing: '-0.015em', margin: '0 0 10px' }}>Direct with intention. Create with impact.</h1>
@@ -196,7 +197,7 @@ export function TheeDirector({
           about the session, not just the Guided form. */}
       {initialCampaign && (
         <div style={{
-          display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 18px',
+          display: 'flex', alignItems: 'flex-start', gap: 12, padding: mobile ? '12px 14px' : '14px 18px',
           borderRadius: 'var(--radius-lg)', background: 'var(--rose-glass)', border: '1px solid var(--border-strong)',
         }}>
           <Icon name="megaphone" size={16} strokeWidth={1.75} style={{ color: 'var(--accent-deep)', flexShrink: 0, marginTop: 2 }} />
@@ -224,8 +225,10 @@ export function TheeDirector({
               onModeChange?.(m.id);
             }}
             style={{
-              display: 'flex', alignItems: 'center', gap: 7,
-              padding: '9px 16px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              padding: mobile ? '11px 14px' : '9px 16px', minHeight: mobile ? 44 : undefined,
+              flex: mobile ? '1 1 132px' : undefined,
+              borderRadius: 'var(--radius-pill)', cursor: 'pointer',
               border: `1.5px solid ${mode === m.id ? 'var(--accent-deep)' : 'var(--border)'}`,
               background: mode === m.id ? 'var(--rose-deep)' : 'transparent',
               color: mode === m.id ? 'var(--accent-deep)' : 'var(--text-muted)',
@@ -246,7 +249,7 @@ export function TheeDirector({
       {/* Creator is session context, not a Guided-only setting. Keeping it
           visible makes all three input methods honest about who is on set. */}
       {characters.length > 0 && (
-        <Card style={{ padding: '16px 20px' }}>
+        <Card style={{ padding: mobile ? '14px' : '16px 20px' }}>
           <CharacterSelector characters={characters} selectedId={selectedCharId} onSelect={selectCreator} />
         </Card>
       )}
@@ -255,7 +258,7 @@ export function TheeDirector({
           without losing a form, conversation, or generated result. */}
       <div role="tabpanel" hidden={mode !== 'guided'} style={{ display: mode === 'guided' ? 'block' : 'none' }}>
         {gated ? (
-          <Card style={{ display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center', textAlign: 'center', padding: '40px 32px' }}>
+          <Card style={{ display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center', textAlign: 'center', padding: mobile ? '28px 18px' : '40px 32px' }}>
             <Icon name="user-round-search" size={30} strokeWidth={1.25} style={{ color: 'var(--text-faint)' }} />
             <div>
               <div style={{ font: '600 1.0625rem/1.3 var(--font-display)', color: 'var(--text-strong)', marginBottom: 6 }}>Pick a creator to start shooting</div>
@@ -263,14 +266,14 @@ export function TheeDirector({
             </div>
             <button
               onClick={() => setBuildWithoutCreator(true)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'var(--text-sm)', color: 'var(--accent-deep)', textDecoration: 'underline', padding: 0, fontFamily: 'inherit' }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'var(--text-sm)', color: 'var(--accent-deep)', textDecoration: 'underline', padding: mobile ? '10px 0' : 0, minHeight: mobile ? 44 : undefined, fontFamily: 'inherit' }}
             >
               Or build a new subject without a creator
             </button>
           </Card>
         ) : (
           <ShootBuilder
-            layout="split"
+            layout={mobile ? 'stacked' : 'split'}
             creator={selectedChar}
             allowNoCreator
             initialScene={initialScene}

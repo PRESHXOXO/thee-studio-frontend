@@ -1,4 +1,6 @@
 import { createTelemetryRequestKey, trackStorageOperation } from '../api/usageTelemetry.js';
+import { SupabasePipelineRepository } from '../production/SupabasePipelineRepository.js';
+import { syncCastReferencesToCloud } from './castCreatorSync.js';
 
 export const SYNCED_KEYS = [
   'ts_characters',
@@ -10,8 +12,6 @@ export const SYNCED_KEYS = [
   'ts_creator_memory_v1',
 ];
 
-// Browser cache is only a working copy for the currently authenticated user.
-// These keys must never survive logout or an account switch.
 export const USER_SCOPED_CACHE_KEYS = [
   ...SYNCED_KEYS,
   'ts_creator_draft',
@@ -26,8 +26,44 @@ let writeChain = Promise.resolve();
 let runtimeEpoch = 0;
 
 function announceSync(type, detail) {
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(type, { detail }));
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(type, { detail }));
+}
+
+async function migrateLegacyCastReferences(db, userId, epoch) {
+  if (runtime?.epoch !== epoch || runtime?.userId !== userId) return;
+  let creators;
+  try {
+    const raw = localStorage.getItem('ts_characters');
+    creators = raw ? JSON.parse(raw) : [];
+  } catch {
+    return;
+  }
+  if (!Array.isArray(creators) || !creators.length) return;
+  const legacyWithImages = creators.filter(creator =>
+    creator && (
+      (Array.isArray(creator.refImages) && creator.refImages.some(image => typeof image === 'string' && image.startsWith('data:image/')))
+      || (typeof creator.image === 'string' && creator.image.startsWith('data:image/'))
+    )
+  );
+  if (!legacyWithImages.length) return;
+
+  try {
+    const repository = new SupabasePipelineRepository(db, userId);
+    await repository.syncStudioCreators(creators);
+    const cloudCreators = await repository.listCreators();
+    for (const source of legacyWithImages) {
+      if (runtime?.epoch !== epoch || runtime?.userId !== userId) return;
+      const cloudCreator = cloudCreators.find(item => String(item.studio_source_id) === String(source.id))
+        || cloudCreators.find(item => item.name?.trim().toLowerCase() === source.name?.trim().toLowerCase());
+      if (!cloudCreator) continue;
+      await syncCastReferencesToCloud(repository, source, cloudCreator, source.id);
+    }
+    announceSync('thee:cloud-sync-ok', { key: 'creator_reference_assets' });
+  } catch (error) {
+    // Migration is a background self-heal and must never block authentication.
+    // Surface it through the normal sync/error telemetry so it remains visible.
+    announceSync('thee:cloud-sync-error', { message: 'Creator reference migration is incomplete.', key: 'creator_reference_assets' });
+    void reportStudioError(error, { code: 'legacy_creator_reference_migration_failed', operation: 'creator_reference_migration' });
   }
 }
 
@@ -50,6 +86,11 @@ export async function bootstrapCloudStore(db, userId) {
       localStorage.removeItem(key);
     }
   }
+
+  // Do not make sign-in wait on historical image uploads. The migration is
+  // idempotent and account-scoped, so every successful bootstrap can safely
+  // self-heal missing canonical Cast references in the background.
+  queueMicrotask(() => void migrateLegacyCastReferences(db, userId, epoch));
 }
 
 async function writeDocument(key, value, sourceRuntime = runtime) {

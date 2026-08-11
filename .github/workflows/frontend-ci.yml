@@ -3,7 +3,10 @@ name: Frontend CI
 on:
   pull_request:
   push:
-    branches: [codex/staging-supabase-integration]
+    branches:
+      - main
+      - codex/staging-supabase-integration
+      - codex/reconcile-full-frontend
 
 jobs:
   frontend:

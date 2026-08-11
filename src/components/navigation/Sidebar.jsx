@@ -87,6 +87,7 @@ export function Sidebar({
             return <div key={it.section} style={{ font: '600 0.61rem/1 var(--font-ui)', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.30)', padding: '16px 11px 7px' }}>{it.section}</div>;
           }
           const on = active === it.id;
+          const displayLabel = it.id === 'settings' ? 'Usage & Credits' : it.label;
           return (
             <button
               key={it.id}
@@ -103,7 +104,7 @@ export function Sidebar({
               onMouseLeave={e => { if (!on) { e.currentTarget.style.color = 'rgba(255,255,255,0.64)'; e.currentTarget.style.background = 'transparent'; } }}
             >
               <Icon name={it.icon} size={16} strokeWidth={on ? 2 : 1.7} color={on ? '#FF8A68' : undefined} />
-              <span style={{ flex: 1 }}>{it.label}</span>
+              <span style={{ flex: 1 }}>{displayLabel}</span>
               {it.badge && <span style={{ font: '700 0.6rem/1 var(--font-mono)', color: '#F08A6A', padding: '2px 0' }}>{it.badge}</span>}
               {on && <span aria-hidden="true" style={{ position: 'absolute', right: 7, width: 4, height: 4, borderRadius: '50%', background: '#FF8A68' }} />}
             </button>

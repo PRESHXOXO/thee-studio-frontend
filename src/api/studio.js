@@ -183,9 +183,7 @@ export async function fetchEngineChoices() {
     const components = config.components || [];
     for (const comp of components) {
       const props = comp.props || {};
-      if (props.label === 'Creative Engine' && Array.isArray(props.choices) && props.choices.length) {
-        return props.choices.map(c => (Array.isArray(c) ? c[0] : c));
-      }
+      if (props.label === 'Creative Engine' && Array.isArray(props.choices) && props.choices.length) return props.choices.map(c => (Array.isArray(c) ? c[0] : c));
     }
     for (const comp of components) {
       const choices = comp.props?.choices;
@@ -193,18 +191,12 @@ export async function fetchEngineChoices() {
       const vals = choices.map(c => (Array.isArray(c) ? c[0] : String(c)));
       if (vals.filter(v => ENGINE_KEYWORDS.some(kw => v.includes(kw))).length >= 2) return vals;
     }
-  } catch (e) {
-    console.warn('fetchEngineChoices:', e?.message);
-  }
+  } catch (e) { console.warn('fetchEngineChoices:', e?.message); }
   return null;
 }
 
-export async function buildDirectorOutputs({
-  vision = '', contentType = '', mood = '', outputGoal = '', character = 'None', scene = 'None', useIdentityLock = false,
-} = {}) {
-  const data = await callNamedEndpoint('build_director_outputs', [
-    vision, contentType, mood, outputGoal, character || 'None', scene || 'None', useIdentityLock,
-  ]);
+export async function buildDirectorOutputs({ vision = '', contentType = '', mood = '', outputGoal = '', character = 'None', scene = 'None', useIdentityLock = false } = {}) {
+  const data = await callNamedEndpoint('build_director_outputs', [vision, contentType, mood, outputGoal, character || 'None', scene || 'None', useIdentityLock]);
   return { positivePrompt: data[0] || '', negativePrompt: data[1] || '', recommendedEngine: data[2] || '', reason: data[3] || '' };
 }
 
@@ -224,6 +216,7 @@ export async function characterGenerate({
   batchSize = 1,
   creatorId = null,
   fashionSafetyMode = 'auto',
+  requestKey = null,
 }) {
   if (hasSupabaseConfig()) {
     const data = await invokeCloudFunction('cast-quick-shoot', {
@@ -235,18 +228,19 @@ export async function characterGenerate({
       batchSize,
       imageSize,
       fashionSafetyMode,
-    });
+    }, requestKey || crypto.randomUUID());
     if (data.status === 'succeeded') {
       const images = await signCastAssets('generation-assets', data.assets);
       return { status: 'succeeded', images, summary: data.summary || '' };
     }
     if (data.status === 'failed' || data.status === 'cancelled') throw new Error(data.error || 'Generation failed.');
-    return { status: 'pending', jobId: data.jobId, images: [] };
+    const submission = { status: 'pending', jobId: data.jobId, images: [] };
+    // Ad-hoc Director/Prompt-Lab reference edits do not have a saved creator
+    // UUID to resume from another screen, so resolve their durable job here.
+    // Saved Cast Quick Shoot keeps the existing pending-return contract.
+    return creatorId ? submission : awaitCastQuickShootResult(submission);
   }
-  const raw = await callNamedEndpoint('character_generate', [
-    JSON.stringify({ engineId, positivePrompt, negativePrompt, imageSize, batchSize, anchorImages, mode }),
-    characterImage,
-  ], IMAGE_GENERATION_TIMEOUT_MS);
+  const raw = await callNamedEndpoint('character_generate', [JSON.stringify({ engineId, positivePrompt, negativePrompt, imageSize, batchSize, anchorImages, mode }), characterImage], IMAGE_GENERATION_TIMEOUT_MS);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0] || '{}') : (raw[0] || {});
   if (parsed.error) throw new Error(parsed.error);
   parsed.images = (parsed.images || []).map(url => url.startsWith('data:') ? url : relativizeUrl(url));
@@ -262,11 +256,7 @@ export async function pollCastQuickShootStatus(jobId) {
     return { status: 'succeeded', images, summary: data.summary || '' };
   }
   if (data.status === 'failed' || data.status === 'cancelled') {
-    return {
-      status: 'failed',
-      error: data.error || 'Image generation failed. The provider did not return a specific reason.',
-      errorCategory: data.errorCategory || 'unknown',
-    };
+    return { status: 'failed', error: data.error || 'Image generation failed. The provider did not return a specific reason.', errorCategory: data.errorCategory || 'unknown' };
   }
   return { status: 'pending' };
 }
@@ -292,14 +282,7 @@ export async function preflightCastReferences(references, creatorId = null) {
   return invokeCloudFunction('cast-reference-preflight', { creatorId, references });
 }
 
-export async function castQuickShootPlain({
-  positivePrompt,
-  negativePrompt,
-  batchSize = 1,
-  creatorId = null,
-  imageSize = 'Vertical 9:16',
-  fashionSafetyMode = 'auto',
-} = {}) {
+export async function castQuickShootPlain({ positivePrompt, negativePrompt, batchSize = 1, creatorId = null, imageSize = 'Vertical 9:16', fashionSafetyMode = 'auto', requestKey = null } = {}) {
   const data = await invokeCloudFunction('cast-quick-shoot', {
     creatorId,
     prompt: positivePrompt,
@@ -308,7 +291,7 @@ export async function castQuickShootPlain({
     batchSize,
     imageSize,
     fashionSafetyMode,
-  });
+  }, requestKey || crypto.randomUUID());
   if (data.status === 'pending') return awaitCastQuickShootResult({ status: 'pending', jobId: data.jobId });
   if (data.status === 'failed' || data.status === 'cancelled') throw new Error(data.error || 'Generation failed.');
   const images = await signCastAssets('generation-assets', data.assets);
@@ -337,11 +320,7 @@ export async function analyzeCharacterReferences(imageDataUrls, { creatorId = nu
     if (parsed.error) throw new Error(parsed.error);
   }
   if (references.length < 3) parsed.wardrobe = '';
-  if (references.length < 2) {
-    parsed.body = '';
-    parsed.personality = '';
-    parsed.niche = '';
-  }
+  if (references.length < 2) { parsed.body = ''; parsed.personality = ''; parsed.niche = ''; }
   if (![parsed.face, parsed.hair, parsed.tone].some(value => typeof value === 'string' && value.trim())) {
     throw new Error('The analysis finished but could not read the creator’s identity. Check that the first image clearly shows their face, then try again.');
   }
@@ -360,11 +339,7 @@ export async function generateCharacterSeed(params) {
 export async function generateReferenceSet({ characterDesc, count, creatorId = null } = {}) {
   if (hasSupabaseConfig()) {
     if (!creatorId) throw new Error('Save this creator before building a reference set.');
-    const data = await invokeCloudFunction('cast-generate-reference-set', {
-      creatorId,
-      characterDescription: characterDesc,
-      count,
-    });
+    const data = await invokeCloudFunction('cast-generate-reference-set', { creatorId, characterDescription: characterDesc, count });
     const images = await signCastAssets('creator-references', data.references);
     return { images, ...data };
   }
@@ -443,9 +418,7 @@ export async function generateImage({
   imageStyle = 'Lifestyle Creator', positivePrompt = '', negativePrompt = '', imageSize = 'Vertical 9:16',
   quality = 'High', batchSize = 1, seed = -1, cfg = 7, steps = 20, width = 832, height = 1216,
 } = {}) {
-  if (hasSupabaseConfig()) {
-    return castQuickShootPlain({ positivePrompt, negativePrompt, batchSize, imageSize });
-  }
+  if (hasSupabaseConfig()) return castQuickShootPlain({ positivePrompt, negativePrompt, batchSize, imageSize });
   const data = await callNamedEndpoint('generate_image', [
     engine, performanceMode, comfyServerUrl, comfyWorkflowPath, imageStyle, positivePrompt, negativePrompt,
     imageSize, quality, batchSize, seed, cfg, steps, width, height,
@@ -462,9 +435,7 @@ export async function generateImage({
 
 export async function sceneFlowChat({ messagesJson = '[]', userMessage = '', referenceImages = [], refImageB64 = '' } = {}) {
   const references = referenceImages.length ? serializeDirectorReferences(referenceImages) : refImageB64;
-  if (hasSupabaseConfig()) {
-    return invokeCloudFunction('director-scene-flow-chat', { messagesJson, userMessage, references });
-  }
+  if (hasSupabaseConfig()) return invokeCloudFunction('director-scene-flow-chat', { messagesJson, userMessage, references });
   const raw = await callNamedEndpoint('scene_flow_chat', [messagesJson, userMessage, references]);
   return typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
 }
@@ -474,29 +445,29 @@ export async function sceneFlowGenerate({ sceneJson = '{}', referenceImages = []
   if (hasSupabaseConfig()) {
     const scene = typeof sceneJson === 'string' ? JSON.parse(sceneJson || '{}') : (sceneJson || {});
     const contentType = scene.content_type || 'photo';
-    if (contentType === 'video') {
-      throw new Error('Cloud video generation is not enabled in Scene Flow yet. Photo generation is available.');
-    }
+    if (contentType === 'video') throw new Error('Cloud video generation is not enabled in Scene Flow yet. Photo generation is available.');
     const positivePrompt = scene.full_prompt || [scene.setting, scene.wardrobe, scene.location, scene.vibe].filter(Boolean).join('. ');
     if (!positivePrompt.trim()) throw new Error('Scene Flow has no generation prompt yet.');
     const identity = references.find(reference => reference.role === 'identity' && reference.dataUrl);
     if (identity) {
-      const submission = await characterGenerate({
+      const completed = await characterGenerate({
         positivePrompt,
         negativePrompt: '',
         characterImage: identity.dataUrl,
         anchorImages: references.filter(reference => reference !== identity && reference.dataUrl).map(reference => reference.dataUrl),
         imageSize: scene.imageSize || scene.aspect || scene.aspect_ratio || 'Vertical 9:16',
         batchSize: 1,
+        requestKey: telemetryRequestKey || crypto.randomUUID(),
       });
-      const completed = await awaitCastQuickShootResult(submission);
-      return { result_url: completed.images?.[0] || null, content_type: 'photo', status: 'succeeded' };
+      const resolved = await awaitCastQuickShootResult(completed);
+      return { result_url: resolved.images?.[0] || null, content_type: 'photo', status: 'succeeded' };
     }
     const completed = await castQuickShootPlain({
       positivePrompt,
       negativePrompt: '',
       batchSize: 1,
       imageSize: scene.imageSize || scene.aspect || scene.aspect_ratio || 'Vertical 9:16',
+      requestKey: telemetryRequestKey || crypto.randomUUID(),
     });
     return { result_url: completed.images?.[0] || null, content_type: 'photo', status: 'succeeded' };
   }

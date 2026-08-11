@@ -8,7 +8,7 @@ export function buildCharacterPrompt(char, sceneName, mood, identityLocked, outf
   // IDENTITY LOCK BLOCK — prepended first when identity is locked
   if (identityLocked) {
     const whatChanges = mode === 'portrait'
-      ? 'Camera angle, expression, and framing only — no outfit changes, no complex scene.'
+      ? 'Camera angle, expression, framing, and crop only — keep styling simple and secondary.'
       : 'Scene, wardrobe, pose, lighting, camera angle, styling, and mood only.';
 
     // Pull the face anchor inside the lock block so eye color / specific features are LOCKED, not just context
@@ -33,9 +33,9 @@ export function buildCharacterPrompt(char, sceneName, mood, identityLocked, outf
     } else if (f.face || f.tone) {
       parts.push(`TALENT — ${char.name}: ${[f.face, f.tone && `${f.tone} complexion`].filter(Boolean).join('. ')}.`);
     }
-    parts.push(`PORTRAIT: Realistic photographic portrait. ${angle}. Neutral clean background. Natural studio lighting. Preserve exact identity. No complex scene, no props, no other people.`);
-    parts.push('QUALITY: Ultra-realistic portrait photography. Natural skin texture. Believable facial features. Shot on 85mm lens at f/2.8.');
-    parts.push('AVOID: Face drift, altered bone structure, changed ethnicity, generic model face, over-smoothed skin, AI look, warped features.');
+    parts.push(`PORTRAIT: Realistic photographic portrait. ${angle}. Head-and-shoulders framing. Neutral clean background. Natural studio lighting. Plain opaque crew-neck top in a neutral tone. Styling stays simple and secondary to the face. Preserve exact identity. No complex scene, no props, no other people.`);
+    parts.push('QUALITY: Ultra-realistic portrait photography. Natural skin texture. Believable facial features. Shot on 85mm lens at f/2.8. Crisp focus on the eyes, eyelashes, brows, skin texture, and individual hair strands.');
+    parts.push('AVOID: Face drift, altered bone structure, changed ethnicity, generic model face, over-smoothed skin, AI look, warped features, soft focus, motion blur.');
     return parts.join('\n\n');
   }
 

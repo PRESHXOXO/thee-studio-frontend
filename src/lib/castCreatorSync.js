@@ -1,8 +1,6 @@
-// Bridges a Cast-saved creator (Characters.jsx's local characters array,
-// legacy Date.now() ids) to a real Supabase `creators` row, reusing the
-// existing studio_source_id-keyed sync. The same save also migrates the
-// creator's actual reference photos into private `creator_reference_assets`
-// so identity generation is not secretly dependent on a browser document.
+// Bridges Cast-saved creators (Characters.jsx's local characters array,
+// legacy Date.now() ids) to real Supabase `creators` rows and canonical
+// private creator reference assets.
 
 function castImages(source) {
   if (Array.isArray(source?.refImages) && source.refImages.length) {
@@ -97,17 +95,35 @@ export async function syncCastReferencesToCloud(repository, source, cloudCreator
   return results;
 }
 
+/**
+ * Bulk reconciliation used at cloud-session bootstrap. This deliberately does
+ * not wait for the user to open Cast or press Save: legacy browser/cloud-
+ * document creators are migrated to canonical UUID rows + private reference
+ * assets as soon as their account is hydrated. Safe to run repeatedly.
+ */
+export async function syncAllCastCreatorsToCloud(repository, studioCreators = []) {
+  if (!repository?.syncStudioCreators || !repository?.listCreators) return [];
+  if (!Array.isArray(studioCreators) || !studioCreators.length) return [];
+
+  await repository.syncStudioCreators(studioCreators);
+  const cloudCreators = await repository.listCreators();
+  const linked = [];
+
+  for (const source of studioCreators) {
+    const cloudCreator = cloudCreators.find(creator => String(creator.studio_source_id) === String(source.id))
+      || cloudCreators.find(creator => creator.name?.trim().toLowerCase() === source.name?.trim().toLowerCase());
+    if (!cloudCreator) continue;
+    await syncCastReferencesToCloud(repository, source, cloudCreator, source.id);
+    linked.push({ savedId: source.id, cloudCreator });
+  }
+
+  return linked;
+}
+
 // Idempotent: a creator already linked by studio_source_id is found and
 // returned, not duplicated. Account isolation is inherited from the injected
 // repository, which scopes all reads/writes to the authenticated user.
 export async function linkCastCreatorToCloud(repository, studioCreators, savedId) {
-  if (!repository?.syncStudioCreators || !repository?.listCreators) return null;
-  await repository.syncStudioCreators(studioCreators);
-  const cloudCreators = await repository.listCreators();
-  const linked = cloudCreators.find(creator => String(creator.studio_source_id) === String(savedId)) || null;
-  if (!linked) return null;
-
-  const source = (studioCreators || []).find(creator => String(creator.id) === String(savedId));
-  if (source) await syncCastReferencesToCloud(repository, source, linked, savedId);
-  return linked;
+  const linked = await syncAllCastCreatorsToCloud(repository, studioCreators);
+  return linked.find(item => String(item.savedId) === String(savedId))?.cloudCreator || null;
 }

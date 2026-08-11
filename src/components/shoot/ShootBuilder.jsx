@@ -16,7 +16,7 @@ import { compressImage } from '../../lib/imageUtils.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../../lib/creatorMemory.js';
 import { referencePromptBlock } from '../../lib/directorReferences.js';
 import {
-  SHOOT_ENGINES, PORTRAIT_ANGLES, BATCH_OPTIONS, SHOOT_MOODS, SHOOT_LIGHTINGS, SHOOT_OUTFITS,
+  PORTRAIT_ANGLES, BATCH_OPTIONS, SHOOT_MOODS, SHOOT_LIGHTINGS, SHOOT_OUTFITS,
 } from '../../lib/shootOptions.js';
 import {
   LOCATIONS, GENDERS, SKIN_TONES, HAIR_COLORS, EYE_DETAILS, SPECIAL_FEATURES, STANDARD_NEGATIVE,
@@ -24,21 +24,11 @@ import {
 } from '../../lib/promptData.js';
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 };
+const MANAGED_ENGINE_ID = 'openai_image';
 
-// Identity-locked Quick Shoot submits are asynchronous (background provider
-// job) — the result comes back as { status: 'pending', jobId } and must be
-// polled. These helpers own that loop plus the localStorage handoff that
-// lets a browser refresh resume polling an already-owned pending job instead
-// of losing it (and never resubmit — polling is always a read).
 const QUICK_SHOOT_POLL_INTERVAL_MS = 2500;
 const QUICK_SHOOT_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
-// Stronger fashion interpretation used only after the user explicitly chooses
-// "Try Fashion-Safe Render" following a safety-moderation block. This does not
-// replace words such as sexy, sheer, lace, bodycon, etc.; it preserves the
-// requested fashion direction while resolving accidental exposure with discreet
-// garment construction. The click is a deliberate NEW generation, never an
-// automatic provider retry.
 const FASHION_SAFE_RENDER_RULE = [
   'FASHION-SAFE RENDER:',
   'Preserve the outfit reference as closely as possible: same silhouette, neckline, cutouts, slit, fit, lace or mesh pattern, accessories, and sexy eveningwear/editorial energy.',
@@ -51,22 +41,17 @@ function pendingQuickShootKey(creatorId) {
 }
 
 function savePendingQuickShootJob(creatorId, jobId) {
-  try { window.localStorage.setItem(pendingQuickShootKey(creatorId), jobId); } catch { /* storage unavailable — resume just won't work */ }
+  try { window.localStorage.setItem(pendingQuickShootKey(creatorId), jobId); } catch {}
 }
 
 function clearPendingQuickShootJob(creatorId) {
-  try { window.localStorage.removeItem(pendingQuickShootKey(creatorId)); } catch { /* no-op */ }
+  try { window.localStorage.removeItem(pendingQuickShootKey(creatorId)); } catch {}
 }
 
 function loadPendingQuickShootJob(creatorId) {
   try { return window.localStorage.getItem(pendingQuickShootKey(creatorId)); } catch { return null; }
 }
 
-// Resolves a characterGenerate()/castQuickShootPlain() result to its final
-// images. Synchronous results (status !== 'pending') pass through
-// immediately. Pending results are polled — each poll is a read-only status
-// check that can never submit another generation, so calling this
-// concurrently or after a refresh (which resumes with the same jobId) is safe.
 async function awaitCastQuickShootResult(result, creatorId) {
   if (result.status !== 'pending') return result;
   savePendingQuickShootJob(creatorId, result.jobId);
@@ -88,9 +73,6 @@ async function awaitCastQuickShootResult(result, creatorId) {
   }
 }
 
-// Editorial section wrapper — turns the old flat wall of uppercase labels into
-// grouped, titled blocks with an icon chip and a hairline divider, so the form
-// reads like a directed shoot sheet rather than a generic settings panel.
 function Section({ icon, title, hint, first, children }) {
   return (
     <div style={{
@@ -116,8 +98,6 @@ function Section({ icon, title, hint, first, children }) {
   );
 }
 
-// Small control label — no longer a heavy all-caps header competing with the
-// section titles; sits quietly above each control cluster.
 const FIELD_LABEL = { font: '600 0.72rem/1 var(--font-ui)', letterSpacing: '0.03em', color: 'var(--text-muted)', marginBottom: 9 };
 
 function PillButton({ active, onClick, children }) {
@@ -147,11 +127,6 @@ function getAllImages(char) {
   return [];
 }
 
-// Shared shoot form + generate pipeline — used embedded on the Characters
-// page (Quick Shoot, always has a creator, layout="stacked") and standalone
-// inside the unified Director screen's Guided tab (may run without a
-// creator via the raw-attribute escape hatch, when allowNoCreator is true;
-// layout="split" for a docked-controls + persistent-canvas arrangement).
 export function ShootBuilder({
   creator,
   allowNoCreator = false,
@@ -164,23 +139,19 @@ export function ShootBuilder({
   layout = 'stacked',
 }) {
   const restored = initialSettings?.workflow === 'guided' ? initialSettings : {};
-  const [identityMode, setIdentityMode] = React.useState(restored.identityMode || 'lifestyle'); // 'portrait' | 'lifestyle'
+  const [identityMode, setIdentityMode] = React.useState(restored.identityMode || 'lifestyle');
   const [quickAngle, setQuickAngle]     = React.useState(restored.quickAngle || 'front-facing');
   const [scene, setScene]               = React.useState(restored.scene || initialScene);
   const [outfit, setOutfit]             = React.useState(restored.outfit || 'default');
   const [mood, setMood]                 = React.useState(restored.mood || 'Clean');
   const [lighting, setLighting]         = React.useState(restored.lighting || 'Natural');
   const [notes, setNotes]               = React.useState(restored.notes ?? initialNotes);
-  const [engine, setEngine]             = React.useState(restored.engine || 'openai_image');
   const [batchSize, setBatchSize]       = React.useState(restored.batchSize || 1);
   const [activeRef, setActiveRef]       = React.useState(restored.activeRef || 0);
 
   const [shotReferences, setShotReferences] = React.useState([]);
-  // Preserve the analyzed description from old History entries after replacing
-  // the one-off outfit uploader with role-aware visual references.
   const legacyOutfitPhotoDesc = restored.outfitPhotoDesc || '';
 
-  // Raw-attribute escape hatch (no creator) — only rendered when allowNoCreator.
   const [rawGender, setRawGender]     = React.useState(restored.rawGender || 'Unspecified');
   const [rawPhysique, setRawPhysique] = React.useState(restored.rawPhysique || 'Unspecified');
   const [rawSkinTone, setRawSkinTone] = React.useState(restored.rawSkinTone || 'Unspecified');
@@ -203,10 +174,6 @@ export function ShootBuilder({
 
   const allImages = getAllImages(creator);
 
-  // Owner-only staging diagnostic: server-authoritative admin check (never
-  // trust a client-side role flag) gated additionally on this build actually
-  // being wired to the staging Supabase project — never production, never a
-  // customer account, regardless of environment.
   React.useEffect(() => {
     let cancelled = false;
     if (!hasSupabaseConfig() || !isStagingSupabaseProject()) return;
@@ -216,10 +183,6 @@ export function ShootBuilder({
     return () => { cancelled = true; };
   }, []);
 
-  // Staging owner-only debug tool: validates the currently-selected
-  // reference images (MIME/signature/size/dimensions) without ever calling
-  // OpenAI. Lets a suspect reference be diagnosed before spending a real
-  // provider request.
   async function runReferencePreflight() {
     if (!hasSupabaseConfig() || !allImages.length) return;
     setPreflighting(true);
@@ -236,8 +199,6 @@ export function ShootBuilder({
 
   const creatorIdRef = React.useRef(creator?.id ?? null);
 
-  // Reset per-shot media when the user changes creator after mount. Do not
-  // wipe a History re-run's restored reference index on the initial render.
   React.useEffect(() => {
     const nextCreatorId = creator?.id ?? null;
     if (creatorIdRef.current === nextCreatorId) return;
@@ -246,9 +207,6 @@ export function ShootBuilder({
     setShotReferences([]);
   }, [creator?.id]);
 
-  // Resume an owned pending Quick Shoot job after a page refresh (or when
-  // switching back to a creator with one in flight) instead of losing it.
-  // Reading localStorage and polling never submits a new generation.
   React.useEffect(() => {
     if (!hasSupabaseConfig()) return;
     const creatorId = canonicalCreatorId(creator);
@@ -285,14 +243,8 @@ export function ShootBuilder({
 
   const handleShotReferencesChange = (nextReferences) => {
     setShotReferences(nextReferences);
-    // The current OpenAI path is the only Guided engine that consumes every
-    // labeled visual input. Keep the selected engine honest when refs are used.
-    if (nextReferences.length) setEngine('openai_image');
   };
 
-  // Lighting/notes don't have dedicated slots in buildCharacterPrompt's
-  // fixed template — folded into the mood argument and appended as a
-  // trailing paragraph respectively, additive only, template untouched.
   const composedMood = [mood, lighting !== 'Natural' && `${lighting} lighting`].filter(Boolean).join(' — ');
 
   const snapshotSettings = () => ({
@@ -305,7 +257,6 @@ export function ShootBuilder({
     mood,
     lighting,
     notes,
-    engine,
     batchSize,
     activeRef,
     outfitPhotoDesc: legacyOutfitPhotoDesc,
@@ -363,21 +314,15 @@ export function ShootBuilder({
                   })),
               ]
             : [];
-          const referenceBlock = referencePromptBlock(
-            providerReferences,
-            { startsAfterIdentity: true }
-          );
+          const referenceBlock = referencePromptBlock(providerReferences, { startsAfterIdentity: true });
           if (referenceBlock) positivePrompt += `\n\n${referenceBlock}`;
           if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
           const identityCreatorId = canonicalCreatorId(creator);
           const submitted = await characterGenerate({
-            engineId: engine,
+            engineId: MANAGED_ENGINE_ID,
             positivePrompt,
             negativePrompt: STANDARD_NEGATIVE,
             characterImage: primaryIdentity,
-            // Providers currently use four visual inputs. Put role-specific
-            // shot references first so outfit/background/makeup choices are
-            // never displaced by secondary creator angles.
             anchorImages: providerReferences.length
               ? providerReferences.map(reference => reference.dataUrl)
               : allImages,
@@ -388,8 +333,6 @@ export function ShootBuilder({
           const result = await awaitCastQuickShootResult(submitted, identityCreatorId);
           images = result.images || [];
         } else {
-          // No reference photo — nothing to identity-lock against, but the
-          // built prompt is still a valid text-to-image prompt.
           if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
           const result = hasSupabaseConfig()
             ? await castQuickShootPlain({
@@ -410,7 +353,7 @@ export function ShootBuilder({
           images = result.images || [];
         }
         images.forEach(url => saveToLibrary(url, {
-          source: 'quick_shoot', character: creator.id, engine, scene: sceneName || undefined,
+          source: 'quick_shoot', character: creator.id, scene: sceneName || undefined,
           prompt: positivePrompt, mood: composedMood, mode: identityMode,
           campaign: campaignId || undefined,
           settings: snapshotSettings(),
@@ -432,7 +375,7 @@ export function ShootBuilder({
         const referenceImages = shotReferences.map(reference => reference.dataUrl);
         const result = referenceImages.length
           ? await awaitCastQuickShootResult(await characterGenerate({
-              engineId: engine,
+              engineId: MANAGED_ENGINE_ID,
               positivePrompt,
               negativePrompt: STANDARD_NEGATIVE,
               characterImage: referenceImages[0],
@@ -451,7 +394,7 @@ export function ShootBuilder({
             });
         images = result.images || [];
         images.forEach(url => saveToLibrary(url, {
-          source: 'director', engine: 'OpenAI Image', scene: scene !== 'None' ? scene : undefined,
+          source: 'director', scene: scene !== 'None' ? scene : undefined,
           prompt: positivePrompt,
           campaign: campaignId || undefined,
           settings: snapshotSettings(),
@@ -486,7 +429,6 @@ export function ShootBuilder({
     }
   };
 
-  // --- Controls: everything the user dials in before generating ---
   const controlsJSX = (
     <>
       {!creator && allowNoCreator && (
@@ -536,17 +478,6 @@ export function ShootBuilder({
         )}
 
         <div>
-          <div style={FIELD_LABEL}>Engine</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {SHOOT_ENGINES.map(eng => (
-              <PillButton key={eng.id} active={engine === eng.id} onClick={() => setEngine(eng.id)}>
-                <Icon name={eng.icon} size={13} strokeWidth={1.75} /> {eng.label}
-              </PillButton>
-            ))}
-          </div>
-        </div>
-
-        <div>
           <div style={FIELD_LABEL}>Shot type</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <PillButton active={identityMode === 'portrait'} onClick={() => setIdentityMode('portrait')}>
@@ -568,8 +499,8 @@ export function ShootBuilder({
           disabled={generating}
           title="Shot references"
           description={allImages.length
-            ? 'Your creator fills the identity slot. Add up to three more images and assign each a job. Multi-reference shots use OpenAI.'
-            : 'Add up to four images and assign each one a job. Multi-reference shots use OpenAI.'}
+            ? 'Your creator fills the identity slot. Add up to three more images and assign each a job.'
+            : 'Add up to four images and assign each one a job.'}
         />
       </div>
 
@@ -644,7 +575,6 @@ export function ShootBuilder({
     </>
   );
 
-  // --- Canvas: active reference before generating, progress + output after ---
   const showLivePreview = !generating && genImages.length === 0;
   const livePreviewImg = creator ? allImages[activeRef] || allImages[0] : null;
 
@@ -655,9 +585,6 @@ export function ShootBuilder({
           aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden',
           background: 'var(--grad-portrait)', border: '1px solid var(--border)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          // Split layout constrains this via its 340px panel. Stacked (Cast
-          // Quick Shoot) has no such cap, so bound it or a 3/4 portrait fills
-          // the whole card at full width.
           width: '100%', maxWidth: layout === 'split' ? 'none' : 260, alignSelf: 'center',
         }}>
           {livePreviewImg
@@ -699,7 +626,7 @@ export function ShootBuilder({
         <Button variant="primary" onClick={() => handleGenerate('auto')} loading={generating} disabled={generating} full={layout === 'split'} style={layout === 'split' ? {} : { alignSelf: 'flex-start' }}>
           <Icon name="zap" size={15} /> {generating ? 'Generating…' : 'Build + Generate'}
         </Button>
-        <GenerationProgress active={generating} identityLocked={!!creator?.locked} engine={engine} batchSize={batchSize} />
+        <GenerationProgress active={generating} identityLocked={!!creator?.locked} batchSize={batchSize} />
         {creator && hasSupabaseConfig() && !canonicalCreatorId(creator) && (
           <p style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', margin: 0 }}>
             This creator isn't cloud-linked yet, so this shoot won't be saved to their profile history.

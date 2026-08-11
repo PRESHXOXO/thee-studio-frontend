@@ -1,33 +1,26 @@
 import React from 'react';
 import { Icon } from './Icon.jsx';
 
-// Chunky & tactile: rounded-rect (not a pill), a hard offset bottom shadow
-// that reads physical, lifts on hover and sinks onto its shadow on click.
-// The press interaction lives in the .ts-btn CSS class (styles.css) since
-// inline styles can't express :hover/:active; per-variant shadow color is
-// passed down via the --btn-shadow custom property.
+// Premier studio controls: generation keeps the sunset signature, but the
+// physical 3D/chunky treatment is gone. Buttons should feel precise and calm,
+// like creative-suite controls, not playful dashboard tiles.
 export function Button({ children, variant = 'primary', size = 'md', icon, iconRight, full = false, disabled = false, loading = false, onClick, type = 'button', style }) {
   const sizes = {
-    sm: { padding: '8px 15px', font: '600 0.8125rem/1 var(--font-ui)', gap: 6, icon: 15, radius: 10 },
-    md: { padding: '12px 22px', font: '600 0.9375rem/1 var(--font-ui)', gap: 8, icon: 18, radius: 13 },
-    lg: { padding: '16px 30px', font: '700 1.0625rem/1 var(--font-ui)', gap: 9, icon: 20, radius: 15 },
+    sm: { padding: '8px 14px', font: '600 0.8125rem/1 var(--font-ui)', gap: 6, icon: 15, radius: 9 },
+    md: { padding: '11px 18px', font: '600 0.9rem/1 var(--font-ui)', gap: 8, icon: 18, radius: 10 },
+    lg: { padding: '15px 24px', font: '650 1rem/1 var(--font-ui)', gap: 9, icon: 20, radius: 11 },
   }[size];
 
   const variants = {
-    // Reserved for the action that actually produces generated pixels
-    // (Build + Generate, Generate Headshot, Generate with X) — the gradient
-    // is a signal, not decoration, so it only fires there.
-    primary:   { background: 'var(--grad-coral)', color: 'var(--text-on-accent)', border: 'none', '--btn-shadow': '#C24417' },
-    // Solid-fill affirmative action that isn't itself a generation call —
-    // data saves, launchers into another screen, approvals.
-    accent:    { background: 'var(--accent-indigo)', color: '#fff', border: 'none', '--btn-shadow': '#2E227F' },
-    secondary: { background: 'var(--white)', color: 'var(--accent-deep)', border: '1.5px solid var(--peach)', '--btn-shadow': '#E7BE9E' },
-    utility:   { background: 'var(--cream-deep)', color: 'var(--text-body)', border: '1.5px solid var(--border-strong)', '--btn-shadow': '#D6D1E8' },
-    ghost:     { background: 'transparent', color: 'var(--text-body)', border: '1.5px solid transparent', '--btn-shadow': 'transparent' },
-    dark:      { background: 'var(--grad-plum)', color: 'var(--text-on-dark)', border: 'none', '--btn-shadow': '#0C0820' },
+    primary:   { background: 'var(--grad-coral)', color: 'var(--text-on-accent)', border: '1px solid rgba(255,255,255,0.08)', '--btn-shadow': 'rgba(213, 73, 51, 0.20)' },
+    accent:    { background: 'var(--plum)', color: 'var(--text-on-dark)', border: '1px solid var(--plum)', '--btn-shadow': 'rgba(23, 20, 27, 0.16)' },
+    secondary: { background: 'rgba(255,254,252,0.78)', color: 'var(--text-strong)', border: '1px solid var(--border-strong)', '--btn-shadow': 'rgba(31,24,20,0.06)' },
+    utility:   { background: 'var(--surface-inset)', color: 'var(--text-body)', border: '1px solid var(--border)', '--btn-shadow': 'rgba(31,24,20,0.05)' },
+    ghost:     { background: 'transparent', color: 'var(--text-body)', border: '1px solid transparent', '--btn-shadow': 'transparent' },
+    dark:      { background: 'var(--plum)', color: 'var(--text-on-dark)', border: '1px solid var(--border-on-dark)', '--btn-shadow': 'rgba(0,0,0,0.18)' },
   };
 
-  const flat = variant === 'ghost'; // ghost has no chunk — stays quiet
+  const flat = variant === 'ghost';
 
   return (
     <button
@@ -37,17 +30,17 @@ export function Button({ children, variant = 'primary', size = 'md', icon, iconR
       className={flat ? undefined : 'ts-btn'}
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        gap: sizes.gap, padding: sizes.padding, font: sizes.font, letterSpacing: '0.01em',
+        gap: sizes.gap, padding: sizes.padding, font: sizes.font, letterSpacing: '0.005em',
         borderRadius: sizes.radius, cursor: disabled || loading ? 'not-allowed' : 'pointer',
         width: full ? '100%' : 'auto', opacity: disabled ? 0.5 : 1,
         whiteSpace: 'nowrap', userSelect: 'none',
         ...variants[variant], ...style,
       }}
     >
-      {icon && !loading && <Icon name={icon} size={sizes.icon} strokeWidth={2.25} />}
-      {loading && <Icon name="loader" size={sizes.icon} strokeWidth={2.25} style={{ animation: 'spin 1s linear infinite' }} />}
+      {icon && !loading && <Icon name={icon} size={sizes.icon} strokeWidth={2.1} />}
+      {loading && <Icon name="loader" size={sizes.icon} strokeWidth={2.1} style={{ animation: 'spin 1s linear infinite' }} />}
       {children}
-      {iconRight && <Icon name={iconRight} size={sizes.icon} strokeWidth={2.25} />}
+      {iconRight && <Icon name={iconRight} size={sizes.icon} strokeWidth={2.1} />}
     </button>
   );
 }

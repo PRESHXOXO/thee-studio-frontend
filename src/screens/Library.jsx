@@ -57,14 +57,14 @@ function StatusBadge({ status }) {
   );
 }
 
-function ReviewActions({ entry, onSetStatus }) {
+function ReviewActions({ entry, onSetStatus, mobile = false }) {
   const actions = [
     { status: 'approved',  icon: 'check', title: 'Approve (A)' },
     { status: 'needs_fix', icon: 'wrench', title: 'Needs fix (F)' },
     { status: 'rejected',  icon: 'x', title: 'Reject (R)' },
   ];
   return (
-    <div style={{ display: 'flex', gap: 5 }}>
+    <div style={{ display: 'flex', gap: mobile ? 7 : 5 }}>
       {actions.map(a => {
         const active = entry.status === a.status;
         const meta = STATUS_META[a.status];
@@ -75,7 +75,7 @@ function ReviewActions({ entry, onSetStatus }) {
             aria-label={a.title}
             onClick={(e) => { e.stopPropagation(); onSetStatus(entry.id, active ? 'unreviewed' : a.status); }}
             style={{
-              width: 30, height: 30, borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              width: mobile ? 40 : 30, height: mobile ? 40 : 30, borderRadius: 'var(--radius-md)', cursor: 'pointer',
               background: active ? meta.bg : 'rgba(10,10,13,0.72)',
               border: `1px solid ${active ? meta.color : 'rgba(255,255,255,0.14)'}`,
               color: active ? meta.color : 'rgba(255,255,255,0.85)',
@@ -83,7 +83,7 @@ function ReviewActions({ entry, onSetStatus }) {
               transition: 'all var(--t-fast)',
             }}
           >
-            <Icon name={a.icon} size={14} strokeWidth={2.25} />
+            <Icon name={a.icon} size={mobile ? 16 : 14} strokeWidth={2.25} />
           </button>
         );
       })}
@@ -91,12 +91,13 @@ function ReviewActions({ entry, onSetStatus }) {
   );
 }
 
-function LibraryCard({ entry, onDelete, onDownload, onSetStatus, onSaveNote, selected, onToggleSelect, focused, onFocusCard, onOpenFocusMode }) {
+function LibraryCard({ entry, onDelete, onDownload, onSetStatus, onSaveNote, selected, onToggleSelect, focused, onFocusCard, onOpenFocusMode, mobile = false }) {
   const [hovered, setHovered] = React.useState(false);
   const [noteOpen, setNoteOpen] = React.useState(false);
   const [note, setNote] = React.useState(entry.note || '');
   const source = SOURCE_LABELS[entry.source] || { label: 'Generated', icon: 'image' };
   const status = entry.status || 'unreviewed';
+  const showActions = mobile || hovered;
 
   const commitNote = () => {
     onSaveNote(entry.id, note.trim());
@@ -128,89 +129,94 @@ function LibraryCard({ entry, onDelete, onDownload, onSetStatus, onSaveNote, sel
           }}
         />
 
-        {/* Select checkbox — top left */}
+        {/* Select checkbox — always reachable on touch, hover-revealed on desktop. */}
         <button
           onClick={(e) => { e.stopPropagation(); onToggleSelect(entry.id); }}
           title={selected ? 'Deselect' : 'Select'}
+          aria-label={selected ? 'Deselect image' : 'Select image'}
           style={{
-            position: 'absolute', top: 10, left: 10, width: 24, height: 24, borderRadius: 7,
-            zIndex: 2,
-            display: (hovered || selected) ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center',
+            position: 'absolute', top: 10, left: 10,
+            width: mobile ? 40 : 24, height: mobile ? 40 : 24, borderRadius: mobile ? 10 : 7,
+            zIndex: 3,
+            display: (showActions || selected) ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center',
             background: selected ? 'var(--accent-deep)' : 'rgba(10,10,13,0.72)',
             border: `1.5px solid ${selected ? 'var(--accent-deep)' : 'rgba(255,255,255,0.4)'}`,
             cursor: 'pointer',
           }}
         >
-          {selected && <Icon name="check" size={13} strokeWidth={3} color="#fff" />}
+          {selected && <Icon name="check" size={mobile ? 16 : 13} strokeWidth={3} color="#fff" />}
         </button>
 
-        {/* Status badge — always visible, shifts right when checkbox showing */}
-        <div style={{ position: 'absolute', top: 10, left: (hovered || selected) ? 42 : 10, transition: 'left var(--t-fast)' }}>
+        {/* Status badge — always visible, shifts right when controls are visible. */}
+        <div style={{ position: 'absolute', top: 10, left: mobile ? 58 : (showActions || selected) ? 42 : 10, zIndex: 2, transition: 'left var(--t-fast)' }}>
           <StatusBadge status={status} />
         </div>
 
-        {/* Top-right utilities — full-screen review + delete. Delete is
-            pulled out of the bottom review/download cluster and tinted red
-            so it's not a misclick away from Download/Edit; it still routes
-            through the confirm dialog. */}
-        {hovered && (
-          <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 2, display: 'flex', gap: 6 }}>
+        {/* Top-right utilities — always visible on touch. */}
+        {showActions && (
+          <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, display: 'flex', gap: 6 }}>
             <button
               onClick={(e) => { e.stopPropagation(); onOpenFocusMode(entry.id); }}
               title="Review full-screen"
               aria-label="Review full-screen"
               style={{
-                width: 26, height: 26, borderRadius: 7,
+                width: mobile ? 40 : 26, height: mobile ? 40 : 26, borderRadius: mobile ? 10 : 7,
                 background: 'rgba(10,10,13,0.72)', border: '1px solid rgba(255,255,255,0.14)',
                 color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
               }}
             >
-              <Icon name="maximize-2" size={12} strokeWidth={2} />
+              <Icon name="maximize-2" size={mobile ? 16 : 12} strokeWidth={2} />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
               title="Delete"
               aria-label="Delete image"
               style={{
-                width: 26, height: 26, borderRadius: 7,
+                width: mobile ? 40 : 26, height: mobile ? 40 : 26, borderRadius: mobile ? 10 : 7,
                 background: 'rgba(220,38,38,0.9)', border: '1px solid rgba(255,255,255,0.2)',
                 color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
               }}
             >
-              <Icon name="trash-2" size={12} strokeWidth={2} />
+              <Icon name="trash-2" size={mobile ? 16 : 12} strokeWidth={2} />
             </button>
           </div>
         )}
 
         {/* Action overlay */}
-        {hovered && (
+        {showActions && (
           <div style={{
             position: 'absolute', inset: 0,
             zIndex: 1,
-            background: 'linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 45%)',
-            display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: 10, gap: 8,
+            background: mobile
+              ? 'linear-gradient(to top, rgba(0,0,0,0.76) 0%, rgba(0,0,0,0.18) 34%, transparent 56%)'
+              : 'linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 45%)',
+            display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: mobile ? 12 : 10, gap: mobile ? 10 : 8,
+            pointerEvents: 'none',
           }}>
-            <ReviewActions entry={{ ...entry, status }} onSetStatus={onSetStatus} />
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ pointerEvents: 'auto' }}>
+              <ReviewActions entry={{ ...entry, status }} onSetStatus={onSetStatus} mobile={mobile} />
+            </div>
+            <div style={{ display: 'flex', gap: 6, pointerEvents: 'auto' }}>
               <button onClick={(event) => { event.stopPropagation(); onDownload(entry); }} style={{
-                flex: 1, width: '100%', padding: '7px 0', borderRadius: 'var(--radius-md)',
+                flex: 1, width: '100%', padding: mobile ? '11px 8px' : '7px 0', minHeight: mobile ? 40 : undefined, borderRadius: 'var(--radius-md)',
                 background: 'rgba(255,255,255,0.92)', border: 'none', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
                 font: '500 0.75rem/1 var(--font-ui)', color: '#101014',
               }}>
-                <Icon name="download" size={12} /> Download Original
+                <Icon name="download" size={mobile ? 15 : 12} /> Download Original
               </button>
               <button
                 title="Add note"
+                aria-label="Add note"
                 onClick={(e) => { e.stopPropagation(); setNoteOpen(o => !o); }}
                 style={{
-                  width: 30, height: 30, borderRadius: 'var(--radius-md)', flexShrink: 0,
+                  width: mobile ? 40 : 30, height: mobile ? 40 : 30, borderRadius: 'var(--radius-md)', flexShrink: 0,
                   background: entry.note ? 'var(--accent-gold)' : 'rgba(255,255,255,0.92)',
                   border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#101014',
                 }}
               >
-                <Icon name="pencil" size={13} />
+                <Icon name="pencil" size={mobile ? 15 : 13} />
               </button>
             </div>
           </div>
@@ -231,9 +237,10 @@ function LibraryCard({ entry, onDelete, onDownload, onSetStatus, onSaveNote, sel
               background: 'var(--surface-inset)', color: 'var(--text-body)',
               border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)',
               padding: '8px 10px', font: 'var(--text-sm)', fontFamily: 'inherit', outline: 'none',
+              fontSize: mobile ? 16 : undefined,
             }}
           />
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <Button variant="accent" size="sm" onClick={commitNote}>Save note</Button>
             <Button variant="ghost" size="sm" onClick={() => setNoteOpen(false)}>Cancel</Button>
           </div>
@@ -277,7 +284,7 @@ function LibraryCard({ entry, onDelete, onDownload, onSetStatus, onSaveNote, sel
   );
 }
 
-export function Library({ initialFilter }) {
+export function Library({ initialFilter, mobile = false }) {
   const [library, setLibrary] = React.useState(loadLibrary);
   const [confirm, setConfirm] = React.useState(null);
   const [filter, setFilter] = React.useState(initialFilter || 'all');
@@ -436,10 +443,12 @@ export function Library({ initialFilter }) {
             )}
           </h1>
           <p style={{ font: 'var(--text-lg)', color: 'var(--text-muted)', margin: 0, maxWidth: 520 }}>
-            Review drafts, approve keepers, flag fixes. Click a card then use arrow keys + A/F/R, or go full-screen.
+            {mobile
+              ? 'Review drafts, approve keepers, flag fixes, and download originals directly from each card.'
+              : 'Review drafts, approve keepers, flag fixes. Click a card then use arrow keys + A/F/R, or go full-screen.'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', width: mobile ? '100%' : undefined }}>
           {visible.length > 0 && (
             <Button variant="secondary" onClick={() => setFocusModeId((visible[focusedIndex >= 0 ? focusedIndex : 0]).id)}>
               <Icon name="maximize-2" size={14} /> Review Full-Screen
@@ -472,7 +481,8 @@ export function Library({ initialFilter }) {
                 className="ts-pill"
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '7px 14px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+                  padding: mobile ? '10px 14px' : '7px 14px', minHeight: mobile ? 40 : undefined,
+                  borderRadius: 'var(--radius-pill)', cursor: 'pointer',
                   font: `${on ? 600 : 500} 0.8125rem/1 var(--font-ui)`,
                   color: on ? (meta ? meta.color : 'var(--accent-deep)') : 'var(--text-muted)',
                   background: on ? (meta ? meta.bg : 'var(--rose-deep)') : 'var(--surface-card)',
@@ -500,7 +510,7 @@ export function Library({ initialFilter }) {
           <span style={{ font: '600 0.8rem/1 var(--font-ui)', color: 'var(--accent-deep)' }}>
             {selected.size} selected
           </span>
-          <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 6, marginLeft: mobile ? 0 : 'auto', width: mobile ? '100%' : undefined, flexWrap: 'wrap' }}>
             <Button variant="secondary" size="sm" onClick={() => applyBulkStatus('approved')}>
               <Icon name="check" size={12} /> Approve
             </Button>
@@ -528,10 +538,10 @@ export function Library({ initialFilter }) {
         <EmptyState
           icon={STATUS_META[filter]?.icon || 'filter'}
           title={`Nothing in ${FILTERS.find(f => f.id === filter)?.label ?? 'this filter'}`}
-          body="Hover any image and use the review buttons to move it into this stage."
+          body="Open any image and use the review controls to move it into this stage."
         />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 'var(--grid-gap-media)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${mobile ? 240 : 180}px, 1fr))`, gap: 'var(--grid-gap-media)' }}>
           {visible.map(entry => (
             <LibraryCard
               key={entry.id}
@@ -545,6 +555,7 @@ export function Library({ initialFilter }) {
               focused={entry.id === focusedId}
               onFocusCard={setFocusedId}
               onOpenFocusMode={setFocusModeId}
+              mobile={mobile}
             />
           ))}
         </div>

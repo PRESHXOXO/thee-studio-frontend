@@ -43,7 +43,7 @@ try {
   await page.goto(`${baseUrl}/signup`, { waitUntil: 'domcontentloaded' });
   await page.getByLabel('Name').fill('Release Smoke');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
+  await page.locator('#auth-password').fill(password);
   await page.getByRole('button', { name: 'Create account' }).click();
 
   const confirmation = page.getByText(/check your email and confirm your account/i);

@@ -33,6 +33,19 @@ const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', tex
 const QUICK_SHOOT_POLL_INTERVAL_MS = 2500;
 const QUICK_SHOOT_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
+// Stronger fashion interpretation used only after the user explicitly chooses
+// "Try Fashion-Safe Render" following a safety-moderation block. This does not
+// replace words such as sexy, sheer, lace, bodycon, etc.; it preserves the
+// requested fashion direction while resolving accidental exposure with discreet
+// garment construction. The click is a deliberate NEW generation, never an
+// automatic provider retry.
+const FASHION_SAFE_RENDER_RULE = [
+  'FASHION-SAFE RENDER:',
+  'Preserve the outfit reference as closely as possible: same silhouette, neckline, cutouts, slit, fit, lace or mesh pattern, accessories, and sexy eveningwear/editorial energy.',
+  'Where transparent fabric would otherwise create unintended exposure, add discreet tonal or illusion lining beneath only those sections while keeping the garment visually sheer-looking and fashion-forward.',
+  'Do not add unnecessary coverage elsewhere and do not introduce nudity or sexual activity.',
+].join(' ');
+
 function pendingQuickShootKey(creatorId) {
   return `thee-studio:quick-shoot-pending:${creatorId || 'no-creator'}`;
 }
@@ -63,7 +76,11 @@ async function awaitCastQuickShootResult(result, creatorId) {
       await new Promise(resolve => setTimeout(resolve, QUICK_SHOOT_POLL_INTERVAL_MS));
       const polled = await pollCastQuickShootStatus(result.jobId);
       if (polled.status === 'succeeded') return polled;
-      if (polled.status === 'failed') throw new Error(polled.error || 'Image generation failed. The provider did not return a specific reason.');
+      if (polled.status === 'failed') {
+        const error = new Error(polled.error || 'Image generation failed. The provider did not return a specific reason.');
+        error.category = polled.errorCategory || 'unknown';
+        throw error;
+      }
     }
     throw new Error('Generation is taking longer than expected. It may still finish — check back shortly.');
   } finally {
@@ -177,6 +194,7 @@ export function ShootBuilder({
   const [generating, setGenerating] = React.useState(false);
   const [genImages, setGenImages]   = React.useState([]);
   const [genError, setGenError]     = React.useState('');
+  const [genErrorCategory, setGenErrorCategory] = React.useState('');
   const [lightboxSrc, setLightboxSrc] = React.useState(null);
   const [anchorSaved, setAnchorSaved] = React.useState(false);
   const [preflightResult, setPreflightResult] = React.useState(null);
@@ -224,7 +242,7 @@ export function ShootBuilder({
     const nextCreatorId = creator?.id ?? null;
     if (creatorIdRef.current === nextCreatorId) return;
     creatorIdRef.current = nextCreatorId;
-    setActiveRef(0); setGenImages([]); setGenError('');
+    setActiveRef(0); setGenImages([]); setGenError(''); setGenErrorCategory('');
     setShotReferences([]);
   }, [creator?.id]);
 
@@ -239,9 +257,15 @@ export function ShootBuilder({
     let cancelled = false;
     setGenerating(true);
     setGenError('');
+    setGenErrorCategory('');
     awaitCastQuickShootResult({ status: 'pending', jobId: pendingJobId }, creatorId)
       .then(result => { if (!cancelled) setGenImages(result.images || []); })
-      .catch(error => { if (!cancelled) setGenError(error.message || 'Generation failed.'); })
+      .catch(error => {
+        if (!cancelled) {
+          setGenError(error.message || 'Generation failed.');
+          setGenErrorCategory(error.category || '');
+        }
+      })
       .finally(() => { if (!cancelled) setGenerating(false); });
     return () => { cancelled = true; };
   }, [creator?.id]);
@@ -300,10 +324,11 @@ export function ShootBuilder({
     rawFeatures,
   });
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (fashionSafetyMode = 'auto') => {
     setGenerating(true);
     setGenImages([]);
     setGenError('');
+    setGenErrorCategory('');
     try {
       let images = [];
 
@@ -343,6 +368,7 @@ export function ShootBuilder({
             { startsAfterIdentity: true }
           );
           if (referenceBlock) positivePrompt += `\n\n${referenceBlock}`;
+          if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
           const identityCreatorId = canonicalCreatorId(creator);
           const submitted = await characterGenerate({
             engineId: engine,
@@ -364,6 +390,7 @@ export function ShootBuilder({
         } else {
           // No reference photo — nothing to identity-lock against, but the
           // built prompt is still a valid text-to-image prompt.
+          if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
           const result = hasSupabaseConfig()
             ? await castQuickShootPlain({
                 positivePrompt,
@@ -401,6 +428,7 @@ export function ShootBuilder({
         });
         const referenceBlock = referencePromptBlock(shotReferences);
         if (referenceBlock) positivePrompt += `\n\n${referenceBlock}`;
+        if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
         const referenceImages = shotReferences.map(reference => reference.dataUrl);
         const result = referenceImages.length
           ? await awaitCastQuickShootResult(await characterGenerate({
@@ -434,6 +462,7 @@ export function ShootBuilder({
       onGenerated?.(images);
     } catch (e) {
       setGenError(e.message || 'Generation failed');
+      setGenErrorCategory(e.category || '');
     } finally {
       setGenerating(false);
     }
@@ -672,7 +701,7 @@ export function ShootBuilder({
       })()}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Button variant="primary" onClick={handleGenerate} loading={generating} disabled={generating} full={layout === 'split'} style={layout === 'split' ? {} : { alignSelf: 'flex-start' }}>
+        <Button variant="primary" onClick={() => handleGenerate('auto')} loading={generating} disabled={generating} full={layout === 'split'} style={layout === 'split' ? {} : { alignSelf: 'flex-start' }}>
           <Icon name="zap" size={15} /> {generating ? 'Generating…' : 'Build + Generate'}
         </Button>
         <GenerationProgress active={generating} identityLocked={!!creator?.locked} engine={engine} batchSize={batchSize} />
@@ -683,7 +712,21 @@ export function ShootBuilder({
         )}
       </div>
 
-      {genError && <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>}
+      {genError && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+          <p style={{ font: 'var(--text-sm)', color: 'var(--cherry)', margin: 0 }}>{genError}</p>
+          {genErrorCategory === 'safety_moderation' && !generating && (
+            <>
+              <Button variant="secondary" onClick={() => handleGenerate('coverage')} disabled={generating}>
+                <Icon name="sparkles" size={14} /> Try Fashion-Safe Render
+              </Button>
+              <p style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', margin: 0 }}>
+                This starts a new generation and may use credits. Your current creator, references, scene, and styling stay in place.
+              </p>
+            </>
+          )}
+        </div>
+      )}
       {canPreflight && allImages.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <Button variant="secondary" onClick={runReferencePreflight} loading={preflighting} disabled={preflighting}>

@@ -5,7 +5,7 @@ import { ShootBuilder } from '../components/shoot/ShootBuilder.jsx';
 import { PromptLab } from './PromptLab.jsx';
 import { SceneFlow } from './SceneFlow.jsx';
 import { resolveActiveCreator, saveActiveCreatorId } from '../lib/activeCreator.js';
-import { isLocalStudioServiceEnabled, LOCAL_ACTION_UNAVAILABLE } from '../api/studio.js';
+import { isLocalStudioServiceEnabled } from '../api/studio.js';
 import { loadCharacters, saveCharacters } from '../lib/creatorCache.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -196,10 +196,12 @@ export function TheeDirector({
         </div>
       </div>
 
-      {!localServicesEnabled && (
+      {!localServicesEnabled && mode !== 'guided' && (
         <Card variant="rose" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Icon name="clock" size={16} />
-          <span style={{ font: 'var(--text-sm)', color: 'var(--text-body)' }}>{LOCAL_ACTION_UNAVAILABLE}</span>
+          <span style={{ font: 'var(--text-sm)', color: 'var(--text-body)' }}>
+            Describe It and Talk It Through still need local studio services in this build. Guided mode is cloud-enabled.
+          </span>
         </Card>
       )}
 

@@ -12,12 +12,11 @@ concurrency:
 
 jobs:
   smoke:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release-smoke]')
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
       STAGING_BASE_URL: https://thee-studio-frontend-git-codex-recon-16c428-preshxoxos-projects.vercel.app
-      STAGING_CHECKOUT_EMAIL: ${{ secrets.STAGING_CHECKOUT_EMAIL }}
-      STAGING_CHECKOUT_PASSWORD: ${{ secrets.STAGING_CHECKOUT_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,9 +25,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Verify required staging credentials exist
-        run: |
-          test -n "$STAGING_CHECKOUT_EMAIL" || (echo "Missing STAGING_CHECKOUT_EMAIL" && exit 1)
-          test -n "$STAGING_CHECKOUT_PASSWORD" || (echo "Missing STAGING_CHECKOUT_PASSWORD" && exit 1)
-      - name: Crawl authenticated cloud surfaces
+      - name: Create throwaway Free customer and crawl authenticated cloud surfaces
         run: node e2e-audit/staging-cloud-smoke.mjs

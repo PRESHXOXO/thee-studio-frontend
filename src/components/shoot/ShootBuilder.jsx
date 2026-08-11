@@ -591,20 +591,15 @@ export function ShootBuilder({
             <Select value={scene} onChange={setScene} options={LOCATIONS} />
           </div>
 
-          <div>
-            <div style={{ ...FIELD_LABEL, display: 'flex', alignItems: 'center' }}>
-              Outfit
-              {outfit !== 'default' && (
-                <button onClick={() => setOutfit('default')} style={{ marginLeft: 10, font: '500 0.72rem/1 var(--font-ui)', color: 'var(--accent-deep)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>reset</button>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, alignItems: 'flex-start' }}>
-              {SHOOT_OUTFITS.map(o => (
-                <PillButton key={o.id} active={outfit === o.id} onClick={() => setOutfit(o.id)}>{o.label}</PillButton>
-              ))}
-            </div>
-            <div style={{ marginTop: 8, font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.45 }}>
-              For an exact look, add an Outfit reference above — visual references override these presets.
+          <div style={{ maxWidth: 320 }}>
+            <div style={FIELD_LABEL}>Outfit</div>
+            <Select
+              value={outfit}
+              onChange={setOutfit}
+              options={SHOOT_OUTFITS.map(option => ({ value: option.id, label: option.label }))}
+            />
+            <div style={{ marginTop: 7, font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.4 }}>
+              Presets guide styling. Outfit references above override them.
             </div>
           </div>
 

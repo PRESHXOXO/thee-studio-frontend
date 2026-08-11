@@ -28,7 +28,7 @@ const forbiddenText = [
 ];
 
 const stamp = Date.now();
-const email = `release-smoke-${stamp}@example.com`;
+const email = `theestudio.release.smoke.${stamp}.${crypto.randomUUID().slice(0, 8)}@gmail.com`;
 const password = `Smoke-${crypto.randomUUID()}-A9!`;
 let stage = 'launch';
 const browser = await chromium.launch({ headless: true });
@@ -50,9 +50,9 @@ try {
   if (new URL(page.url()).pathname !== '/plans') {
     const bodyText = (await page.locator('body').innerText()).replace(/\s+/g, ' ').trim();
     if (/check your email and confirm your account/i.test(bodyText)) {
-      throw new Error('Staging requires email confirmation; headless release signup cannot continue.');
+      throw new Error('Public signup succeeded but email confirmation is required; automated route crawl needs a confirmed staging test identity.');
     }
-    const useful = bodyText.match(/(?:sign-in failed|authentication failed|unable to reach|account already exists|password[^.]*|rate limit[^.]*|email[^.]*invalid)[^.]*\.?/i)?.[0]
+    const useful = bodyText.match(/(?:sign-in failed|authentication failed|unable to reach|account already exists|enter a valid email address|password[^.]*|rate limit[^.]*|email[^.]*invalid)[^.]*\.?/i)?.[0]
       || bodyText.slice(0, 500);
     throw new Error(`Public signup did not reach plan selection. UI detail: ${useful}`);
   }

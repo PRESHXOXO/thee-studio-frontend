@@ -1,6 +1,13 @@
 import React from 'react';
 import { Icon } from './Icon.jsx';
 
+function textContent(node) {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textContent).join(' ');
+  return textContent(node?.props?.children);
+}
+
 // Premier studio controls: generation keeps the sunset signature, but the
 // physical 3D/chunky treatment is gone. Buttons should feel precise and calm,
 // like creative-suite controls, not playful dashboard tiles.
@@ -21,26 +28,46 @@ export function Button({ children, variant = 'primary', size = 'md', icon, iconR
   };
 
   const flat = variant === 'ghost';
+  const stagingDebug = textContent(children).includes('Check References');
 
   return (
     <button
       type={type}
+      title={stagingDebug ? 'Reference preflight — staging only' : undefined}
+      aria-label={stagingDebug ? 'Reference preflight — staging only' : undefined}
       onClick={disabled || loading ? undefined : onClick}
       disabled={disabled || loading}
-      className={flat ? undefined : 'ts-btn'}
+      className={stagingDebug ? 'ts-staging-debug-btn' : (flat ? undefined : 'ts-btn')}
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         gap: sizes.gap, padding: sizes.padding, font: sizes.font, letterSpacing: '0.005em',
         borderRadius: sizes.radius, cursor: disabled || loading ? 'not-allowed' : 'pointer',
         width: full ? '100%' : 'auto', opacity: disabled ? 0.5 : 1,
         whiteSpace: 'nowrap', userSelect: 'none',
-        ...variants[variant], ...style,
+        ...variants[variant],
+        ...(stagingDebug ? {
+          width: 34, height: 34, minWidth: 34, padding: 0,
+          borderRadius: 9, alignSelf: 'flex-end',
+          background: 'rgba(255,255,255,0.045)',
+          color: 'var(--text-faint)',
+          border: '1px solid var(--border)',
+          boxShadow: 'none',
+        } : null),
+        ...style,
       }}
     >
-      {icon && !loading && <Icon name={icon} size={sizes.icon} strokeWidth={2.1} />}
-      {loading && <Icon name="loader" size={sizes.icon} strokeWidth={2.1} style={{ animation: 'spin 1s linear infinite' }} />}
-      {children}
-      {iconRight && <Icon name={iconRight} size={sizes.icon} strokeWidth={2.1} />}
+      {stagingDebug ? (
+        loading
+          ? <Icon name="loader" size={14} strokeWidth={2} style={{ animation: 'spin 1s linear infinite' }} />
+          : <Icon name="activity" size={14} strokeWidth={1.9} />
+      ) : (
+        <>
+          {icon && !loading && <Icon name={icon} size={sizes.icon} strokeWidth={2.1} />}
+          {loading && <Icon name="loader" size={sizes.icon} strokeWidth={2.1} style={{ animation: 'spin 1s linear infinite' }} />}
+          {children}
+          {iconRight && <Icon name={iconRight} size={sizes.icon} strokeWidth={2.1} />}
+        </>
+      )}
     </button>
   );
 }

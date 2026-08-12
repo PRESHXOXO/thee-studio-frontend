@@ -231,6 +231,10 @@ export async function characterGenerate({
 }) {
   const structuredReferences = normalizeGenerationReferences(anchorReferences)
     .slice(0, characterImage || creatorId ? 3 : 4);
+  if (structuredReferences.length && !characterImage && !creatorId
+      && !structuredReferences.some(reference => reference.role === 'identity')) {
+    throw new Error('Add an Identity reference before using outfit, background, makeup, hair, or pose references without a saved creator.');
+  }
   const referenceImages = structuredReferences.length
     ? structuredReferences.map(reference => reference.dataUrl)
     : anchorImages;

@@ -86,6 +86,25 @@ describe('Cast cloud workflows never call local Gradio', () => {
     expect(body.anchorImages).toBeUndefined();
   });
 
+  it('characterGenerate keeps all four role-labeled references when no creator identity slot is reserved', async () => {
+    invoke.mockResolvedValueOnce({
+      data: { status: 'succeeded', assets: [{ storagePath: 'user/quick-shoot/job/0.png' }], summary: 'ok' },
+      error: null,
+    });
+    const anchorReferences = [
+      { dataUrl: PIXEL, role: 'identity', name: 'identity.png' },
+      { dataUrl: PIXEL_2, role: 'outfit', name: 'look.png' },
+      { dataUrl: PIXEL, role: 'background', name: 'room.png' },
+      { dataUrl: PIXEL_2, role: 'pose', name: 'pose.png' },
+    ];
+    const result = await characterGenerate({ positivePrompt: 'p', characterImage: null, anchorReferences });
+    expect(result.status).toBe('succeeded');
+    const body = invoke.mock.calls[0][1].body;
+    expect(body.anchorReferences).toHaveLength(4);
+    expect(body.anchorReferences.map(reference => reference.role)).toEqual(['identity', 'outfit', 'background', 'pose']);
+    expect(body.anchorImages).toBeUndefined();
+  });
+
   // Regression: identity-locked Quick Shoot is async in cloud mode — the
   // initial submit must never return images directly, only a pending job id.
   it('characterGenerate returns a pending job, not images, for a fresh identity-locked submit', async () => {

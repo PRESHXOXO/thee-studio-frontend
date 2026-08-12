@@ -14,7 +14,6 @@ import { buildCharacterPrompt } from '../../lib/characterPrompt.js';
 import { saveToLibrary } from '../../lib/library.js';
 import { compressImage } from '../../lib/imageUtils.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../../lib/creatorMemory.js';
-import { referencePromptBlock } from '../../lib/directorReferences.js';
 import {
   PORTRAIT_ANGLES, BATCH_OPTIONS, SHOOT_MOODS, SHOOT_LIGHTINGS, SHOOT_OUTFITS,
 } from '../../lib/shootOptions.js';
@@ -314,8 +313,6 @@ export function ShootBuilder({
                   })),
               ]
             : [];
-          const referenceBlock = referencePromptBlock(providerReferences, { startsAfterIdentity: true });
-          if (referenceBlock) positivePrompt += `\n\n${referenceBlock}`;
           if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
           const identityCreatorId = canonicalCreatorId(creator);
           const submitted = await characterGenerate({
@@ -323,9 +320,7 @@ export function ShootBuilder({
             positivePrompt,
             negativePrompt: STANDARD_NEGATIVE,
             characterImage: primaryIdentity,
-            anchorImages: providerReferences.length
-              ? providerReferences.map(reference => reference.dataUrl)
-              : allImages,
+            anchorReferences: providerReferences,
             mode: identityMode,
             batchSize,
             creatorId: identityCreatorId,
@@ -369,17 +364,14 @@ export function ShootBuilder({
           mood: composedMood, contentType: identityMode === 'portrait' ? 'Portrait' : 'Lifestyle',
           scene,
         });
-        const referenceBlock = referencePromptBlock(shotReferences);
-        if (referenceBlock) positivePrompt += `\n\n${referenceBlock}`;
         if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
-        const referenceImages = shotReferences.map(reference => reference.dataUrl);
-        const result = referenceImages.length
+        const result = shotReferences.length
           ? await awaitCastQuickShootResult(await characterGenerate({
               engineId: MANAGED_ENGINE_ID,
               positivePrompt,
               negativePrompt: STANDARD_NEGATIVE,
-              characterImage: referenceImages[0],
-              anchorImages: referenceImages.slice(1),
+              characterImage: null,
+              anchorReferences: shotReferences,
               mode: identityMode,
               batchSize,
             }), null)

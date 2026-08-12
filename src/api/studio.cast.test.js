@@ -153,6 +153,17 @@ describe('Cast cloud workflows never call local Gradio', () => {
     expect(body.anchorImages).toBeUndefined();
   });
 
+  it('Scene Flow refuses attached visual references without an Identity role instead of ignoring them', async () => {
+    await expect(sceneFlowGenerate({
+      sceneJson: JSON.stringify({ content_type: 'photo', full_prompt: 'Miami vacation street-style scene.' }),
+      referenceImages: [
+        { dataUrl: PIXEL, role: 'outfit', name: 'look.png' },
+        { dataUrl: PIXEL_2, role: 'background', name: 'miami.png' },
+      ],
+    })).rejects.toThrow('Assign one attached visual reference as Identity');
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   describe('pollCastQuickShootStatus', () => {
     it('reports pending without ever creating a provider request', async () => {
       invoke.mockResolvedValueOnce({ data: { status: 'pending' }, error: null });

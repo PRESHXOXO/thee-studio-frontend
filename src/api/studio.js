@@ -1,4 +1,4 @@
-import { serializeDirectorReferences } from '../lib/directorReferences.js';
+import { referencePromptBlock, serializeDirectorReferences } from '../lib/directorReferences.js';
 import { finishUsageTelemetry, startUsageTelemetry } from './usageTelemetry.js';
 import { getSupabase, hasSupabaseConfig } from '../lib/supabase.js';
 
@@ -205,12 +205,24 @@ function relativizeUrl(url) {
   return url.replace(/^https?:\/\/127\.0\.0\.1:\d+\/gradio_api/, '/gradio_api');
 }
 
+function normalizeGenerationReferences(references = []) {
+  return references
+    .filter(reference => reference?.dataUrl)
+    .slice(0, 3)
+    .map(reference => ({
+      dataUrl: reference.dataUrl,
+      role: reference.role || 'supporting',
+      name: reference.name || 'Reference',
+    }));
+}
+
 export async function characterGenerate({
   engineId,
   positivePrompt,
   negativePrompt,
   characterImage,
   anchorImages = [],
+  anchorReferences = [],
   mode = 'lifestyle',
   imageSize = 'Vertical 9:16',
   batchSize = 1,
@@ -218,13 +230,25 @@ export async function characterGenerate({
   fashionSafetyMode = 'auto',
   requestKey = null,
 }) {
+  const structuredReferences = normalizeGenerationReferences(anchorReferences);
+  const referenceImages = structuredReferences.length
+    ? structuredReferences.map(reference => reference.dataUrl)
+    : anchorImages;
+
   if (hasSupabaseConfig()) {
     const data = await invokeCloudFunction('cast-quick-shoot', {
       creatorId,
       prompt: positivePrompt,
       negativePrompt,
       characterImage,
-      anchorImages,
+      anchorImages: structuredReferences.length ? undefined : anchorImages,
+      anchorReferences: structuredReferences.length
+        ? structuredReferences.map(reference => ({
+            image: reference.dataUrl,
+            role: reference.role,
+            name: reference.name,
+          }))
+        : undefined,
       batchSize,
       imageSize,
       fashionSafetyMode,
@@ -241,7 +265,22 @@ export async function characterGenerate({
     // Saved Cast Quick Shoot keeps the existing pending-return contract.
     return creatorId ? submission : awaitCastQuickShootResult(submission);
   }
-  const raw = await callNamedEndpoint('character_generate', [JSON.stringify({ engineId, positivePrompt, negativePrompt, imageSize, batchSize, anchorImages, mode }), characterImage], IMAGE_GENERATION_TIMEOUT_MS);
+
+  const localReferenceBlock = structuredReferences.length
+    ? referencePromptBlock(structuredReferences, { startsAfterIdentity: Boolean(characterImage) })
+    : '';
+  const localPositivePrompt = localReferenceBlock
+    ? `${positivePrompt}\n\n${localReferenceBlock}`
+    : positivePrompt;
+  const raw = await callNamedEndpoint('character_generate', [JSON.stringify({
+    engineId,
+    positivePrompt: localPositivePrompt,
+    negativePrompt,
+    imageSize,
+    batchSize,
+    anchorImages: referenceImages,
+    mode,
+  }), characterImage], IMAGE_GENERATION_TIMEOUT_MS);
   const parsed = typeof raw[0] === 'string' ? JSON.parse(raw[0] || '{}') : (raw[0] || {});
   if (parsed.error) throw new Error(parsed.error);
   parsed.images = (parsed.images || []).map(url => url.startsWith('data:') ? url : relativizeUrl(url));
@@ -457,7 +496,7 @@ export async function sceneFlowGenerate({ sceneJson = '{}', referenceImages = []
         positivePrompt,
         negativePrompt: '',
         characterImage: identity.dataUrl,
-        anchorImages: references.filter(reference => reference !== identity && reference.dataUrl).map(reference => reference.dataUrl),
+        anchorReferences: references.filter(reference => reference !== identity && reference.dataUrl),
         imageSize: scene.imageSize || scene.aspect || scene.aspect_ratio || 'Vertical 9:16',
         batchSize: 1,
         requestKey: telemetryRequestKey || crypto.randomUUID(),

@@ -508,6 +508,9 @@ export async function sceneFlowGenerate({ sceneJson = '{}', referenceImages = []
       const resolved = await awaitCastQuickShootResult(completed);
       return { result_url: resolved.images?.[0] || null, content_type: 'photo', status: 'succeeded' };
     }
+    if (references.length) {
+      throw new Error('Assign one attached visual reference as Identity before generating with Scene Flow.');
+    }
     const completed = await castQuickShootPlain({
       positivePrompt,
       negativePrompt: '',

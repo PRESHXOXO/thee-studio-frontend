@@ -228,6 +228,7 @@ export async function characterGenerate({
       batchSize,
       imageSize,
       fashionSafetyMode,
+      shootMode: mode,
     }, requestKey || crypto.randomUUID());
     if (data.status === 'succeeded') {
       const images = await signCastAssets('generation-assets', data.assets);
@@ -440,7 +441,7 @@ export async function sceneFlowChat({ messagesJson = '[]', userMessage = '', ref
   return typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
 }
 
-export async function sceneFlowGenerate({ sceneJson = '{}', referenceImages = [], refImageB64 = '', telemetryRequestKey } = {}) {
+export async function sceneFlowGenerate({ sceneJson = '{}', referenceImages = [], refImageB64 = '', telemetryRequestKey, creatorId = null } = {}) {
   const references = referenceImages.length ? referenceImages.slice(0, 4) : [];
   if (hasSupabaseConfig()) {
     const scene = typeof sceneJson === 'string' ? JSON.parse(sceneJson || '{}') : (sceneJson || {});
@@ -451,6 +452,8 @@ export async function sceneFlowGenerate({ sceneJson = '{}', referenceImages = []
     const identity = references.find(reference => reference.role === 'identity' && reference.dataUrl);
     if (identity) {
       const completed = await characterGenerate({
+        creatorId,
+        mode: 'lifestyle',
         positivePrompt,
         negativePrompt: '',
         characterImage: identity.dataUrl,

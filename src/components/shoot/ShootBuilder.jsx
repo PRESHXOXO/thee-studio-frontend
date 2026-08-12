@@ -487,12 +487,12 @@ export function ShootBuilder({
           references={shotReferences}
           onChange={handleShotReferencesChange}
           maxReferences={allImages.length ? 3 : 4}
-          defaultRole={identityMode === 'portrait' ? 'makeup' : 'outfit'}
+          defaultRole={!creator ? 'identity' : identityMode === 'portrait' ? 'makeup' : 'outfit'}
           disabled={generating}
           title="Shot references"
           description={allImages.length
             ? 'Your creator fills the identity slot. Add up to three more images and assign each a job.'
-            : 'Add up to four images and assign each one a job.'}
+            : 'Start with an Identity image, then add up to three styling or scene references.'}
         />
       </div>
 

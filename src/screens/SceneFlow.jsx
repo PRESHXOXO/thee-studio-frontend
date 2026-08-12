@@ -6,7 +6,6 @@ import { ReferenceImageTray } from '../components/director/ReferenceImageTray.js
 import { GenerationProgress } from '../components/feedback/GenerationProgress.jsx';
 import { saveToLibrary } from '../lib/library.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../lib/creatorMemory.js';
-import { referencePromptBlock } from '../lib/directorReferences.js';
 import { canonicalCreatorId } from '../lib/cloudCreators.js';
 
 // ---------------------------------------------------------------------------
@@ -456,8 +455,9 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
       outputType,
       hasIdentityReference
     );
-    const visualReferenceBlock = referencePromptBlock(generationReferences);
-    if (visualReferenceBlock) requestedScene.full_prompt += `\n\n${visualReferenceBlock}`;
+    // Provider-facing reference numbering is constructed server-side from the
+    // exact images attached to that pass. Keeping it out of full_prompt avoids
+    // stale Image 1/Image 2 labels after identity/reference reordering.
     const memory = creator ? getCreatorMemory(creator.id) : null;
     const memoryBlock = creatorMemoryPrompt(memory);
     if (memoryBlock) requestedScene.full_prompt += `\n\n${memoryBlock}`;

@@ -208,7 +208,6 @@ function relativizeUrl(url) {
 function normalizeGenerationReferences(references = []) {
   return references
     .filter(reference => reference?.dataUrl)
-    .slice(0, 3)
     .map(reference => ({
       dataUrl: reference.dataUrl,
       role: reference.role || 'supporting',
@@ -230,7 +229,8 @@ export async function characterGenerate({
   fashionSafetyMode = 'auto',
   requestKey = null,
 }) {
-  const structuredReferences = normalizeGenerationReferences(anchorReferences);
+  const structuredReferences = normalizeGenerationReferences(anchorReferences)
+    .slice(0, characterImage || creatorId ? 3 : 4);
   const referenceImages = structuredReferences.length
     ? structuredReferences.map(reference => reference.dataUrl)
     : anchorImages;

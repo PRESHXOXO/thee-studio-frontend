@@ -25,9 +25,10 @@ afterAll(() => {
   global.fetch = originalFetch;
 });
 
-import { analyzeCharacterReferences, characterGenerate, generateReferenceSet, castQuickShootPlain, extractFaceAnchor, pollCastQuickShootStatus, preflightCastReferences } from './studio.js';
+import { analyzeCharacterReferences, characterGenerate, generateReferenceSet, castQuickShootPlain, extractFaceAnchor, pollCastQuickShootStatus, preflightCastReferences, sceneFlowGenerate } from './studio.js';
 
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/6ZcmWQAAAABJRU5ErkJggg==';
+const PIXEL_2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgQIA/2gqWQAAAABJRU5ErkJggg==';
 
 describe('Cast cloud workflows never call local Gradio', () => {
   it('analyzeCharacterReferences calls cast-analyze-references, not /gradio_api', async () => {
@@ -64,6 +65,27 @@ describe('Cast cloud workflows never call local Gradio', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('characterGenerate forwards structured reference roles without flattening them into anchorImages', async () => {
+    invoke.mockResolvedValueOnce({ data: { status: 'pending', jobId: 'job-role-aware' }, error: null });
+    const anchorReferences = [
+      { dataUrl: PIXEL, role: 'outfit', name: 'look.png' },
+      { dataUrl: PIXEL_2, role: 'background', name: 'miami.png' },
+    ];
+    const result = await characterGenerate({
+      positivePrompt: 'p',
+      characterImage: PIXEL,
+      creatorId: 'creator-1',
+      anchorReferences,
+    });
+    expect(result.status).toBe('pending');
+    const body = invoke.mock.calls[0][1].body;
+    expect(body.anchorReferences).toEqual([
+      { image: PIXEL, role: 'outfit', name: 'look.png' },
+      { image: PIXEL_2, role: 'background', name: 'miami.png' },
+    ]);
+    expect(body.anchorImages).toBeUndefined();
+  });
+
   // Regression: identity-locked Quick Shoot is async in cloud mode — the
   // initial submit must never return images directly, only a pending job id.
   it('characterGenerate returns a pending job, not images, for a fresh identity-locked submit', async () => {
@@ -79,6 +101,28 @@ describe('Cast cloud workflows never call local Gradio', () => {
     invoke.mockResolvedValueOnce({ data: { status: 'failed', error: 'blocked by content policy' }, error: null });
     await expect(characterGenerate({ positivePrompt: 'p', characterImage: PIXEL, creatorId: 'creator-1' }))
       .rejects.toThrow('blocked by content policy');
+  });
+
+  it('Scene Flow cloud generation preserves identity/outfit/background roles in the managed request', async () => {
+    invoke.mockResolvedValueOnce({
+      data: { status: 'succeeded', assets: [{ storagePath: 'user/creator/quick-shoot/job/0.png' }], summary: 'ok' },
+      error: null,
+    });
+    const result = await sceneFlowGenerate({
+      creatorId: 'creator-1',
+      sceneJson: JSON.stringify({ content_type: 'photo', full_prompt: 'Miami vacation street-style scene.' }),
+      referenceImages: [
+        { dataUrl: PIXEL, role: 'identity', name: 'creator.png' },
+        { dataUrl: PIXEL_2, role: 'outfit', name: 'look.png' },
+        { dataUrl: PIXEL, role: 'background', name: 'miami.png' },
+      ],
+      telemetryRequestKey: 'scene-flow-role-test',
+    });
+    expect(result.status).toBe('succeeded');
+    const body = invoke.mock.calls[0][1].body;
+    expect(body.characterImage).toBe(PIXEL);
+    expect(body.anchorReferences.map(reference => reference.role)).toEqual(['outfit', 'background']);
+    expect(body.anchorImages).toBeUndefined();
   });
 
   describe('pollCastQuickShootStatus', () => {

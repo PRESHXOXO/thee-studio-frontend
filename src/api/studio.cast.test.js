@@ -105,6 +105,15 @@ describe('Cast cloud workflows never call local Gradio', () => {
     expect(body.anchorImages).toBeUndefined();
   });
 
+  it('characterGenerate refuses unsaved visual-reference edits without an explicit identity reference', async () => {
+    await expect(characterGenerate({
+      positivePrompt: 'p',
+      characterImage: null,
+      anchorReferences: [{ dataUrl: PIXEL, role: 'outfit', name: 'look.png' }],
+    })).rejects.toThrow('Add an Identity reference');
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   // Regression: identity-locked Quick Shoot is async in cloud mode — the
   // initial submit must never return images directly, only a pending job id.
   it('characterGenerate returns a pending job, not images, for a fresh identity-locked submit', async () => {

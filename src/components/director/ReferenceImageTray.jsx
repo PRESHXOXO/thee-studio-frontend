@@ -7,6 +7,8 @@ import {
   referenceRoleLabel,
 } from '../../lib/directorReferences.js';
 
+const ROLE_SEQUENCE = ['identity', 'outfit', 'background', 'pose', 'makeup', 'hair'];
+
 function makeReferenceId() {
   return globalThis.crypto?.randomUUID?.()
     || `ref-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -19,6 +21,14 @@ function readFileAsDataURL(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+function nextSuggestedRole(currentRole, references) {
+  const used = new Set(references.map(reference => reference.role));
+  const start = Math.max(0, ROLE_SEQUENCE.indexOf(currentRole) + 1);
+  return ROLE_SEQUENCE.slice(start).find(role => !used.has(role))
+    || ROLE_SEQUENCE.find(role => !used.has(role))
+    || currentRole;
 }
 
 export function ReferenceImageTray({
@@ -37,6 +47,10 @@ export function ReferenceImageTray({
   const [error, setError] = React.useState('');
   const available = Math.max(0, maxReferences - references.length);
 
+  React.useEffect(() => {
+    if (!references.length) setNextRole(defaultRole);
+  }, [defaultRole, references.length]);
+
   async function handleFiles(event) {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
@@ -49,26 +63,28 @@ export function ReferenceImageTray({
     setReading(true);
     setError('');
     try {
-      const accepted = files.slice(0, available);
-      const added = [];
-      for (const file of accepted) {
-        const raw = await readFileAsDataURL(file);
-        const dataUrl = await normalizeImageForVision(raw);
-        added.push({
-          id: makeReferenceId(),
-          dataUrl,
-          name: file.name,
-          role: nextRole,
-          pending: true,
-          source: 'upload',
-        });
-      }
-      onChange([...references, ...added]);
-      if (files.length > accepted.length) {
-        setError(`Added ${accepted.length}. This shot supports up to ${maxReferences} reference images.`);
+      // One file per add keeps the role contract explicit. Previously a batch
+      // silently inherited one role for every image, which could turn a
+      // background board into a second outfit authority.
+      const file = files[0];
+      const raw = await readFileAsDataURL(file);
+      const dataUrl = await normalizeImageForVision(raw);
+      const added = {
+        id: makeReferenceId(),
+        dataUrl,
+        name: file.name,
+        role: nextRole,
+        pending: true,
+        source: 'upload',
+      };
+      const nextReferences = [...references, added];
+      onChange(nextReferences);
+      setNextRole(nextSuggestedRole(nextRole, nextReferences));
+      if (files.length > 1) {
+        setError('Add one image at a time so each reference keeps a clear role.');
       }
     } catch (uploadError) {
-      setError(uploadError.message || 'Could not read one of those images.');
+      setError(uploadError.message || 'Could not read that image.');
     } finally {
       setReading(false);
     }
@@ -98,7 +114,6 @@ export function ReferenceImageTray({
         ref={inputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
-        multiple
         style={{ display: 'none' }}
         onChange={handleFiles}
       />
@@ -117,7 +132,7 @@ export function ReferenceImageTray({
         }}
       >
         <Icon name="plus" size={compact ? 12 : 14} />
-        {reading ? 'Reading…' : available ? 'Add images' : 'Reference limit reached'}
+        {reading ? 'Reading…' : available ? 'Add image' : 'Reference limit reached'}
       </button>
       <select
         aria-label="Role for new references"
@@ -137,7 +152,7 @@ export function ReferenceImageTray({
       </select>
       {!compact && available > 0 && (
         <span style={{ font: '500 0.72rem/1.35 var(--font-ui)', color: 'var(--text-faint)', marginLeft: 2 }}>
-          Assign a role before adding · {available} slot{available === 1 ? '' : 's'} open
+          Choose the job, then add one image · {available} slot{available === 1 ? '' : 's'} open
         </span>
       )}
     </div>
@@ -244,7 +259,6 @@ export function ReferenceImageTray({
 
       {!compact && addControls}
       {compact && references.length === 0 && addControls}
-
       {error && (
         <div role="alert" style={{ font: 'var(--text-xs)', color: 'var(--cherry)' }}>{error}</div>
       )}

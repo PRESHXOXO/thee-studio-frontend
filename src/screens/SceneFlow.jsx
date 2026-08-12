@@ -7,6 +7,7 @@ import { GenerationProgress } from '../components/feedback/GenerationProgress.js
 import { saveToLibrary } from '../lib/library.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../lib/creatorMemory.js';
 import { referencePromptBlock } from '../lib/directorReferences.js';
+import { canonicalCreatorId } from '../lib/cloudCreators.js';
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -464,6 +465,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
 
     try {
       const generationRequestKey = crypto.randomUUID();
+      const generationCreatorId = canonicalCreatorId(creator);
       let result;
 
       if (outputType === 'video') {
@@ -476,6 +478,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
           sceneJson: JSON.stringify(keyframeScene),
           referenceImages: generationReferences,
           telemetryRequestKey: `${generationRequestKey}-keyframe`,
+          creatorId: generationCreatorId,
         });
         if (keyframe?.error) throw new Error(keyframe.error);
         if (!keyframe?.result_url) throw new Error('The video keyframe finished without a usable image.');
@@ -492,6 +495,7 @@ export function SceneFlow({ campaignId = null, initialVision = '', initialSettin
           sceneJson: JSON.stringify(requestedScene),
           referenceImages: generationReferences,
           telemetryRequestKey: generationRequestKey,
+          creatorId: generationCreatorId,
         });
       }
 

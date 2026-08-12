@@ -55,12 +55,14 @@ test('Guided sends multiple references with distinct visual jobs', async ({ page
 
   await page.goto('http://127.0.0.1:3000/studio/director/guided');
   const guidedPanel = page.getByRole('tabpanel');
-  await guidedPanel.locator('input[type="file"]').setInputFiles([
-    { name: 'look.png', mimeType: 'image/png', buffer: PIXEL },
-    { name: 'penthouse.png', mimeType: 'image/png', buffer: PIXEL },
-  ]);
-  await expect(page.getByLabel('Role for look.png')).toBeVisible();
-  await page.getByLabel('Role for penthouse.png').selectOption('background');
+  const input = guidedPanel.locator('input[type="file"]');
+
+  await input.setInputFiles({ name: 'look.png', mimeType: 'image/png', buffer: PIXEL });
+  await expect(page.getByLabel('Role for look.png')).toHaveValue('outfit');
+  await expect(guidedPanel.getByLabel('Role for new references')).toHaveValue('background');
+
+  await input.setInputFiles({ name: 'penthouse.png', mimeType: 'image/png', buffer: PIXEL });
+  await expect(page.getByLabel('Role for penthouse.png')).toHaveValue('background');
 
   await page.getByRole('button', { name: 'Build + Generate' }).click();
   await expect.poll(() => generationPayload).toBeTruthy();
@@ -118,13 +120,17 @@ test('Scene Flow sends and generates with all labeled references', async ({ page
 
   await page.goto('http://127.0.0.1:3000/studio/director/scene-flow');
   const sceneFlowPanel = page.getByRole('tabpanel');
-  await sceneFlowPanel.getByLabel('Role for new references').selectOption('makeup');
-  await sceneFlowPanel.locator('input[type="file"]').setInputFiles([
-    { name: 'beauty.png', mimeType: 'image/png', buffer: PIXEL },
-    { name: 'suite.png', mimeType: 'image/png', buffer: PIXEL },
-  ]);
-  await expect(page.getByLabel('Role for beauty.png')).toBeVisible();
-  await page.getByLabel('Role for suite.png').selectOption('background');
+  const roleSelect = sceneFlowPanel.getByLabel('Role for new references');
+  const input = sceneFlowPanel.locator('input[type="file"]');
+
+  await roleSelect.selectOption('makeup');
+  await input.setInputFiles({ name: 'beauty.png', mimeType: 'image/png', buffer: PIXEL });
+  await expect(page.getByLabel('Role for beauty.png')).toHaveValue('makeup');
+
+  await roleSelect.selectOption('background');
+  await input.setInputFiles({ name: 'suite.png', mimeType: 'image/png', buffer: PIXEL });
+  await expect(page.getByLabel('Role for suite.png')).toHaveValue('background');
+
   await page.getByTitle('Send').click();
   await expect(page.getByText('Your scene is ready.')).toBeVisible();
 
@@ -132,7 +138,7 @@ test('Scene Flow sends and generates with all labeled references', async ({ page
   const generationReferences = JSON.parse(generationPayload.data[1]);
   expect(chatReferences.map(reference => reference.role)).toEqual(['makeup', 'background']);
   expect(generationReferences.map(reference => reference.role)).toEqual(['makeup', 'background']);
-  expect(JSON.parse(generationPayload.data[0]).full_prompt).toContain('Image 2 — BACKGROUND');
+  expect(JSON.parse(generationPayload.data[0]).full_prompt).not.toContain('VISUAL REFERENCE MAP:');
 });
 
 test('Scene Flow composer stays visible at 100% zoom with three references', async ({ page }) => {
@@ -143,11 +149,11 @@ test('Scene Flow composer stays visible at 100% zoom with three references', asy
   await page.goto('http://127.0.0.1:3000/studio/director/scene-flow');
   const panel = page.getByRole('tabpanel');
   await panel.evaluate(element => element.scrollIntoView({ block: 'start' }));
-  await panel.locator('input[type="file"]').setInputFiles([
-    { name: 'outfit.png', mimeType: 'image/png', buffer: PIXEL },
-    { name: 'background.png', mimeType: 'image/png', buffer: PIXEL },
-    { name: 'makeup.png', mimeType: 'image/png', buffer: PIXEL },
-  ]);
+  const input = panel.locator('input[type="file"]');
+
+  await input.setInputFiles({ name: 'outfit.png', mimeType: 'image/png', buffer: PIXEL });
+  await input.setInputFiles({ name: 'background.png', mimeType: 'image/png', buffer: PIXEL });
+  await input.setInputFiles({ name: 'pose.png', mimeType: 'image/png', buffer: PIXEL });
 
   await expect(panel.getByText('3/4')).toBeVisible();
   const composer = page.getByPlaceholder(/Message Scene Flow/);

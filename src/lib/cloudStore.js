@@ -1,6 +1,7 @@
 import { createTelemetryRequestKey, trackStorageOperation } from '../api/usageTelemetry.js';
 import { SupabasePipelineRepository } from '../production/SupabasePipelineRepository.js';
 import { syncCastReferencesToCloud } from './castCreatorSync.js';
+import { compressImage } from './imageUtils.js';
 
 export const SYNCED_KEYS = [
   'ts_characters',
@@ -22,6 +23,7 @@ export const USER_SCOPED_CACHE_KEYS = [
 ];
 
 const MAX_CLOUD_PREVIEW_CHARS = 220000;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function compactCloudCharacterDocument(value) {
   if (typeof value !== 'string' || !value) return value;
@@ -58,6 +60,70 @@ let runtimeEpoch = 0;
 
 function announceSync(type, detail) {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(type, { detail }));
+}
+
+function cloudCreatorId(character) {
+  const candidate = character?.cloudCreatorId || character?.id || null;
+  return typeof candidate === 'string' && UUID_PATTERN.test(candidate) ? candidate : null;
+}
+
+async function hydrateMissingCloudRosterPreviews(db, userId, epoch) {
+  if (runtime?.epoch !== epoch || runtime?.userId !== userId) return;
+  let creators;
+  try {
+    const raw = localStorage.getItem('ts_characters');
+    creators = raw ? JSON.parse(raw) : [];
+  } catch {
+    return;
+  }
+  if (!Array.isArray(creators) || !creators.length) return;
+
+  const missing = creators
+    .map((character, index) => ({ character, index, creatorId: cloudCreatorId(character) }))
+    .filter(item => item.character?.cloudProfile === true
+      && !item.character?.image
+      && (!Array.isArray(item.character?.refImages) || item.character.refImages.length === 0)
+      && item.creatorId);
+  if (!missing.length) return;
+
+  const repository = new SupabasePipelineRepository(db, userId);
+  const hydrated = [...creators];
+  let changed = false;
+
+  for (const item of missing) {
+    if (runtime?.epoch !== epoch || runtime?.userId !== userId) return;
+    try {
+      const loaded = await repository.loadCreatorProfile(item.creatorId);
+      const headshot = loaded?.references?.find(reference => reference.reference_type === 'headshot' && reference.is_canonical)
+        || loaded?.references?.find(reference => reference.reference_type === 'headshot');
+      if (!headshot?.signed_url) continue;
+      const thumbnail = await compressImage(headshot.signed_url, 320, 0.72);
+      if (typeof thumbnail !== 'string'
+        || !thumbnail.startsWith('data:image/')
+        || thumbnail.length > MAX_CLOUD_PREVIEW_CHARS) continue;
+      hydrated[item.index] = {
+        ...item.character,
+        id: item.creatorId,
+        cloudCreatorId: item.creatorId,
+        refImages: [],
+        image: thumbnail,
+      };
+      changed = true;
+    } catch {
+      // A missing decorative roster thumbnail must never block sign-in or
+      // creator usage. The canonical reference remains available server-side.
+    }
+  }
+
+  if (!changed || runtime?.epoch !== epoch || runtime?.userId !== userId) return;
+  const value = JSON.stringify(hydrated);
+  try {
+    localStorage.setItem('ts_characters', value);
+  } catch {
+    return;
+  }
+  await persistCloudDocument('ts_characters', value).catch(() => undefined);
+  announceSync('thee:cloud-sync-ok', { key: 'ts_characters_preview_hydration' });
 }
 
 async function migrateLegacyCastReferences(db, userId, epoch) {
@@ -101,10 +167,10 @@ async function migrateLegacyCastReferences(db, userId, epoch) {
     // resolves the same creator after the first successful self-heal.
     let mappingChanged = false;
     const reconciledCreators = creators.map(creator => {
-      const cloudCreatorId = cloudBySavedId.get(String(creator.id));
-      if (!cloudCreatorId || creator.cloudCreatorId === cloudCreatorId) return creator;
+      const linkedCreatorId = cloudBySavedId.get(String(creator.id));
+      if (!linkedCreatorId || creator.cloudCreatorId === linkedCreatorId) return creator;
       mappingChanged = true;
-      return { ...creator, cloudCreatorId };
+      return { ...creator, cloudCreatorId: linkedCreatorId };
     });
 
     if (mappingChanged && runtime?.epoch === epoch && runtime?.userId === userId) {
@@ -155,10 +221,15 @@ export async function bootstrapCloudStore(db, userId) {
     queueMicrotask(() => void persistCloudDocument('ts_characters', healedCharactersValue).catch(() => undefined));
   }
 
-  // Do not make sign-in wait on historical image uploads. The migration is
-  // idempotent and account-scoped, so every successful bootstrap can safely
-  // self-heal missing canonical Cast references in the background.
-  queueMicrotask(() => void migrateLegacyCastReferences(db, userId, epoch));
+  // Restore a tiny decorative thumbnail for cloud creators whose old inline
+  // preview pack was removed during quota repair. This reads the canonical
+  // headshot from private Supabase storage; it never restores full references
+  // to localStorage. Run legacy migration afterwards so both self-heals see
+  // the same final roster state.
+  queueMicrotask(() => void (async () => {
+    await hydrateMissingCloudRosterPreviews(db, userId, epoch);
+    await migrateLegacyCastReferences(db, userId, epoch);
+  })());
 }
 
 async function writeDocument(key, value, sourceRuntime = runtime) {

@@ -99,6 +99,11 @@ function orderCloudReferences(references = []) {
   }).slice(0, MAX_CLOUD_REFERENCE_PREVIEWS);
 }
 
+function isSelfMigratedCloudThumbnail(reference, creatorId) {
+  return typeof reference?.notes === 'string'
+    && reference.notes.startsWith(`cast-sync:${creatorId}:`);
+}
+
 async function hydrateCloudRosterReferencePreviews(db, userId, epoch) {
   if (runtime?.epoch !== epoch || runtime?.userId !== userId) return;
   let creators;
@@ -127,7 +132,12 @@ async function hydrateCloudRosterReferencePreviews(db, userId, epoch) {
     if (runtime?.epoch !== epoch || runtime?.userId !== userId) return;
     try {
       const loaded = await repository.loadCreatorProfile(item.creatorId);
-      const references = orderCloudReferences(loaded?.references || []);
+      const selfMigrated = (loaded?.references || []).filter(reference => isSelfMigratedCloudThumbnail(reference, item.creatorId));
+      for (const reference of selfMigrated) {
+        await repository.removeReferenceAsset(reference.id).catch(() => undefined);
+      }
+      const cleanReferences = (loaded?.references || []).filter(reference => !isSelfMigratedCloudThumbnail(reference, item.creatorId));
+      const references = orderCloudReferences(cleanReferences);
       if (!references.length) continue;
 
       const thumbnails = [];

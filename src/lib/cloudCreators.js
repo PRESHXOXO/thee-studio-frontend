@@ -6,17 +6,43 @@
 // Creator Builder flow (repository.saveCreatorProfile) produces creators with
 // a genuine UUID id and/or cloudCreatorId.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_CLOUD_PREVIEW_CHARS = 220000;
 
 export function canonicalCreatorId(creator) {
   const candidate = creator?.cloudCreatorId || creator?.id || null;
   return typeof candidate === 'string' && UUID_PATTERN.test(candidate) ? candidate : null;
 }
 
+function compactCloudCreatorForRoster(creator) {
+  if (!creator || creator.cloudProfile !== true) return creator;
+
+  // Canonical cloud creators already own their real reference files in
+  // private Supabase storage. The browser `ts_characters` document is a
+  // lightweight roster only; duplicating a whole compressed reference pack
+  // here can exhaust localStorage after just a few creators.
+  const candidates = [
+    ...(Array.isArray(creator.refImages) ? creator.refImages : []),
+    creator.image,
+  ];
+  const preview = candidates.find(value => (
+    typeof value === 'string'
+    && value.startsWith('data:image/')
+    && value.length <= MAX_CLOUD_PREVIEW_CHARS
+  )) || null;
+
+  return {
+    ...creator,
+    refImages: [],
+    image: preview,
+  };
+}
+
 export function reconcileCloudCreator(existing = [], savedCreator) {
   const savedId = canonicalCreatorId(savedCreator);
-  if (!savedId) return [...existing, savedCreator];
+  const compactExisting = existing.map(compactCloudCreatorForRoster);
+  if (!savedId) return [...compactExisting, compactCloudCreatorForRoster(savedCreator)];
   return [
-    ...existing.filter(creator => String(canonicalCreatorId(creator)) !== String(savedId)),
-    savedCreator,
+    ...compactExisting.filter(creator => String(canonicalCreatorId(creator)) !== String(savedId)),
+    compactCloudCreatorForRoster(savedCreator),
   ];
 }

@@ -22,8 +22,16 @@ export const USER_SCOPED_CACHE_KEYS = [
   'ts_test_accounts',
 ];
 
-const MAX_CLOUD_PREVIEW_CHARS = 220000;
+const MAX_CLOUD_REFERENCE_PREVIEW_CHARS = 60000;
+const MAX_CLOUD_REFERENCE_PREVIEWS = 10;
+const MAX_CLOUD_PRIMARY_PREVIEW_CHARS = 220000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function validPreview(value, maxChars = MAX_CLOUD_REFERENCE_PREVIEW_CHARS) {
+  return typeof value === 'string'
+    && value.startsWith('data:image/')
+    && value.length <= maxChars;
+}
 
 function compactCloudCharacterDocument(value) {
   if (typeof value !== 'string' || !value) return value;
@@ -33,20 +41,23 @@ function compactCloudCharacterDocument(value) {
     let changed = false;
     const compacted = creators.map(character => {
       if (!character || character.cloudProfile !== true) return character;
-      const candidates = [
-        ...(Array.isArray(character.refImages) ? character.refImages : []),
-        character.image,
-      ];
-      const preview = candidates.find(candidate => (
-        typeof candidate === 'string'
-        && candidate.startsWith('data:image/')
-        && candidate.length <= MAX_CLOUD_PREVIEW_CHARS
-      )) || null;
-      const hasPackedRefs = Array.isArray(character.refImages) && character.refImages.length > 0;
-      const imageChanged = character.image !== preview;
-      if (!hasPackedRefs && !imageChanged) return character;
+
+      const originalRefs = Array.isArray(character.refImages) ? character.refImages : [];
+      const referencePreviews = originalRefs
+        .filter(candidate => validPreview(candidate))
+        .slice(0, MAX_CLOUD_REFERENCE_PREVIEWS);
+      const primary = referencePreviews[0]
+        || (validPreview(character.image, MAX_CLOUD_PRIMARY_PREVIEW_CHARS) ? character.image : null);
+      const normalizedRefs = referencePreviews.length
+        ? referencePreviews
+        : (validPreview(primary) ? [primary] : []);
+
+      const refsChanged = originalRefs.length !== normalizedRefs.length
+        || originalRefs.some((candidate, index) => candidate !== normalizedRefs[index]);
+      const imageChanged = character.image !== primary;
+      if (!refsChanged && !imageChanged) return character;
       changed = true;
-      return { ...character, refImages: [], image: preview };
+      return { ...character, refImages: normalizedRefs, image: primary };
     });
     return changed ? JSON.stringify(compacted) : value;
   } catch {
@@ -67,7 +78,28 @@ function cloudCreatorId(character) {
   return typeof candidate === 'string' && UUID_PATTERN.test(candidate) ? candidate : null;
 }
 
-async function hydrateMissingCloudRosterPreviews(db, userId, epoch) {
+function expectedCloudPreviewCount(character) {
+  const metadataCount = Array.isArray(character?.referenceAssets) ? character.referenceAssets.length : 0;
+  return Math.min(MAX_CLOUD_REFERENCE_PREVIEWS, Math.max(1, metadataCount));
+}
+
+function orderCloudReferences(references = []) {
+  const headshot = references.find(reference => reference.reference_type === 'headshot' && reference.is_canonical)
+    || references.find(reference => reference.reference_type === 'headshot');
+  const fullBody = references.find(reference => reference.reference_type === 'full_body' && reference.is_canonical)
+    || references.find(reference => reference.reference_type === 'full_body');
+  const additionals = references.filter(reference => reference.reference_type === 'additional');
+  const ordered = [headshot, ...additionals, fullBody, ...references].filter(Boolean);
+  const seen = new Set();
+  return ordered.filter(reference => {
+    const key = reference.id || reference.storage_path;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, MAX_CLOUD_REFERENCE_PREVIEWS);
+}
+
+async function hydrateCloudRosterReferencePreviews(db, userId, epoch) {
   if (runtime?.epoch !== epoch || runtime?.userId !== userId) return;
   let creators;
   try {
@@ -78,52 +110,57 @@ async function hydrateMissingCloudRosterPreviews(db, userId, epoch) {
   }
   if (!Array.isArray(creators) || !creators.length) return;
 
-  const missing = creators
+  const targets = creators
     .map((character, index) => ({ character, index, creatorId: cloudCreatorId(character) }))
-    .filter(item => item.character?.cloudProfile === true
-      && !item.character?.image
-      && (!Array.isArray(item.character?.refImages) || item.character.refImages.length === 0)
-      && item.creatorId);
-  if (!missing.length) return;
+    .filter(item => {
+      if (item.character?.cloudProfile !== true || !item.creatorId) return false;
+      const currentCount = Array.isArray(item.character.refImages) ? item.character.refImages.length : 0;
+      return !item.character.image || currentCount < expectedCloudPreviewCount(item.character);
+    });
+  if (!targets.length) return;
 
   const repository = new SupabasePipelineRepository(db, userId);
   const hydrated = [...creators];
   let changed = false;
 
-  for (const item of missing) {
+  for (const item of targets) {
     if (runtime?.epoch !== epoch || runtime?.userId !== userId) return;
     try {
       const loaded = await repository.loadCreatorProfile(item.creatorId);
-      const headshot = loaded?.references?.find(reference => reference.reference_type === 'headshot' && reference.is_canonical)
-        || loaded?.references?.find(reference => reference.reference_type === 'headshot');
-      if (!headshot?.signed_url) continue;
-      const thumbnail = await compressImage(headshot.signed_url, 320, 0.72);
-      if (typeof thumbnail !== 'string'
-        || !thumbnail.startsWith('data:image/')
-        || thumbnail.length > MAX_CLOUD_PREVIEW_CHARS) continue;
+      const references = orderCloudReferences(loaded?.references || []);
+      if (!references.length) continue;
+
+      const thumbnails = [];
+      for (const reference of references) {
+        if (!reference?.signed_url) continue;
+        const thumbnail = await compressImage(reference.signed_url, 240, 0.65);
+        if (validPreview(thumbnail)) thumbnails.push(thumbnail);
+      }
+      if (!thumbnails.length) continue;
+
       hydrated[item.index] = {
         ...item.character,
         id: item.creatorId,
         cloudCreatorId: item.creatorId,
-        refImages: [],
-        image: thumbnail,
+        refImages: thumbnails,
+        image: thumbnails[0],
       };
       changed = true;
     } catch {
-      // A missing decorative roster thumbnail must never block sign-in or
-      // creator usage. The canonical reference remains available server-side.
+      // Decorative reference thumbnails must never block sign-in or creator
+      // generation. Canonical reference files remain authoritative server-side.
     }
   }
 
   if (!changed || runtime?.epoch !== epoch || runtime?.userId !== userId) return;
-  const value = JSON.stringify(hydrated);
+  const value = compactCloudCharacterDocument(JSON.stringify(hydrated));
   try {
     localStorage.setItem('ts_characters', value);
   } catch {
     return;
   }
   await persistCloudDocument('ts_characters', value).catch(() => undefined);
-  announceSync('thee:cloud-sync-ok', { key: 'ts_characters_preview_hydration' });
+  announceSync('thee:cloud-sync-ok', { key: 'ts_characters_reference_preview_hydration' });
 }
 
 async function migrateLegacyCastReferences(db, userId, epoch) {
@@ -137,8 +174,13 @@ async function migrateLegacyCastReferences(db, userId, epoch) {
   }
   if (!Array.isArray(creators) || !creators.length) return;
 
+  // Cloud creators already own canonical private references. Their tiny local
+  // thumbnails are display cache only and must never be re-uploaded as legacy
+  // Cast references.
   const legacyWithImages = creators.filter(creator =>
-    creator && (
+    creator
+    && creator.cloudProfile !== true
+    && (
       (Array.isArray(creator.refImages) && creator.refImages.some(image => typeof image === 'string' && image.startsWith('data:image/')))
       || (typeof creator.image === 'string' && creator.image.startsWith('data:image/'))
     )
@@ -213,21 +255,17 @@ export async function bootstrapCloudStore(db, userId) {
     }
   }
 
-  // If an older cloud document still contains inline reference packs for a
-  // canonical cloud creator, hydrate the compact roster first (avoiding a
-  // browser quota failure) and then self-heal the authoritative document in
+  // If an older cloud document still contains oversized cloud previews, hydrate
+  // the compact roster first and then self-heal the authoritative document in
   // the background. Real reference files stay untouched in creator-references.
   if (healedCharactersValue != null) {
     queueMicrotask(() => void persistCloudDocument('ts_characters', healedCharactersValue).catch(() => undefined));
   }
 
-  // Restore a tiny decorative thumbnail for cloud creators whose old inline
-  // preview pack was removed during quota repair. This reads the canonical
-  // headshot from private Supabase storage; it never restores full references
-  // to localStorage. Run legacy migration afterwards so both self-heals see
-  // the same final roster state.
+  // Cloud creators get tiny display-only thumbnails for their canonical
+  // references; legacy local creators keep their existing migration path.
   queueMicrotask(() => void (async () => {
-    await hydrateMissingCloudRosterPreviews(db, userId, epoch);
+    await hydrateCloudRosterReferencePreviews(db, userId, epoch);
     await migrateLegacyCastReferences(db, userId, epoch);
   })());
 }

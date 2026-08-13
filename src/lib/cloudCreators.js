@@ -6,7 +6,7 @@
 // Creator Builder flow (repository.saveCreatorProfile) produces creators with
 // a genuine UUID id and/or cloudCreatorId.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_CLOUD_PREVIEW_CHARS = 220000;
+const MAX_CLOUD_PREVIEW_CHARS = 500000;
 
 export function canonicalCreatorId(creator) {
   const candidate = creator?.cloudCreatorId || creator?.id || null;
@@ -19,7 +19,9 @@ function compactCloudCreatorForRoster(creator) {
   // Canonical cloud creators already own their real reference files in
   // private Supabase storage. The browser `ts_characters` document is a
   // lightweight roster only; duplicating a whole compressed reference pack
-  // here can exhaust localStorage after just a few creators.
+  // here can exhaust localStorage after just a few creators. Keep at most one
+  // bounded preview for Cast/canvas display; generation never uses it as the
+  // canonical identity source.
   const candidates = [
     ...(Array.isArray(creator.refImages) ? creator.refImages : []),
     creator.image,
@@ -29,9 +31,11 @@ function compactCloudCreatorForRoster(creator) {
     && value.startsWith('data:image/')
     && value.length <= MAX_CLOUD_PREVIEW_CHARS
   )) || null;
+  const creatorId = canonicalCreatorId(creator);
 
   return {
     ...creator,
+    ...(creatorId ? { id: creatorId, cloudCreatorId: creatorId } : {}),
     refImages: [],
     image: preview,
   };

@@ -39,4 +39,43 @@ describe('cloud creator identity', () => {
       saved,
     ]);
   });
+
+  it('preserves tiny display-only reference thumbnails for cloud creators', () => {
+    const uuid = '00000000-0000-0000-0000-000000000111';
+    const ref1 = `data:image/jpeg;base64,${'a'.repeat(120)}`;
+    const ref2 = `data:image/jpeg;base64,${'b'.repeat(140)}`;
+    const saved = {
+      id: 'temporary-local-id',
+      cloudCreatorId: uuid,
+      cloudProfile: true,
+      name: 'Amara',
+      refImages: [ref1, ref2],
+      image: ref1,
+    };
+
+    expect(reconcileCloudCreator([], saved)).toEqual([{
+      ...saved,
+      id: uuid,
+      cloudCreatorId: uuid,
+      refImages: [ref1, ref2],
+      image: ref1,
+    }]);
+  });
+
+  it('never keeps a full-resolution cloud reference pack in the roster cache', () => {
+    const uuid = '00000000-0000-0000-0000-000000000111';
+    const oversized = `data:image/jpeg;base64,${'x'.repeat(510000)}`;
+    const saved = {
+      id: uuid,
+      cloudCreatorId: uuid,
+      cloudProfile: true,
+      name: 'Amara',
+      refImages: [oversized, oversized],
+      image: oversized,
+    };
+
+    const [compacted] = reconcileCloudCreator([], saved);
+    expect(compacted.refImages).toEqual([]);
+    expect(compacted.image).toBeNull();
+  });
 });

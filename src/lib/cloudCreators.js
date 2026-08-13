@@ -6,11 +6,19 @@
 // Creator Builder flow (repository.saveCreatorProfile) produces creators with
 // a genuine UUID id and/or cloudCreatorId.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_CLOUD_PREVIEW_CHARS = 500000;
+const MAX_CLOUD_REFERENCE_PREVIEW_CHARS = 60000;
+const MAX_CLOUD_REFERENCE_PREVIEWS = 10;
+const MAX_CLOUD_PRIMARY_PREVIEW_CHARS = 500000;
 
 export function canonicalCreatorId(creator) {
   const candidate = creator?.cloudCreatorId || creator?.id || null;
   return typeof candidate === 'string' && UUID_PATTERN.test(candidate) ? candidate : null;
+}
+
+function validPreview(value, maxChars) {
+  return typeof value === 'string'
+    && value.startsWith('data:image/')
+    && value.length <= maxChars;
 }
 
 function compactCloudCreatorForRoster(creator) {
@@ -18,26 +26,27 @@ function compactCloudCreatorForRoster(creator) {
 
   // Canonical cloud creators already own their real reference files in
   // private Supabase storage. The browser `ts_characters` document is a
-  // lightweight roster only; duplicating a whole compressed reference pack
-  // here can exhaust localStorage after just a few creators. Keep at most one
-  // bounded preview for Cast/canvas display; generation never uses it as the
-  // canonical identity source.
-  const candidates = [
+  // lightweight roster only. Keep tiny display thumbnails if they already
+  // exist, plus at most one medium fallback portrait immediately after a
+  // Creator Builder save. Generation never uses these as identity authority.
+  const referencePreviews = (Array.isArray(creator.refImages) ? creator.refImages : [])
+    .filter(value => validPreview(value, MAX_CLOUD_REFERENCE_PREVIEW_CHARS))
+    .slice(0, MAX_CLOUD_REFERENCE_PREVIEWS);
+  const fallbackCandidates = [
+    ...referencePreviews,
     ...(Array.isArray(creator.refImages) ? creator.refImages : []),
     creator.image,
   ];
-  const preview = candidates.find(value => (
-    typeof value === 'string'
-    && value.startsWith('data:image/')
-    && value.length <= MAX_CLOUD_PREVIEW_CHARS
-  )) || null;
+  const primary = referencePreviews[0]
+    || fallbackCandidates.find(value => validPreview(value, MAX_CLOUD_PRIMARY_PREVIEW_CHARS))
+    || null;
   const creatorId = canonicalCreatorId(creator);
 
   return {
     ...creator,
     ...(creatorId ? { id: creatorId, cloudCreatorId: creatorId } : {}),
-    refImages: [],
-    image: preview,
+    refImages: referencePreviews,
+    image: primary,
   };
 }
 

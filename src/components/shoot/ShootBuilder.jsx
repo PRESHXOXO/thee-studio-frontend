@@ -13,6 +13,7 @@ import { fetchAdminAccess } from '../../api/adminTelemetry.js';
 import { canonicalCreatorId } from '../../lib/cloudCreators.js';
 import { buildCharacterPrompt } from '../../lib/characterPrompt.js';
 import { saveToLibrary } from '../../lib/library.js';
+import { downloadImageAsPng } from '../../lib/libraryAssets.js';
 import { compressImage } from '../../lib/imageUtils.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../../lib/creatorMemory.js';
 import {
@@ -302,6 +303,7 @@ export function ShootBuilder({
         const memoryBlock = creatorMemoryPrompt(memory);
         if (memoryBlock) positivePrompt += `\n\n${memoryBlock}`;
         if (notes.trim()) positivePrompt += `\n\nDIRECTOR'S NOTES:\n${notes.trim()}`;
+        if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
 
         if (allImages.length) {
           const primaryIdentity = allImages[activeRef] || allImages[0];
@@ -318,37 +320,53 @@ export function ShootBuilder({
                   })),
               ]
             : [];
-          if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
-          const submitted = await characterGenerate({
-            engineId: MANAGED_ENGINE_ID,
+          const sequence = [];
+          const sequenceKey = crypto.randomUUID();
+          for (let index = 0; index < batchSize; index += 1) {
+            const submitted = await characterGenerate({
+              engineId: MANAGED_ENGINE_ID,
+              positivePrompt,
+              negativePrompt: STANDARD_NEGATIVE,
+              characterImage: primaryIdentity,
+              anchorReferences: providerReferences,
+              mode: identityMode,
+              batchSize: 1,
+              creatorId: cloudCreatorId,
+              requestKey: `${sequenceKey}:guided-image-${index + 1}`,
+            });
+            const result = await awaitCastQuickShootResult(submitted, cloudCreatorId);
+            const image = result.images?.[0];
+            if (!image) throw new Error(`Guided render ${index + 1} of ${batchSize} finished without an image.`);
+            sequence.push(image);
+          }
+          images = sequence;
+        } else if (hasSupabaseConfig()) {
+          const sequence = [];
+          const sequenceKey = crypto.randomUUID();
+          for (let index = 0; index < batchSize; index += 1) {
+            const submitted = await castQuickShootPlain({
+              positivePrompt,
+              negativePrompt: STANDARD_NEGATIVE,
+              batchSize: 1,
+              creatorId: cloudCreatorId,
+              requestKey: `${sequenceKey}:guided-image-${index + 1}`,
+            });
+            const result = await awaitCastQuickShootResult(submitted, cloudCreatorId);
+            const image = result.images?.[0];
+            if (!image) throw new Error(`Guided render ${index + 1} of ${batchSize} finished without an image.`);
+            sequence.push(image);
+          }
+          images = sequence;
+        } else {
+          const result = await generateImage({
+            engine: 'OpenAI Image',
             positivePrompt,
             negativePrompt: STANDARD_NEGATIVE,
-            characterImage: primaryIdentity,
-            anchorReferences: providerReferences,
-            mode: identityMode,
-            batchSize,
-            creatorId: cloudCreatorId,
+            imageSize: 'Vertical 9:16',
+            quality: 'High',
+            performanceMode: 'Balanced',
+            imageStyle: 'Lifestyle Creator',
           });
-          const result = await awaitCastQuickShootResult(submitted, cloudCreatorId);
-          images = result.images || [];
-        } else {
-          if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
-          const result = hasSupabaseConfig()
-            ? await castQuickShootPlain({
-                positivePrompt,
-                negativePrompt: STANDARD_NEGATIVE,
-                batchSize,
-                creatorId: cloudCreatorId,
-              })
-            : await generateImage({
-                engine: 'OpenAI Image',
-                positivePrompt,
-                negativePrompt: STANDARD_NEGATIVE,
-                imageSize: 'Vertical 9:16',
-                quality: 'High',
-                performanceMode: 'Balanced',
-                imageStyle: 'Lifestyle Creator',
-              });
           images = result.images || [];
         }
         if (hasSupabaseConfig() && images.length !== batchSize) {
@@ -372,32 +390,45 @@ export function ShootBuilder({
           scene,
         });
         if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
-        const result = shotReferences.length
-          ? await awaitCastQuickShootResult(await characterGenerate({
+        if (shotReferences.length) {
+          const sequence = [];
+          const sequenceKey = crypto.randomUUID();
+          for (let index = 0; index < batchSize; index += 1) {
+            const submitted = await characterGenerate({
               engineId: MANAGED_ENGINE_ID,
               positivePrompt,
               negativePrompt: STANDARD_NEGATIVE,
               characterImage: null,
               anchorReferences: shotReferences,
               mode: identityMode,
-              batchSize,
-            }), null)
-          : hasSupabaseConfig()
-            ? await castQuickShootPlain({
-                positivePrompt,
-                negativePrompt: STANDARD_NEGATIVE,
-                batchSize,
-              })
-            : await generateImage({
-                engine: 'OpenAI Image',
-                positivePrompt,
-                negativePrompt: STANDARD_NEGATIVE,
-                imageSize: 'Vertical 9:16',
-                quality: 'High',
-                performanceMode: 'Balanced',
-                imageStyle: 'Lifestyle Creator',
-              });
-        images = result.images || [];
+              batchSize: 1,
+              requestKey: `${sequenceKey}:guided-open-image-${index + 1}`,
+            });
+            const result = await awaitCastQuickShootResult(submitted, null);
+            const image = result.images?.[0];
+            if (!image) throw new Error(`Guided render ${index + 1} of ${batchSize} finished without an image.`);
+            sequence.push(image);
+          }
+          images = sequence;
+        } else if (hasSupabaseConfig()) {
+          const result = await castQuickShootPlain({
+            positivePrompt,
+            negativePrompt: STANDARD_NEGATIVE,
+            batchSize,
+          });
+          images = result.images || [];
+        } else {
+          const result = await generateImage({
+            engine: 'OpenAI Image',
+            positivePrompt,
+            negativePrompt: STANDARD_NEGATIVE,
+            imageSize: 'Vertical 9:16',
+            quality: 'High',
+            performanceMode: 'Balanced',
+            imageStyle: 'Lifestyle Creator',
+          });
+          images = result.images || [];
+        }
         if (hasSupabaseConfig() && images.length !== batchSize) {
           throw new Error(`Guided requested ${batchSize} image${batchSize === 1 ? '' : 's'} but received ${images.length}. The incomplete batch was not silently accepted.`);
         }
@@ -702,9 +733,13 @@ export function ShootBuilder({
                 <div onClick={() => setLightboxSrc(url)} style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden', boxShadow: 'var(--shadow-md)', cursor: 'zoom-in' }}>
                   <img src={url} alt={`Generated ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
-                <a href={url} download={`thee-studio-${Date.now()}-${i}.png`} target="_blank" rel="noreferrer">
-                  <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }}><Icon name="download" size={13} /> Download PNG</Button>
-                </a>
+                <Button
+                  variant="secondary"
+                  style={{ width: '100%', fontSize: '0.75rem' }}
+                  onClick={() => downloadImageAsPng(url, `thee-studio-${Date.now()}-${i + 1}.png`).catch(error => setGenError(error.message || 'PNG download failed.'))}
+                >
+                  <Icon name="download" size={13} /> Download PNG
+                </Button>
                 {creator && onSaveAsCreator && (
                   <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }} onClick={() => handleSaveAsAnchor(url)}>
                     <Icon name="bookmark" size={13} /> Save as Anchor

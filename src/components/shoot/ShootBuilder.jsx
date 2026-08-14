@@ -6,6 +6,7 @@ import { GenerationProgress } from '../feedback/GenerationProgress.jsx';
 import { ImageLightbox } from '../feedback/ImageLightbox.jsx';
 import { Select } from '../forms/Select.jsx';
 import { ReferenceImageTray } from '../director/ReferenceImageTray.jsx';
+import { DirectorStatusCard } from '../director/DirectorStatusCard.jsx';
 import { castQuickShootPlain, characterGenerate, generateImage, pollCastQuickShootStatus, preflightCastReferences } from '../../api/studio.js';
 import { hasSupabaseConfig, isStagingSupabaseProject } from '../../lib/supabase.js';
 import { fetchAdminAccess } from '../../api/adminTelemetry.js';
@@ -24,6 +25,7 @@ import {
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 };
 const MANAGED_ENGINE_ID = 'openai_image';
+const DATA_IMAGE = /^data:image\/(?:jpeg|png|webp);base64,/i;
 
 const QUICK_SHOOT_POLL_INTERVAL_MS = 2500;
 const QUICK_SHOOT_POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -172,6 +174,12 @@ export function ShootBuilder({
   const [canPreflight, setCanPreflight] = React.useState(false);
 
   const allImages = getAllImages(creator);
+  const cloudCreatorId = canonicalCreatorId(creator);
+  const embeddedIdentityAvailable = allImages.some(image => typeof image === 'string' && DATA_IMAGE.test(image));
+  const creatorIdentityBound = Boolean(creator && (cloudCreatorId || embeddedIdentityAvailable));
+  const identityWarning = creator && !creatorIdentityBound
+    ? `${creator.name || 'This Cast member'} is selected, but Guided cannot bind a canonical or embedded identity to the render. No generation will start until identity is available.`
+    : '';
 
   React.useEffect(() => {
     let cancelled = false;
@@ -187,7 +195,7 @@ export function ShootBuilder({
     setPreflighting(true);
     setPreflightResult(null);
     try {
-      const result = await preflightCastReferences(allImages, canonicalCreatorId(creator));
+      const result = await preflightCastReferences(allImages, cloudCreatorId);
       setPreflightResult(result);
     } catch (error) {
       setPreflightResult({ error: error.message || 'Preflight failed.' });
@@ -208,14 +216,13 @@ export function ShootBuilder({
 
   React.useEffect(() => {
     if (!hasSupabaseConfig()) return;
-    const creatorId = canonicalCreatorId(creator);
-    const pendingJobId = loadPendingQuickShootJob(creatorId);
+    const pendingJobId = loadPendingQuickShootJob(cloudCreatorId);
     if (!pendingJobId) return;
     let cancelled = false;
     setGenerating(true);
     setGenError('');
     setGenErrorCategory('');
-    awaitCastQuickShootResult({ status: 'pending', jobId: pendingJobId }, creatorId)
+    awaitCastQuickShootResult({ status: 'pending', jobId: pendingJobId }, cloudCreatorId)
       .then(result => { if (!cancelled) setGenImages(result.images || []); })
       .catch(error => {
         if (!cancelled) {
@@ -225,7 +232,7 @@ export function ShootBuilder({
       })
       .finally(() => { if (!cancelled) setGenerating(false); });
     return () => { cancelled = true; };
-  }, [creator?.id]);
+  }, [creator?.id, cloudCreatorId]);
 
   const rawPhysiqueOptions  = getPhysiqueOptions(rawGender);
   const rawHairStyleOptions = getHairStyleOptions(rawGender);
@@ -247,7 +254,7 @@ export function ShootBuilder({
   const composedMood = [mood, lighting !== 'Natural' && `${lighting} lighting`].filter(Boolean).join(' — ');
 
   const snapshotSettings = () => ({
-    version: 1,
+    version: 2,
     workflow: 'guided',
     identityMode,
     quickAngle,
@@ -283,16 +290,14 @@ export function ShootBuilder({
       let images = [];
 
       if (creator) {
-        if (creator.locked && !allImages.length) {
-          throw new Error('Identity lock is on but this creator has no reference images. Add one first.');
-        }
+        if (!creatorIdentityBound) throw new Error(identityWarning);
         const hasOutfitReference = shotReferences.some(reference => reference.role === 'outfit');
         const outfitOverride = hasOutfitReference
           ? null
           : legacyOutfitPhotoDesc || SHOOT_OUTFITS.find(o => o.id === outfit)?.prompt || null;
         const outfitOrAngle = identityMode === 'portrait' ? quickAngle : outfitOverride;
         const sceneName = scene === 'None' ? '' : scene;
-        let positivePrompt = buildCharacterPrompt(creator, sceneName, composedMood, !!creator.locked, outfitOrAngle, identityMode);
+        let positivePrompt = buildCharacterPrompt(creator, sceneName, composedMood, creatorIdentityBound, outfitOrAngle, identityMode);
         const memory = getCreatorMemory(creator.id);
         const memoryBlock = creatorMemoryPrompt(memory);
         if (memoryBlock) positivePrompt += `\n\n${memoryBlock}`;
@@ -314,7 +319,6 @@ export function ShootBuilder({
               ]
             : [];
           if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
-          const identityCreatorId = canonicalCreatorId(creator);
           const submitted = await characterGenerate({
             engineId: MANAGED_ENGINE_ID,
             positivePrompt,
@@ -323,9 +327,9 @@ export function ShootBuilder({
             anchorReferences: providerReferences,
             mode: identityMode,
             batchSize,
-            creatorId: identityCreatorId,
+            creatorId: cloudCreatorId,
           });
-          const result = await awaitCastQuickShootResult(submitted, identityCreatorId);
+          const result = await awaitCastQuickShootResult(submitted, cloudCreatorId);
           images = result.images || [];
         } else {
           if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
@@ -334,7 +338,7 @@ export function ShootBuilder({
                 positivePrompt,
                 negativePrompt: STANDARD_NEGATIVE,
                 batchSize,
-                creatorId: canonicalCreatorId(creator),
+                creatorId: cloudCreatorId,
               })
             : await generateImage({
                 engine: 'OpenAI Image',
@@ -346,6 +350,9 @@ export function ShootBuilder({
                 imageStyle: 'Lifestyle Creator',
               });
           images = result.images || [];
+        }
+        if (hasSupabaseConfig() && images.length !== batchSize) {
+          throw new Error(`Guided requested ${batchSize} image${batchSize === 1 ? '' : 's'} but received ${images.length}. The incomplete batch was not silently accepted.`);
         }
         images.forEach(url => saveToLibrary(url, {
           source: 'quick_shoot', character: creator.id, scene: sceneName || undefined,
@@ -375,16 +382,25 @@ export function ShootBuilder({
               mode: identityMode,
               batchSize,
             }), null)
-          : await generateImage({
-              engine: 'OpenAI Image',
-              positivePrompt,
-              negativePrompt: STANDARD_NEGATIVE,
-              imageSize: 'Vertical 9:16',
-              quality: 'High',
-              performanceMode: 'Balanced',
-              imageStyle: 'Lifestyle Creator',
-            });
+          : hasSupabaseConfig()
+            ? await castQuickShootPlain({
+                positivePrompt,
+                negativePrompt: STANDARD_NEGATIVE,
+                batchSize,
+              })
+            : await generateImage({
+                engine: 'OpenAI Image',
+                positivePrompt,
+                negativePrompt: STANDARD_NEGATIVE,
+                imageSize: 'Vertical 9:16',
+                quality: 'High',
+                performanceMode: 'Balanced',
+                imageStyle: 'Lifestyle Creator',
+              });
         images = result.images || [];
+        if (hasSupabaseConfig() && images.length !== batchSize) {
+          throw new Error(`Guided requested ${batchSize} image${batchSize === 1 ? '' : 's'} but received ${images.length}. The incomplete batch was not silently accepted.`);
+        }
         images.forEach(url => saveToLibrary(url, {
           source: 'director', scene: scene !== 'None' ? scene : undefined,
           prompt: positivePrompt,
@@ -486,12 +502,13 @@ export function ShootBuilder({
         <ReferenceImageTray
           references={shotReferences}
           onChange={handleShotReferencesChange}
-          maxReferences={allImages.length ? 3 : 4}
+          maxReferences={creator ? 3 : 4}
           defaultRole={!creator ? 'identity' : identityMode === 'portrait' ? 'makeup' : 'outfit'}
+          identityLocked={Boolean(creator)}
           disabled={generating}
           title="Shot references"
-          description={allImages.length
-            ? 'Your creator fills the identity slot. Add up to three more images and assign each a job.'
+          description={creator
+            ? `${creator.name} already owns the Identity slot. Add up to three Outfit, Background, Hair, Makeup, or Pose references.`
             : 'Start with an Identity image, then add up to three styling or scene references.'}
         />
       </div>
@@ -569,6 +586,10 @@ export function ShootBuilder({
 
   const showLivePreview = !generating && genImages.length === 0;
   const livePreviewImg = creator ? allImages[activeRef] || allImages[0] : null;
+  const guidedDirection = [
+    identityMode === 'portrait' ? `Portrait · ${quickAngle}` : scene !== 'None' ? scene : 'Lifestyle scene',
+    notes.trim() || null,
+  ].filter(Boolean).join(' · ');
 
   const canvasJSX = (
     <>
@@ -614,14 +635,27 @@ export function ShootBuilder({
         );
       })()}
 
+      <DirectorStatusCard
+        creator={creator}
+        workflow="Guided"
+        identityLocked={creator ? creatorIdentityBound : shotReferences.some(reference => reference.role === 'identity')}
+        count={batchSize}
+        format="PNG"
+        sceneSummary={guidedDirection}
+        referenceRoles={shotReferences.map(reference => reference.role)}
+        ready={!identityWarning}
+        warning={identityWarning}
+        compact
+      />
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Button variant="primary" onClick={() => handleGenerate('auto')} loading={generating} disabled={generating} full={layout === 'split'} style={layout === 'split' ? {} : { alignSelf: 'flex-start' }}>
-          <Icon name="zap" size={15} /> {generating ? 'Generating…' : 'Build + Generate'}
+        <Button variant="primary" onClick={() => handleGenerate('auto')} loading={generating} disabled={generating || Boolean(identityWarning)} full={layout === 'split'} style={layout === 'split' ? {} : { alignSelf: 'flex-start' }}>
+          <Icon name="zap" size={15} /> {generating ? 'Generating…' : `Generate ${batchSize === 1 ? 'photo' : `${batchSize} photos`}`}
         </Button>
-        <GenerationProgress active={generating} identityLocked={!!creator?.locked} batchSize={batchSize} />
-        {creator && hasSupabaseConfig() && !canonicalCreatorId(creator) && (
+        <GenerationProgress active={generating} identityLocked={creator ? creatorIdentityBound : shotReferences.some(reference => reference.role === 'identity')} batchSize={batchSize} />
+        {creator && hasSupabaseConfig() && !cloudCreatorId && embeddedIdentityAvailable && (
           <p style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', margin: 0 }}>
-            This creator isn't cloud-linked yet, so this shoot won't be saved to their profile history.
+            This legacy creator can render from its embedded Identity reference, but it is not cloud-linked to profile history yet.
           </p>
         )}
       </div>
@@ -668,8 +702,8 @@ export function ShootBuilder({
                 <div onClick={() => setLightboxSrc(url)} style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden', boxShadow: 'var(--shadow-md)', cursor: 'zoom-in' }}>
                   <img src={url} alt={`Generated ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
-                <a href={url} download={`thee-studio-${Date.now()}-${i}.jpg`} target="_blank" rel="noreferrer">
-                  <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }}><Icon name="download" size={13} /> Download</Button>
+                <a href={url} download={`thee-studio-${Date.now()}-${i}.png`} target="_blank" rel="noreferrer">
+                  <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }}><Icon name="download" size={13} /> Download PNG</Button>
                 </a>
                 {creator && onSaveAsCreator && (
                   <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }} onClick={() => handleSaveAsAnchor(url)}>

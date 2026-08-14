@@ -7,10 +7,11 @@
 // - string: use the selected/prompted outfit override
 // - null: an attached visual Outfit reference is authoritative; do not inject
 //   saved creator wardrobe text into the prompt
-export function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverride = undefined, mode = 'lifestyle') {
+export function buildCharacterPrompt(char, sceneName, mood, identityLocked, outfitOverride = undefined, mode = 'lifestyle', referenceRoles = []) {
   const f = char.fields || {};
   const parts = [];
   const visualOutfitAuthority = mode === 'lifestyle' && outfitOverride === null;
+  const roleSet = new Set(referenceRoles.map(role => String(role).toLowerCase()));
 
   // IDENTITY LOCK BLOCK — prepended first when identity is locked
   if (identityLocked) {
@@ -87,8 +88,10 @@ export function buildCharacterPrompt(char, sceneName, mood, identityLocked, outf
   }
 
   // HAIR
-  if (f.hair) {
+  if (f.hair && !roleSet.has('hair')) {
     parts.push(`HAIR:\n${f.hair}, with full strand detail, realistic density, and believable natural movement.`);
+  } else if (roleSet.has('hair')) {
+    parts.push('HAIR SOURCE:\nUse the attached role-labeled HAIR reference as the authoritative source for hairstyle, length, texture, color, and finish. Ignore saved creator hair defaults.');
   }
 
   // SCENE

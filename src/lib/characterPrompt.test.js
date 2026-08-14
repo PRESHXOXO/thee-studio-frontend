@@ -101,4 +101,20 @@ describe('role-labeled shot references', () => {
     expect(block).toContain('BACKGROUND AUTHORITY:');
     expect(block).toContain('POSE AUTHORITY:');
   });
+
+  it('does not inject saved hair over an authoritative Hair reference', () => {
+    const prompt = buildCharacterPrompt(
+      creator,
+      'luxury store',
+      'Clean',
+      true,
+      undefined,
+      'lifestyle',
+      ['hair'],
+    );
+
+    expect(prompt).toContain('HAIR SOURCE:');
+    expect(prompt).toContain('role-labeled HAIR reference');
+    expect(prompt).not.toContain('long braids');
+  });
 });

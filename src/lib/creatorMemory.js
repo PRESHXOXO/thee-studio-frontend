@@ -9,9 +9,48 @@ export const EMPTY_BRAND_DNA = {
   lighting: '',
   wardrobeRules: '',
   locationRules: '',
+  hairRules: '',
+  makeupRules: '',
   mustKeep: '',
   avoid: '',
 };
+
+const SENTINEL_VALUES = new Set([
+  '', 'none', 'unspecified', 'n/a', 'na', 'default', 'surprise', 'surprise me',
+  'not specified', 'no preference', 'no preference specified', 'choose for me',
+  'automatic', 'auto',
+]);
+
+function normalizedValue(value) {
+  if (value == null) return '';
+  const text = String(value).trim().replace(/\s+/g, ' ');
+  const sentinelKey = text.toLowerCase().replace(/[.!]+$/g, '').trim();
+  return SENTINEL_VALUES.has(sentinelKey) ? '' : text;
+}
+
+function uniqueValues(values = []) {
+  const seen = new Set();
+  return values.reduce((result, value) => {
+    const clean = normalizedValue(value);
+    const key = clean.toLocaleLowerCase();
+    if (!clean || seen.has(key)) return result;
+    seen.add(key);
+    result.push(clean);
+    return result;
+  }, []);
+}
+
+function sanitizeLearnedItems(items = []) {
+  const seen = new Set();
+  return (Array.isArray(items) ? items : []).reduce((result, item) => {
+    const value = normalizedValue(typeof item === 'object' ? item?.value : item);
+    const key = value.toLocaleLowerCase();
+    if (!value || seen.has(key)) return result;
+    seen.add(key);
+    result.push(typeof item === 'object' ? { ...item, value } : { value, count: 1 });
+    return result;
+  }, []);
+}
 
 function readStore() {
   try { return JSON.parse(localStorage.getItem(CREATOR_MEMORY_KEY) || '{}'); }
@@ -32,13 +71,17 @@ export function getCreatorMemory(creatorId) {
   return {
     creatorId: creatorKey,
     version: current.version || 1,
-    preferences: { ...EMPTY_BRAND_DNA, ...(current.preferences || {}) },
+    preferences: Object.fromEntries(Object.entries({ ...EMPTY_BRAND_DNA, ...(current.preferences || {}) })
+      .map(([field, value]) => [field, normalizedValue(value)])),
     learned: {
       favoriteScenes: [],
       favoriteMoods: [],
+      favoriteWardrobes: [],
+      favoriteLocations: [],
       favoriteEngines: [],
       avoidScenes: [],
-      ...(current.learned || {}),
+      ...Object.fromEntries(Object.entries(current.learned || {})
+        .map(([field, items]) => [field, sanitizeLearnedItems(items)])),
     },
     feedback: {
       total: 0,
@@ -57,15 +100,17 @@ function topValues(entries, getter, limit = 4) {
   entries.forEach(entry => {
     const raw = getter(entry);
     const values = Array.isArray(raw) ? raw : [raw];
-    values.filter(Boolean).forEach(value => {
-      const normalized = String(value).trim();
-      if (normalized) counts.set(normalized, (counts.get(normalized) || 0) + 1);
+    uniqueValues(values).forEach(value => {
+      const key = value.toLocaleLowerCase();
+      const current = counts.get(key);
+      counts.set(key, { value: current?.value || value, count: (current?.count || 0) + 1 });
     });
   });
   return [...counts.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([, item]) => item)
+    .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value))
     .slice(0, limit)
-    .map(([value, count]) => ({ value, count }));
+    .map(({ value, count }) => ({ value, count }));
 }
 
 function sceneValue(entry) {
@@ -76,6 +121,14 @@ function sceneValue(entry) {
 
 function moodValue(entry) {
   return entry.mood || entry.settings?.mood || entry.settings?.scene?.vibe || '';
+}
+
+function wardrobeValue(entry) {
+  return entry.wardrobe || entry.settings?.wardrobe || entry.settings?.outfit || entry.settings?.scene?.wardrobe || '';
+}
+
+function locationValue(entry) {
+  return entry.location || entry.settings?.location || entry.settings?.scene?.location || '';
 }
 
 export function learnCreatorMemory(creatorId, libraryEntries) {
@@ -91,6 +144,8 @@ export function learnCreatorMemory(creatorId, libraryEntries) {
     learned: {
       favoriteScenes: topValues(approved, sceneValue),
       favoriteMoods: topValues(approved, moodValue),
+      favoriteWardrobes: topValues(approved, wardrobeValue),
+      favoriteLocations: topValues(approved, locationValue),
       favoriteEngines: topValues(approved, entry => entry.engine),
       avoidScenes: topValues([...needsFix, ...rejected], sceneValue),
     },
@@ -119,7 +174,7 @@ export function saveCreatorMemory(creatorId, preferences) {
   const current = getCreatorMemory(creatorKey);
   const normalized = { ...EMPTY_BRAND_DNA };
   Object.keys(normalized).forEach(field => {
-    normalized[field] = String(preferences[field] || '').trim();
+    normalized[field] = normalizedValue(preferences[field]);
   });
   const changed = JSON.stringify(normalized) !== JSON.stringify(current.preferences);
   const version = changed ? current.version + 1 : current.version;
@@ -145,25 +200,47 @@ export function saveCreatorMemory(creatorId, preferences) {
 }
 
 function learnedValues(items = []) {
-  return items.map(item => item.value).filter(Boolean).join(', ');
+  return uniqueValues(sanitizeLearnedItems(items).map(item => item.value)).join(', ');
 }
 
-export function creatorMemoryPrompt(memory) {
+function hasExplicitIntent(value) {
+  if (Array.isArray(value)) return value.some(hasExplicitIntent);
+  return Boolean(normalizedValue(value));
+}
+
+export function creatorMemoryPrompt(memory, context = {}) {
   if (!memory) return '';
-  const preferences = memory.preferences || EMPTY_BRAND_DNA;
+  const preferences = Object.fromEntries(Object.entries({ ...EMPTY_BRAND_DNA, ...(memory.preferences || {}) })
+    .map(([field, value]) => [field, normalizedValue(value)]));
   const learned = memory.learned || {};
+  const roles = new Set((context.referenceRoles || [])
+    .map(role => String(typeof role === 'object' ? role?.role : role).trim().toLowerCase())
+    .filter(Boolean));
+  const explicitScene = hasExplicitIntent(context.explicitScene) || hasExplicitIntent(context.locationIntent) || hasExplicitIntent(context.backgroundIntent);
+  const explicitMood = hasExplicitIntent(context.explicitMood);
+  const explicitWardrobe = hasExplicitIntent(context.wardrobeIntent) || hasExplicitIntent(context.explicitWardrobe);
+  const explicitHair = hasExplicitIntent(context.hairIntent);
+  const explicitMakeup = hasExplicitIntent(context.makeupIntent);
+  const sceneAuthority = explicitScene || roles.has('background');
+  const wardrobeAuthority = explicitWardrobe || roles.has('outfit');
+  const hairAuthority = explicitHair || roles.has('hair');
+  const makeupAuthority = explicitMakeup || roles.has('makeup');
   const lines = [
     preferences.visualSignature && `Visual signature: ${preferences.visualSignature}`,
     preferences.colorPalette && `Color palette: ${preferences.colorPalette}`,
     preferences.cameraLanguage && `Camera language: ${preferences.cameraLanguage}`,
     preferences.lighting && `Lighting rules: ${preferences.lighting}`,
-    preferences.wardrobeRules && `Wardrobe rules: ${preferences.wardrobeRules}`,
-    preferences.locationRules && `Location rules: ${preferences.locationRules}`,
+    !wardrobeAuthority && preferences.wardrobeRules && `Wardrobe rules: ${preferences.wardrobeRules}`,
+    !sceneAuthority && preferences.locationRules && `Location rules: ${preferences.locationRules}`,
+    !hairAuthority && preferences.hairRules && `Hair rules: ${preferences.hairRules}`,
+    !makeupAuthority && preferences.makeupRules && `Makeup rules: ${preferences.makeupRules}`,
     preferences.mustKeep && `Always preserve: ${preferences.mustKeep}`,
-    learnedValues(learned.favoriteScenes) && `Learned approved scenes: ${learnedValues(learned.favoriteScenes)}`,
-    learnedValues(learned.favoriteMoods) && `Learned approved moods: ${learnedValues(learned.favoriteMoods)}`,
+    !sceneAuthority && learnedValues(learned.favoriteScenes) && `Learned approved scenes: ${learnedValues(learned.favoriteScenes)}`,
+    !sceneAuthority && learnedValues(learned.favoriteLocations) && `Learned approved locations: ${learnedValues(learned.favoriteLocations)}`,
+    !explicitMood && learnedValues(learned.favoriteMoods) && `Learned approved moods: ${learnedValues(learned.favoriteMoods)}`,
+    !wardrobeAuthority && learnedValues(learned.favoriteWardrobes) && `Learned approved wardrobe: ${learnedValues(learned.favoriteWardrobes)}`,
     preferences.avoid && `Avoid: ${preferences.avoid}`,
-    learnedValues(learned.avoidScenes) && `Learned weak/rejected scenes: ${learnedValues(learned.avoidScenes)}`,
+    !sceneAuthority && learnedValues(learned.avoidScenes) && `Learned weak/rejected scenes: ${learnedValues(learned.avoidScenes)}`,
   ].filter(Boolean);
   return lines.length
     ? `CREATOR MEMORY — APPLY CONSISTENTLY:\n${lines.join('\n')}`

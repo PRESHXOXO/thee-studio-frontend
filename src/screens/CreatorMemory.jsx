@@ -22,6 +22,8 @@ const FIELD_META = [
   ['lighting', 'Lighting rules', 'Natural window light, hard flash, warm practicals, studio softness…'],
   ['wardrobeRules', 'Wardrobe rules', 'Silhouettes, materials, accessories, styling rhythm, and hard boundaries.'],
   ['locationRules', 'Location rules', 'Recurring environments, material language, geography, and atmosphere.'],
+  ['hairRules', 'Hair rules', 'Saved hair defaults used only when current direction or a Hair reference does not override them.'],
+  ['makeupRules', 'Makeup rules', 'Saved beauty defaults used only when current direction or a Makeup reference does not override them.'],
   ['mustKeep', 'Always preserve', 'Signature traits or brand cues every generation must keep.'],
   ['avoid', 'Never generate', 'Looks, scenes, styling, colors, or visual clichés to reject.'],
 ];

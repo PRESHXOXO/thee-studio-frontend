@@ -23,9 +23,20 @@ export function DirectorStatusCard({
   ready = true,
   warning = '',
   compact = false,
+  generationStatus = 'idle',
+  statusMessage = '',
 }) {
   const subject = creator?.name || (identityLocked ? 'Identity reference' : 'Prompt-defined subject');
   const roleLabels = [...new Set(referenceRoles.filter(Boolean))].map(role => role.charAt(0).toUpperCase() + role.slice(1));
+  const states = {
+    generating: { label: 'Generating', icon: 'loader-circle' },
+    still_processing: { label: 'Still processing', icon: 'clock-3' },
+    succeeded: { label: 'Completed', icon: 'circle-check' },
+    failed: { label: 'Failed', icon: 'circle-x' },
+    cancelled: { label: 'Cancelled', icon: 'circle-x' },
+  };
+  const currentState = states[generationStatus] || { label: ready ? 'Ready to generate' : 'Generation needs attention', icon: ready ? 'shield-check' : 'triangle-alert' };
+  const positiveState = generationStatus === 'succeeded' || (generationStatus === 'idle' && ready);
   return (
     <div aria-label="Director generation preflight" style={{
       display: 'flex', flexDirection: 'column', gap: compact ? 9 : 12,
@@ -34,8 +45,8 @@ export function DirectorStatusCard({
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Icon name={ready ? 'shield-check' : 'triangle-alert'} size={15} strokeWidth={1.75} style={{ color: ready ? 'var(--accent-deep)' : 'var(--text-muted)' }} />
-          <strong style={{ font: '600 0.82rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>{ready ? 'Ready to generate' : 'Generation needs attention'}</strong>
+          <Icon name={currentState.icon} size={15} strokeWidth={1.75} style={{ color: positiveState ? 'var(--accent-deep)' : 'var(--text-muted)' }} />
+          <strong style={{ font: '600 0.82rem/1 var(--font-ui)', color: 'var(--text-strong)' }}>{currentState.label}</strong>
         </div>
         <Badge tone={identityLocked ? 'locked' : 'neutral'}>{identityLocked ? 'Identity locked' : 'Open subject'}</Badge>
       </div>
@@ -49,6 +60,7 @@ export function DirectorStatusCard({
 
       {sceneSummary && <div style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.45, overflow: 'hidden', textOverflow: 'ellipsis' }}><strong style={{ color: 'var(--text-body)' }}>Direction:</strong> {sceneSummary}</div>}
       {warning && <div role="alert" style={{ display: 'flex', gap: 7, alignItems: 'flex-start', font: 'var(--text-xs)', color: 'var(--text-body)', lineHeight: 1.45 }}><Icon name="triangle-alert" size={13} style={{ marginTop: 1, flexShrink: 0 }} />{warning}</div>}
+      {statusMessage && <div role="status" style={{ display: 'flex', gap: 7, alignItems: 'flex-start', font: 'var(--text-xs)', color: 'var(--text-body)', lineHeight: 1.45 }}><Icon name={currentState.icon} size={13} style={{ marginTop: 1, flexShrink: 0 }} />{statusMessage}</div>}
     </div>
   );
 }

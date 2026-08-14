@@ -228,6 +228,7 @@ export async function characterGenerate({
   creatorId = null,
   fashionSafetyMode = 'auto',
   requestKey = null,
+  returnPending = false,
 }) {
   const structuredReferences = normalizeGenerationReferences(anchorReferences)
     .slice(0, characterImage || creatorId ? 3 : 4);
@@ -262,12 +263,16 @@ export async function characterGenerate({
       const images = await signCastAssets('generation-assets', data.assets);
       return { status: 'succeeded', images, summary: data.summary || '' };
     }
-    if (data.status === 'failed' || data.status === 'cancelled') throw new Error(data.error || 'Generation failed.');
+    if (data.status === 'failed' || data.status === 'cancelled') {
+      const generationError = new Error(data.error || (data.status === 'cancelled' ? 'Generation was cancelled.' : 'Generation failed.'));
+      generationError.status = data.status;
+      generationError.category = data.errorCategory || 'unknown';
+      throw generationError;
+    }
     const submission = { status: 'pending', jobId: data.jobId, images: [] };
-    // Ad-hoc Director/Prompt-Lab reference edits do not have a saved creator
-    // UUID to resume from another screen, so resolve their durable job here.
-    // Saved Cast Quick Shoot keeps the existing pending-return contract.
-    return creatorId ? submission : awaitCastQuickShootResult(submission);
+    // Legacy callers can keep awaiting here. Director passes returnPending so
+    // its shared gateway can persist and resume the exact server job itself.
+    return (creatorId || returnPending) ? submission : awaitCastQuickShootResult(submission);
   }
 
   const localReferenceBlock = structuredReferences.length
@@ -300,7 +305,7 @@ export async function pollCastQuickShootStatus(jobId) {
     return { status: 'succeeded', images, summary: data.summary || '' };
   }
   if (data.status === 'failed' || data.status === 'cancelled') {
-    return { status: 'failed', error: data.error || 'Image generation failed. The provider did not return a specific reason.', errorCategory: data.errorCategory || 'unknown' };
+    return { status: data.status, error: data.error || (data.status === 'cancelled' ? 'Image generation was cancelled.' : 'Image generation failed. The provider did not return a specific reason.'), errorCategory: data.errorCategory || 'unknown' };
   }
   return { status: 'pending' };
 }
@@ -326,7 +331,7 @@ export async function preflightCastReferences(references, creatorId = null) {
   return invokeCloudFunction('cast-reference-preflight', { creatorId, references });
 }
 
-export async function castQuickShootPlain({ positivePrompt, negativePrompt, batchSize = 1, creatorId = null, imageSize = 'Vertical 9:16', fashionSafetyMode = 'auto', requestKey = null } = {}) {
+export async function castQuickShootPlain({ positivePrompt, negativePrompt, batchSize = 1, creatorId = null, imageSize = 'Vertical 9:16', fashionSafetyMode = 'auto', requestKey = null, returnPending = false } = {}) {
   const data = await invokeCloudFunction('cast-quick-shoot', {
     creatorId,
     prompt: positivePrompt,
@@ -336,8 +341,16 @@ export async function castQuickShootPlain({ positivePrompt, negativePrompt, batc
     imageSize,
     fashionSafetyMode,
   }, requestKey || crypto.randomUUID());
-  if (data.status === 'pending') return awaitCastQuickShootResult({ status: 'pending', jobId: data.jobId });
-  if (data.status === 'failed' || data.status === 'cancelled') throw new Error(data.error || 'Generation failed.');
+  if (data.status === 'pending') {
+    const submission = { status: 'pending', jobId: data.jobId, images: [] };
+    return returnPending ? submission : awaitCastQuickShootResult(submission);
+  }
+  if (data.status === 'failed' || data.status === 'cancelled') {
+    const generationError = new Error(data.error || (data.status === 'cancelled' ? 'Generation was cancelled.' : 'Generation failed.'));
+    generationError.status = data.status;
+    generationError.category = data.errorCategory || 'unknown';
+    throw generationError;
+  }
   const images = await signCastAssets('generation-assets', data.assets);
   return { status: 'succeeded', images, summary: data.summary || '' };
 }

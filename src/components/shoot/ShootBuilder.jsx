@@ -7,7 +7,9 @@ import { ImageLightbox } from '../feedback/ImageLightbox.jsx';
 import { Select } from '../forms/Select.jsx';
 import { ReferenceImageTray } from '../director/ReferenceImageTray.jsx';
 import { DirectorStatusCard } from '../director/DirectorStatusCard.jsx';
-import { castQuickShootPlain, characterGenerate, generateImage, pollCastQuickShootStatus, preflightCastReferences } from '../../api/studio.js';
+import { generateImage, preflightCastReferences } from '../../api/studio.js';
+import { generateDirectorPhoto } from '../../api/directorGeneration.js';
+import { useDirectorPendingGeneration } from '../../hooks/useDirectorPendingGeneration.js';
 import { hasSupabaseConfig, isStagingSupabaseProject } from '../../lib/supabase.js';
 import { fetchAdminAccess } from '../../api/adminTelemetry.js';
 import { canonicalCreatorId } from '../../lib/cloudCreators.js';
@@ -25,11 +27,10 @@ import {
 } from '../../lib/promptData.js';
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 };
-const MANAGED_ENGINE_ID = 'openai_image';
 const DATA_IMAGE = /^data:image\/(?:jpeg|png|webp);base64,/i;
-
-const QUICK_SHOOT_POLL_INTERVAL_MS = 2500;
-const QUICK_SHOOT_POLL_TIMEOUT_MS = 5 * 60 * 1000;
+const WARDROBE_INTENT = /\b(?:wear(?:ing)?|outfit|wardrobe|dress|gown|suit|jacket|coat|shirt|top|pants|jeans|skirt|hoodie|sweater|shoes|heels|sneakers|bikini|styling|clothing)\b/i;
+const HAIR_INTENT = /\b(?:hair|hairstyle|braids?|locs?|wig|ponytail|bun|bob|curls?|waves?)\b/i;
+const MAKEUP_INTENT = /\b(?:makeup|beauty look|glam|lipstick|eyeshadow|eyeliner|blush|contour)\b/i;
 
 const FASHION_SAFE_RENDER_RULE = [
   'FASHION-SAFE RENDER:',
@@ -37,43 +38,6 @@ const FASHION_SAFE_RENDER_RULE = [
   'Where transparent fabric would otherwise create unintended exposure, add discreet tonal or illusion lining beneath only those sections while keeping the garment visually sheer-looking and fashion-forward.',
   'Do not add unnecessary coverage elsewhere and do not introduce nudity or sexual activity.',
 ].join(' ');
-
-function pendingQuickShootKey(creatorId) {
-  return `thee-studio:quick-shoot-pending:${creatorId || 'no-creator'}`;
-}
-
-function savePendingQuickShootJob(creatorId, jobId) {
-  try { window.localStorage.setItem(pendingQuickShootKey(creatorId), jobId); } catch {}
-}
-
-function clearPendingQuickShootJob(creatorId) {
-  try { window.localStorage.removeItem(pendingQuickShootKey(creatorId)); } catch {}
-}
-
-function loadPendingQuickShootJob(creatorId) {
-  try { return window.localStorage.getItem(pendingQuickShootKey(creatorId)); } catch { return null; }
-}
-
-async function awaitCastQuickShootResult(result, creatorId) {
-  if (result.status !== 'pending') return result;
-  savePendingQuickShootJob(creatorId, result.jobId);
-  const deadline = Date.now() + QUICK_SHOOT_POLL_TIMEOUT_MS;
-  try {
-    while (Date.now() < deadline) {
-      await new Promise(resolve => setTimeout(resolve, QUICK_SHOOT_POLL_INTERVAL_MS));
-      const polled = await pollCastQuickShootStatus(result.jobId);
-      if (polled.status === 'succeeded') return polled;
-      if (polled.status === 'failed') {
-        const error = new Error(polled.error || 'Image generation failed. The provider did not return a specific reason.');
-        error.category = polled.errorCategory || 'unknown';
-        throw error;
-      }
-    }
-    throw new Error('Generation is taking longer than expected. It may still finish — check back shortly.');
-  } finally {
-    clearPendingQuickShootJob(creatorId);
-  }
-}
 
 function Section({ icon, title, hint, first, children }) {
   return (
@@ -215,26 +179,6 @@ export function ShootBuilder({
     setShotReferences([]);
   }, [creator?.id]);
 
-  React.useEffect(() => {
-    if (!hasSupabaseConfig()) return;
-    const pendingJobId = loadPendingQuickShootJob(cloudCreatorId);
-    if (!pendingJobId) return;
-    let cancelled = false;
-    setGenerating(true);
-    setGenError('');
-    setGenErrorCategory('');
-    awaitCastQuickShootResult({ status: 'pending', jobId: pendingJobId }, cloudCreatorId)
-      .then(result => { if (!cancelled) setGenImages(result.images || []); })
-      .catch(error => {
-        if (!cancelled) {
-          setGenError(error.message || 'Generation failed.');
-          setGenErrorCategory(error.category || '');
-        }
-      })
-      .finally(() => { if (!cancelled) setGenerating(false); });
-    return () => { cancelled = true; };
-  }, [creator?.id, cloudCreatorId]);
-
   const rawPhysiqueOptions  = getPhysiqueOptions(rawGender);
   const rawHairStyleOptions = getHairStyleOptions(rawGender);
   const rawClothingOptions  = getClothingOptions(rawGender);
@@ -282,169 +226,120 @@ export function ShootBuilder({
     rawFeatures,
   });
 
+  const pendingScope = `guided:${cloudCreatorId || creator?.id || 'open'}`;
+
+  const buildGenerationDetails = (fashionSafetyMode = 'auto') => {
+    if (creator) {
+      if (!creatorIdentityBound) throw new Error(identityWarning);
+      const referenceRoles = shotReferences.map(reference => reference.role);
+      const hasOutfitReference = referenceRoles.includes('outfit');
+      const selectedOutfit = SHOOT_OUTFITS.find(option => option.id === outfit)?.prompt || '';
+      const outfitOverride = hasOutfitReference
+        ? null
+        : legacyOutfitPhotoDesc || selectedOutfit || undefined;
+      const outfitOrAngle = identityMode === 'portrait' ? quickAngle : outfitOverride;
+      const sceneName = scene === 'None' ? '' : scene;
+      let positivePrompt = buildCharacterPrompt(creator, sceneName, composedMood, creatorIdentityBound, outfitOrAngle, identityMode, referenceRoles);
+      const memory = getCreatorMemory(cloudCreatorId || creator.id);
+      const memoryBlock = creatorMemoryPrompt(memory, {
+        explicitScene: sceneName,
+        explicitMood: composedMood,
+        wardrobeIntent: hasOutfitReference ? '' : selectedOutfit || legacyOutfitPhotoDesc || (WARDROBE_INTENT.test(notes) ? notes : ''),
+        hairIntent: HAIR_INTENT.test(notes) ? notes : '',
+        makeupIntent: MAKEUP_INTENT.test(notes) ? notes : '',
+        referenceRoles,
+      });
+      if (memoryBlock) positivePrompt += `\n\n${memoryBlock}`;
+      if (notes.trim()) positivePrompt += `\n\nDIRECTOR'S NOTES:\n${notes.trim()}`;
+      if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
+      const primaryIdentity = allImages[activeRef] || allImages[0];
+      const selectedCreator = cloudCreatorId || !primaryIdentity
+        ? creator
+        : { ...creator, refImages: [primaryIdentity, ...allImages.filter(image => image !== primaryIdentity)] };
+      return { positivePrompt, memory, sceneName, selectedCreator, source: 'quick_shoot' };
+    }
+
+    if (!allowNoCreator) throw new Error('No creator selected.');
+    let positivePrompt = buildStructuredVision({
+      vision: notes,
+      gender: rawGender, physique: rawPhysique, skinTone: rawSkinTone,
+      hairStyle: rawHairStyle, hairColor: rawHairColor, eyeDetail: rawEyeDetail,
+      jewelry: rawJewelry, clothing: rawClothing, features: rawFeatures,
+      mood: composedMood, contentType: identityMode === 'portrait' ? 'Portrait' : 'Lifestyle',
+      scene,
+    });
+    if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
+    return { positivePrompt, memory: null, sceneName: scene === 'None' ? '' : scene, selectedCreator: null, source: 'director' };
+  };
+
+  const acceptGeneratedImages = (images, details) => {
+    if (images.length !== batchSize) {
+      throw new Error(`Guided requested ${batchSize} image${batchSize === 1 ? '' : 's'} but received ${images.length}. The incomplete batch was not silently accepted.`);
+    }
+    setGenImages(images);
+    onGenerated?.(images);
+    const character = cloudCreatorId || creator?.id;
+    images.forEach(url => saveToLibrary(url, {
+      source: details.source,
+      character,
+      scene: details.sceneName || undefined,
+      prompt: details.positivePrompt,
+      mood: composedMood,
+      mode: identityMode,
+      campaign: campaignId || undefined,
+      settings: snapshotSettings(),
+      memoryVersion: details.memory?.version,
+    }).catch(() => {}));
+  };
+
+  const pendingGeneration = useDirectorPendingGeneration(pendingScope, {
+    active: generating,
+    onSucceeded: result => {
+      try { acceptGeneratedImages(result.images || [], buildGenerationDetails()); }
+      catch (error) { setGenError(error.message || 'Generation failed.'); }
+    },
+    onFailed: error => {
+      setGenError(error.message || 'Generation failed.');
+      setGenErrorCategory(error.category || '');
+    },
+  });
+
   const handleGenerate = async (fashionSafetyMode = 'auto') => {
+    if (generating || pendingGeneration.renderStatus === 'still_processing') return;
     setGenerating(true);
     setGenImages([]);
     setGenError('');
     setGenErrorCategory('');
+    pendingGeneration.setRenderStatus('generating');
     try {
-      let images = [];
-
-      if (creator) {
-        if (!creatorIdentityBound) throw new Error(identityWarning);
-        const hasOutfitReference = shotReferences.some(reference => reference.role === 'outfit');
-        const outfitOverride = hasOutfitReference
-          ? null
-          : legacyOutfitPhotoDesc || SHOOT_OUTFITS.find(o => o.id === outfit)?.prompt || null;
-        const outfitOrAngle = identityMode === 'portrait' ? quickAngle : outfitOverride;
-        const sceneName = scene === 'None' ? '' : scene;
-        let positivePrompt = buildCharacterPrompt(creator, sceneName, composedMood, creatorIdentityBound, outfitOrAngle, identityMode);
-        const memory = getCreatorMemory(creator.id);
-        const memoryBlock = creatorMemoryPrompt(memory);
-        if (memoryBlock) positivePrompt += `\n\n${memoryBlock}`;
-        if (notes.trim()) positivePrompt += `\n\nDIRECTOR'S NOTES:\n${notes.trim()}`;
-        if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
-
-        if (allImages.length) {
-          const primaryIdentity = allImages[activeRef] || allImages[0];
-          const remainingIdentityAnchors = allImages.filter(image => image !== primaryIdentity);
-          const providerReferences = shotReferences.length
-            ? [
-                ...shotReferences,
-                ...remainingIdentityAnchors
-                  .slice(0, Math.max(0, 3 - shotReferences.length))
-                  .map((dataUrl, index) => ({
-                    dataUrl,
-                    role: 'identity',
-                    name: `Creator angle ${index + 2}`,
-                  })),
-              ]
-            : [];
-          const sequence = [];
-          const sequenceKey = crypto.randomUUID();
-          for (let index = 0; index < batchSize; index += 1) {
-            const submitted = await characterGenerate({
-              engineId: MANAGED_ENGINE_ID,
-              positivePrompt,
-              negativePrompt: STANDARD_NEGATIVE,
-              characterImage: primaryIdentity,
-              anchorReferences: providerReferences,
-              mode: identityMode,
-              batchSize: 1,
-              creatorId: cloudCreatorId,
-              requestKey: `${sequenceKey}:guided-image-${index + 1}`,
-            });
-            const result = await awaitCastQuickShootResult(submitted, cloudCreatorId);
-            const image = result.images?.[0];
-            if (!image) throw new Error(`Guided render ${index + 1} of ${batchSize} finished without an image.`);
-            sequence.push(image);
-          }
-          images = sequence;
-        } else if (hasSupabaseConfig()) {
-          const sequence = [];
-          const sequenceKey = crypto.randomUUID();
-          for (let index = 0; index < batchSize; index += 1) {
-            const submitted = await castQuickShootPlain({
-              positivePrompt,
-              negativePrompt: STANDARD_NEGATIVE,
-              batchSize: 1,
-              creatorId: cloudCreatorId,
-              requestKey: `${sequenceKey}:guided-image-${index + 1}`,
-            });
-            const result = await awaitCastQuickShootResult(submitted, cloudCreatorId);
-            const image = result.images?.[0];
-            if (!image) throw new Error(`Guided render ${index + 1} of ${batchSize} finished without an image.`);
-            sequence.push(image);
-          }
-          images = sequence;
-        } else {
-          const result = await generateImage({
-            engine: 'OpenAI Image',
-            positivePrompt,
-            negativePrompt: STANDARD_NEGATIVE,
-            imageSize: 'Vertical 9:16',
-            quality: 'High',
-            performanceMode: 'Balanced',
-            imageStyle: 'Lifestyle Creator',
-          });
-          images = result.images || [];
-        }
-        if (hasSupabaseConfig() && images.length !== batchSize) {
-          throw new Error(`Guided requested ${batchSize} image${batchSize === 1 ? '' : 's'} but received ${images.length}. The incomplete batch was not silently accepted.`);
-        }
-        images.forEach(url => saveToLibrary(url, {
-          source: 'quick_shoot', character: creator.id, scene: sceneName || undefined,
-          prompt: positivePrompt, mood: composedMood, mode: identityMode,
-          campaign: campaignId || undefined,
-          settings: snapshotSettings(),
-          memoryVersion: memory.version,
-        }).catch(() => {}));
-      } else {
-        if (!allowNoCreator) throw new Error('No creator selected.');
-        let positivePrompt = buildStructuredVision({
-          vision: notes,
-          gender: rawGender, physique: rawPhysique, skinTone: rawSkinTone,
-          hairStyle: rawHairStyle, hairColor: rawHairColor, eyeDetail: rawEyeDetail,
-          jewelry: rawJewelry, clothing: rawClothing, features: rawFeatures,
-          mood: composedMood, contentType: identityMode === 'portrait' ? 'Portrait' : 'Lifestyle',
-          scene,
+      const details = buildGenerationDetails(fashionSafetyMode);
+      let result;
+      if (!creator && !shotReferences.length && !hasSupabaseConfig()) {
+        result = await generateImage({
+          engine: 'OpenAI Image', positivePrompt: details.positivePrompt,
+          negativePrompt: STANDARD_NEGATIVE, imageSize: 'Vertical 9:16',
+          quality: 'High', performanceMode: 'Balanced', imageStyle: 'Lifestyle Creator',
         });
-        if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
-        if (shotReferences.length) {
-          const sequence = [];
-          const sequenceKey = crypto.randomUUID();
-          for (let index = 0; index < batchSize; index += 1) {
-            const submitted = await characterGenerate({
-              engineId: MANAGED_ENGINE_ID,
-              positivePrompt,
-              negativePrompt: STANDARD_NEGATIVE,
-              characterImage: null,
-              anchorReferences: shotReferences,
-              mode: identityMode,
-              batchSize: 1,
-              requestKey: `${sequenceKey}:guided-open-image-${index + 1}`,
-            });
-            const result = await awaitCastQuickShootResult(submitted, null);
-            const image = result.images?.[0];
-            if (!image) throw new Error(`Guided render ${index + 1} of ${batchSize} finished without an image.`);
-            sequence.push(image);
-          }
-          images = sequence;
-        } else if (hasSupabaseConfig()) {
-          const result = await castQuickShootPlain({
-            positivePrompt,
-            negativePrompt: STANDARD_NEGATIVE,
-            batchSize,
-          });
-          images = result.images || [];
-        } else {
-          const result = await generateImage({
-            engine: 'OpenAI Image',
-            positivePrompt,
-            negativePrompt: STANDARD_NEGATIVE,
-            imageSize: 'Vertical 9:16',
-            quality: 'High',
-            performanceMode: 'Balanced',
-            imageStyle: 'Lifestyle Creator',
-          });
-          images = result.images || [];
-        }
-        if (hasSupabaseConfig() && images.length !== batchSize) {
-          throw new Error(`Guided requested ${batchSize} image${batchSize === 1 ? '' : 's'} but received ${images.length}. The incomplete batch was not silently accepted.`);
-        }
-        images.forEach(url => saveToLibrary(url, {
-          source: 'director', scene: scene !== 'None' ? scene : undefined,
-          prompt: positivePrompt,
-          campaign: campaignId || undefined,
-          settings: snapshotSettings(),
-        }).catch(() => {}));
+      } else {
+        result = await generateDirectorPhoto({
+          creator: details.selectedCreator,
+          prompt: details.positivePrompt,
+          negativePrompt: STANDARD_NEGATIVE,
+          references: shotReferences,
+          mode: identityMode,
+          batchSize,
+          fashionSafetyMode,
+          pendingScope,
+          onStatus: pendingGeneration.handleStatus,
+        });
       }
-
-      setGenImages(images);
-      onGenerated?.(images);
+      acceptGeneratedImages(result.images || [], details);
     } catch (e) {
-      setGenError(e.message || 'Generation failed');
-      setGenErrorCategory(e.category || '');
+      if (e?.status !== 'still_processing' && e?.code !== 'DIRECTOR_STILL_PROCESSING') {
+        pendingGeneration.setRenderStatus(e?.status === 'cancelled' ? 'cancelled' : 'failed');
+        setGenError(e.message || 'Generation failed');
+        setGenErrorCategory(e.category || '');
+      }
     } finally {
       setGenerating(false);
     }
@@ -677,13 +572,15 @@ export function ShootBuilder({
         ready={!identityWarning}
         warning={identityWarning}
         compact
+        generationStatus={pendingGeneration.renderStatus}
+        statusMessage={pendingGeneration.statusMessage}
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Button variant="primary" onClick={() => handleGenerate('auto')} loading={generating} disabled={generating || Boolean(identityWarning)} full={layout === 'split'} style={layout === 'split' ? {} : { alignSelf: 'flex-start' }}>
-          <Icon name="zap" size={15} /> {generating ? 'Generating…' : `Generate ${batchSize === 1 ? 'photo' : `${batchSize} photos`}`}
+        <Button variant="primary" onClick={() => handleGenerate('auto')} loading={generating} disabled={generating || pendingGeneration.renderStatus === 'still_processing' || Boolean(identityWarning)} full={layout === 'split'} style={layout === 'split' ? {} : { alignSelf: 'flex-start' }}>
+          <Icon name="zap" size={15} /> {generating ? 'Generating…' : pendingGeneration.renderStatus === 'still_processing' ? 'Render processing' : `Generate ${batchSize === 1 ? 'photo' : `${batchSize} photos`}`}
         </Button>
-        <GenerationProgress active={generating} identityLocked={creator ? creatorIdentityBound : shotReferences.some(reference => reference.role === 'identity')} batchSize={batchSize} />
+        <GenerationProgress active={generating || pendingGeneration.renderStatus === 'still_processing'} identityLocked={creator ? creatorIdentityBound : shotReferences.some(reference => reference.role === 'identity')} batchSize={batchSize} />
         {creator && hasSupabaseConfig() && !cloudCreatorId && embeddedIdentityAvailable && (
           <p style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', margin: 0 }}>
             This legacy creator can render from its embedded Identity reference, but it is not cloud-linked to profile history yet.

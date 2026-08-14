@@ -8,9 +8,11 @@ import { ReferenceImageTray } from '../components/director/ReferenceImageTray.js
 import { DirectorStatusCard } from '../components/director/DirectorStatusCard.jsx';
 import { promptLabBuild } from '../api/studio.js';
 import { generateDirectorPhoto, directorIdentityState } from '../api/directorGeneration.js';
+import { useDirectorPendingGeneration } from '../hooks/useDirectorPendingGeneration.js';
 import { saveToLibrary } from '../lib/library.js';
 import { persistCloudDocument } from '../lib/cloudStore.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../lib/creatorMemory.js';
+import { canonicalCreatorId } from '../lib/cloudCreators.js';
 import { BATCH_OPTIONS } from '../lib/shootOptions.js';
 import {
   getAdapter, aspectToImageSize,
@@ -20,6 +22,9 @@ import {
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 };
 const TEXTAREA = { width: '100%', boxSizing: 'border-box', resize: 'vertical', minHeight: 110, padding: '12px 14px', background: 'var(--surface-inset)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', font: 'var(--text-sm)', color: 'var(--text-body)', lineHeight: 1.55, outline: 'none', fontFamily: 'inherit' };
 const HISTORY_KEY = 'ts_promptlab';
+const WARDROBE_INTENT = /\b(?:wear(?:ing)?|outfit|wardrobe|dress|gown|suit|jacket|coat|shirt|top|pants|jeans|skirt|hoodie|sweater|shoes|heels|sneakers|bikini|styling|clothing)\b/i;
+const HAIR_INTENT = /\b(?:hair|hairstyle|braids?|locs?|wig|ponytail|bun|bob|curls?|waves?)\b/i;
+const MAKEUP_INTENT = /\b(?:makeup|beauty look|glam|lipstick|eyeshadow|eyeliner|blush|contour)\b/i;
 
 function loadHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } }
 function pushHistory(entry) {
@@ -64,6 +69,40 @@ export function PromptLabV2({ campaignId = null, initialVision = '', initialSett
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const creatorIdRef = React.useRef(creator?.id ?? null);
   const adapter = getAdapter('openai');
+  const pendingScope = `describe:${canonicalCreatorId(creator) || creator?.id || 'open'}`;
+
+  const generationPromptFor = memory => {
+    const memoryBlock = creatorMemoryPrompt(memory, {
+      explicitScene: rawInput,
+      explicitMood: mood === SURPRISE ? '' : mood,
+      wardrobeIntent: WARDROBE_INTENT.test(rawInput) ? rawInput : '',
+      hairIntent: HAIR_INTENT.test(rawInput) ? rawInput : '',
+      makeupIntent: MAKEUP_INTENT.test(rawInput) ? rawInput : '',
+      referenceRoles: refRoles,
+    });
+    const lockedSubject = creator ? `SELECTED CAST — MANDATORY SUBJECT: ${creator.name}. Preserve this exact Cast identity. Do not substitute, recast, or invent another person.` : '';
+    return [lockedSubject, activePrompt, memoryBlock].filter(Boolean).join('\n\n');
+  };
+
+  const acceptGeneratedImages = (images, generationPrompt, memory) => {
+    if (images.length !== batchSize) throw new Error(`Director requested ${batchSize} image${batchSize === 1 ? '' : 's'} but received ${images.length}. The job was not silently treated as complete.`);
+    setGenImages(images);
+    const character = canonicalCreatorId(creator) || creator?.id;
+    images.forEach(url => saveToLibrary(url, { source: 'prompt_lab', prompt: generationPrompt, campaign: campaignId || undefined, character, settings: snapshotSettings(), memoryVersion: memory?.version }).catch(() => {}));
+  };
+
+  const pendingGeneration = useDirectorPendingGeneration(pendingScope, {
+    active: generating,
+    onSucceeded: generated => {
+      try {
+        const memory = creator ? getCreatorMemory(canonicalCreatorId(creator) || creator.id) : null;
+        acceptGeneratedImages(generated.images || [], generationPromptFor(memory), memory);
+      } catch (resumeError) {
+        setGenError(resumeError.message || 'Generation failed.');
+      }
+    },
+    onFailed: resumeError => setGenError(resumeError.message || 'Generation failed.'),
+  });
 
   React.useEffect(() => {
     const nextId = creator?.id ?? null;
@@ -103,13 +142,12 @@ export function PromptLabV2({ campaignId = null, initialVision = '', initialSett
   }
 
   async function handleGenerate() {
-    if (!activePrompt || generating || identity.warning) return;
+    if (!activePrompt || generating || pendingGeneration.renderStatus === 'still_processing' || identity.warning) return;
     setGenerating(true); setGenImages([]); setGenError('');
+    pendingGeneration.setRenderStatus('generating');
     try {
-      const memory = creator ? getCreatorMemory(creator.id) : null;
-      const memoryBlock = creatorMemoryPrompt(memory);
-      const lockedSubject = creator ? `SELECTED CAST — MANDATORY SUBJECT: ${creator.name}. Preserve this exact Cast identity. Do not substitute, recast, or invent another person.` : '';
-      const generationPrompt = [lockedSubject, activePrompt, memoryBlock].filter(Boolean).join('\n\n');
+      const memory = creator ? getCreatorMemory(canonicalCreatorId(creator) || creator.id) : null;
+      const generationPrompt = generationPromptFor(memory);
       const generated = await generateDirectorPhoto({
         creator,
         prompt: generationPrompt,
@@ -117,12 +155,17 @@ export function PromptLabV2({ campaignId = null, initialVision = '', initialSett
         references,
         imageSize: aspectToImageSize(aspect === SURPRISE ? '9:16' : aspect),
         batchSize,
+        pendingScope,
+        onStatus: pendingGeneration.handleStatus,
       });
       const images = generated.images || [];
-      if (images.length !== batchSize) throw new Error(`Director requested ${batchSize} image${batchSize === 1 ? '' : 's'} but received ${images.length}. The job was not silently treated as complete.`);
-      setGenImages(images);
-      images.forEach(url => saveToLibrary(url, { source: 'prompt_lab', prompt: generationPrompt, campaign: campaignId || undefined, character: creator?.id, settings: snapshotSettings(), memoryVersion: memory?.version }).catch(() => {}));
-    } catch (err) { setGenError(err.message || 'Generation failed.'); }
+      acceptGeneratedImages(images, generationPrompt, memory);
+    } catch (err) {
+      if (err?.status !== 'still_processing' && err?.code !== 'DIRECTOR_STILL_PROCESSING') {
+        pendingGeneration.setRenderStatus(err?.status === 'cancelled' ? 'cancelled' : 'failed');
+        setGenError(err.message || 'Generation failed.');
+      }
+    }
     finally { setGenerating(false); }
   }
 
@@ -155,8 +198,8 @@ export function PromptLabV2({ campaignId = null, initialVision = '', initialSett
       <PromptBlock prompt={activePrompt} copied={copied} onCopy={() => { navigator.clipboard.writeText(activePrompt).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1500); }} />
       <p style={{ font: 'var(--text-sm)', color: 'var(--text-muted)', margin: 0 }}>{adapter.note(identity.locked)}</p>
       {result.variants?.length > 0 && <div><div style={LABEL}>Variants</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 8 }}>{result.variants.map((variant, index) => <button key={index} type="button" onClick={() => setActivePrompt(activePrompt === variant.prompt ? result.prompt : variant.prompt)} style={{ textAlign: 'left', padding: 12, borderRadius: 'var(--radius-md)', border: `1px solid ${activePrompt === variant.prompt ? 'var(--accent-deep)' : 'var(--border)'}`, background: activePrompt === variant.prompt ? 'var(--rose-deep)' : 'var(--surface-inset)', color: 'var(--text-body)', cursor: 'pointer', fontFamily: 'inherit' }}><strong style={{ display: 'block', font: '600 0.78rem/1 var(--font-ui)', marginBottom: 6 }}>{variant.label}</strong><span style={{ font: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.4 }}>{variant.prompt.slice(0, 180)}{variant.prompt.length > 180 ? '…' : ''}</span></button>)}</div></div>}
-      <DirectorStatusCard creator={creator} workflow="Describe It" identityLocked={identity.locked} count={batchSize} format="PNG" sceneSummary={direction} referenceRoles={refRoles} ready={!identity.warning} warning={identity.warning} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}><Button variant="primary" loading={generating} disabled={generating || Boolean(identity.warning)} onClick={handleGenerate}><Icon name="sparkles" size={15} />{generating ? 'Generating…' : `Generate ${batchSize === 1 ? 'photo' : `${batchSize} photos`}`}</Button><GenerationProgress active={generating} identityLocked={identity.locked} batchSize={batchSize} style={{ flex: 1 }} /></div>
+      <DirectorStatusCard creator={creator} workflow="Describe It" identityLocked={identity.locked} count={batchSize} format="PNG" sceneSummary={direction} referenceRoles={refRoles} ready={!identity.warning} warning={identity.warning} generationStatus={pendingGeneration.renderStatus} statusMessage={pendingGeneration.statusMessage} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}><Button variant="primary" loading={generating} disabled={generating || pendingGeneration.renderStatus === 'still_processing' || Boolean(identity.warning)} onClick={handleGenerate}><Icon name="sparkles" size={15} />{generating ? 'Generating…' : pendingGeneration.renderStatus === 'still_processing' ? 'Render processing' : `Generate ${batchSize === 1 ? 'photo' : `${batchSize} photos`}`}</Button><GenerationProgress active={generating || pendingGeneration.renderStatus === 'still_processing'} identityLocked={identity.locked} batchSize={batchSize} style={{ flex: 1 }} /></div>
       {genError && <div role="alert" style={{ font: 'var(--text-sm)', color: 'var(--cherry)' }}>{genError}</div>}
       {genImages.length > 0 && <><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 14 }}>{genImages.map((url, index) => <div key={index} onClick={() => setLightboxSrc(url)} style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-lg)', overflow: 'hidden', cursor: 'zoom-in', border: '1px solid var(--border)' }}><img src={url} alt={`Generated ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>)}</div><div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>PNG originals saved to your Library automatically.</div></>}
     </Card>}

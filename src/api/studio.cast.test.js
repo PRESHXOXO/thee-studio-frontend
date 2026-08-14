@@ -186,6 +186,12 @@ describe('Cast cloud workflows never call local Gradio', () => {
       expect(result).toEqual({ status: 'failed', error: 'Image generation was blocked by content safety review.', errorCategory: 'safety_moderation' });
     });
 
+    it('keeps cancelled distinct from failed for truthful Director UI state', async () => {
+      invoke.mockResolvedValueOnce({ data: { status: 'cancelled', error: 'Cancelled by user.' }, error: null });
+      const result = await pollCastQuickShootStatus('job-123');
+      expect(result).toEqual({ status: 'cancelled', error: 'Cancelled by user.', errorCategory: 'unknown' });
+    });
+
     // Regression: never fabricate a specific-sounding reason when the
     // provider gave none — the honest unknown-failure fallback must show.
     it('falls back to the honest unknown-failure message when the server omits error/errorCategory entirely', async () => {

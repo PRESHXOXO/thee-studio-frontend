@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
+import path from 'node:path';
 
-const source = fs.readFileSync(new URL('./cloudStore.js', import.meta.url), 'utf8');
+const source = fs.readFileSync(path.join(process.cwd(), 'src/lib/cloudStore.js'), 'utf8');
 
 describe('cloud Cast reference display contract', () => {
   it('hydrates canonical cloud references from fresh signed URLs', () => {

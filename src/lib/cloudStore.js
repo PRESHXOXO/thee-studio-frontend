@@ -1,7 +1,6 @@
 import { createTelemetryRequestKey, trackStorageOperation } from '../api/usageTelemetry.js';
 import { SupabasePipelineRepository } from '../production/SupabasePipelineRepository.js';
 import { syncCastReferencesToCloud } from './castCreatorSync.js';
-import { compressImage } from './imageUtils.js';
 
 export const SYNCED_KEYS = [
   'ts_characters',
@@ -22,17 +21,22 @@ export const USER_SCOPED_CACHE_KEYS = [
   'ts_test_accounts',
 ];
 
-const MAX_CLOUD_REFERENCE_PREVIEW_CHARS = 60000;
-const MAX_CLOUD_REFERENCE_PREVIEWS = 10;
-const MAX_CLOUD_PRIMARY_PREVIEW_CHARS = 220000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_CLOUD_REFERENCE_URLS = 10;
 
-function validPreview(value, maxChars = MAX_CLOUD_REFERENCE_PREVIEW_CHARS) {
-  return typeof value === 'string'
-    && value.startsWith('data:image/')
-    && value.length <= maxChars;
+function isInlineImage(value) {
+  return typeof value === 'string' && value.startsWith('data:image/');
 }
 
+function isRemoteImageUrl(value) {
+  return typeof value === 'string' && /^https?:\/\//i.test(value);
+}
+
+// Cloud creator images are authoritative in private Supabase storage. The
+// account-scoped ts_characters document must never become an image database,
+// and it also must not persist signed URLs that will eventually expire.
+// Strip all cloud display images before writing the document; bootstrap will
+// hydrate fresh signed URLs into local runtime state before React consumes it.
 function compactCloudCharacterDocument(value) {
   if (typeof value !== 'string' || !value) return value;
   try {
@@ -41,23 +45,11 @@ function compactCloudCharacterDocument(value) {
     let changed = false;
     const compacted = creators.map(character => {
       if (!character || character.cloudProfile !== true) return character;
-
-      const originalRefs = Array.isArray(character.refImages) ? character.refImages : [];
-      const referencePreviews = originalRefs
-        .filter(candidate => validPreview(candidate))
-        .slice(0, MAX_CLOUD_REFERENCE_PREVIEWS);
-      const primary = referencePreviews[0]
-        || (validPreview(character.image, MAX_CLOUD_PRIMARY_PREVIEW_CHARS) ? character.image : null);
-      const normalizedRefs = referencePreviews.length
-        ? referencePreviews
-        : (validPreview(primary) ? [primary] : []);
-
-      const refsChanged = originalRefs.length !== normalizedRefs.length
-        || originalRefs.some((candidate, index) => candidate !== normalizedRefs[index]);
-      const imageChanged = character.image !== primary;
-      if (!refsChanged && !imageChanged) return character;
+      const refs = Array.isArray(character.refImages) ? character.refImages : [];
+      const hasDisplayImages = refs.length > 0 || Boolean(character.image);
+      if (!hasDisplayImages) return character;
       changed = true;
-      return { ...character, refImages: normalizedRefs, image: primary };
+      return { ...character, refImages: [], image: null };
     });
     return changed ? JSON.stringify(compacted) : value;
   } catch {
@@ -78,11 +70,6 @@ function cloudCreatorId(character) {
   return typeof candidate === 'string' && UUID_PATTERN.test(candidate) ? candidate : null;
 }
 
-function expectedCloudPreviewCount(character) {
-  const metadataCount = Array.isArray(character?.referenceAssets) ? character.referenceAssets.length : 0;
-  return Math.min(MAX_CLOUD_REFERENCE_PREVIEWS, Math.max(1, metadataCount));
-}
-
 function orderCloudReferences(references = []) {
   const headshot = references.find(reference => reference.reference_type === 'headshot' && reference.is_canonical)
     || references.find(reference => reference.reference_type === 'headshot');
@@ -96,7 +83,7 @@ function orderCloudReferences(references = []) {
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, MAX_CLOUD_REFERENCE_PREVIEWS);
+  }).slice(0, MAX_CLOUD_REFERENCE_URLS);
 }
 
 function isSelfMigratedCloudThumbnail(reference, creatorId) {
@@ -104,7 +91,7 @@ function isSelfMigratedCloudThumbnail(reference, creatorId) {
     && reference.notes.startsWith(`cast-sync:${creatorId}:`);
 }
 
-async function hydrateCloudRosterReferencePreviews(db, userId, epoch) {
+async function hydrateCloudRosterReferenceUrls(db, userId, epoch) {
   if (runtime?.epoch !== epoch || runtime?.userId !== userId) return;
   let creators;
   try {
@@ -117,11 +104,7 @@ async function hydrateCloudRosterReferencePreviews(db, userId, epoch) {
 
   const targets = creators
     .map((character, index) => ({ character, index, creatorId: cloudCreatorId(character) }))
-    .filter(item => {
-      if (item.character?.cloudProfile !== true || !item.creatorId) return false;
-      const currentCount = Array.isArray(item.character.refImages) ? item.character.refImages.length : 0;
-      return !item.character.image || currentCount < expectedCloudPreviewCount(item.character);
-    });
+    .filter(item => item.character?.cloudProfile === true && item.creatorId);
   if (!targets.length) return;
 
   const repository = new SupabasePipelineRepository(db, userId);
@@ -138,39 +121,37 @@ async function hydrateCloudRosterReferencePreviews(db, userId, epoch) {
       }
       const cleanReferences = (loaded?.references || []).filter(reference => !isSelfMigratedCloudThumbnail(reference, item.creatorId));
       const references = orderCloudReferences(cleanReferences);
-      if (!references.length) continue;
-
-      const thumbnails = [];
-      for (const reference of references) {
-        if (!reference?.signed_url) continue;
-        const thumbnail = await compressImage(reference.signed_url, 240, 0.65);
-        if (validPreview(thumbnail)) thumbnails.push(thumbnail);
-      }
-      if (!thumbnails.length) continue;
+      const urls = references
+        .map(reference => reference?.signed_url)
+        .filter(isRemoteImageUrl)
+        .slice(0, MAX_CLOUD_REFERENCE_URLS);
+      if (!urls.length) continue;
 
       hydrated[item.index] = {
         ...item.character,
         id: item.creatorId,
         cloudCreatorId: item.creatorId,
-        refImages: thumbnails,
-        image: thumbnails[0],
+        refImages: urls,
+        image: urls[0],
       };
       changed = true;
     } catch {
-      // Decorative reference thumbnails must never block sign-in or creator
-      // generation. Canonical reference files remain authoritative server-side.
+      // Display URL hydration must never make authentication fail. Canonical
+      // references remain authoritative server-side and generation can still
+      // resolve them by creator id.
     }
   }
 
   if (!changed || runtime?.epoch !== epoch || runtime?.userId !== userId) return;
-  const value = compactCloudCharacterDocument(JSON.stringify(hydrated));
+  const value = JSON.stringify(hydrated);
   try {
     localStorage.setItem('ts_characters', value);
   } catch {
     return;
   }
-  await persistCloudDocument('ts_characters', value).catch(() => undefined);
-  announceSync('thee:cloud-sync-ok', { key: 'ts_characters_reference_preview_hydration' });
+  // Deliberately do not persist signed URLs. They are runtime display state;
+  // the cloud roster stays lightweight and receives fresh URLs next bootstrap.
+  announceSync('thee:cloud-sync-ok', { key: 'ts_characters_reference_url_hydration' });
 }
 
 async function migrateLegacyCastReferences(db, userId, epoch) {
@@ -184,15 +165,15 @@ async function migrateLegacyCastReferences(db, userId, epoch) {
   }
   if (!Array.isArray(creators) || !creators.length) return;
 
-  // Cloud creators already own canonical private references. Their tiny local
-  // thumbnails are display cache only and must never be re-uploaded as legacy
+  // Cloud creators already own canonical private references. Their runtime
+  // signed URLs are display state only and must never be re-uploaded as legacy
   // Cast references.
   const legacyWithImages = creators.filter(creator =>
     creator
     && creator.cloudProfile !== true
     && (
-      (Array.isArray(creator.refImages) && creator.refImages.some(image => typeof image === 'string' && image.startsWith('data:image/')))
-      || (typeof creator.image === 'string' && creator.image.startsWith('data:image/'))
+      (Array.isArray(creator.refImages) && creator.refImages.some(isInlineImage))
+      || isInlineImage(creator.image)
     )
   );
   if (!legacyWithImages.length) return;
@@ -226,9 +207,9 @@ async function migrateLegacyCastReferences(db, userId, epoch) {
     });
 
     if (mappingChanged && runtime?.epoch === epoch && runtime?.userId === userId) {
-      const value = compactCloudCharacterDocument(JSON.stringify(reconciledCreators));
-      localStorage.setItem('ts_characters', value);
-      await writeDocument('ts_characters', value, runtime);
+      const localValue = JSON.stringify(reconciledCreators);
+      localStorage.setItem('ts_characters', localValue);
+      await writeDocument('ts_characters', compactCloudCharacterDocument(localValue), runtime);
     }
 
     announceSync('thee:cloud-sync-ok', { key: 'creator_reference_assets' });
@@ -265,19 +246,22 @@ export async function bootstrapCloudStore(db, userId) {
     }
   }
 
-  // If an older cloud document still contains oversized cloud previews, hydrate
-  // the compact roster first and then self-heal the authoritative document in
-  // the background. Real reference files stay untouched in creator-references.
+  // Self-heal any old cloud document that still contains browser image data.
+  // This write is lightweight because compactCloudCharacterDocument strips
+  // cloud creator image payloads and expiring signed URLs.
   if (healedCharactersValue != null) {
-    queueMicrotask(() => void persistCloudDocument('ts_characters', healedCharactersValue).catch(() => undefined));
+    queueMicrotask(() => void writeDocument('ts_characters', healedCharactersValue, runtime).catch(() => undefined));
   }
 
-  // Cloud creators get tiny display-only thumbnails for their canonical
-  // references; legacy local creators keep their existing migration path.
-  queueMicrotask(() => void (async () => {
-    await hydrateCloudRosterReferencePreviews(db, userId, epoch);
-    await migrateLegacyCastReferences(db, userId, epoch);
-  })());
+  // Hydrate fresh private signed URLs BEFORE bootstrap resolves. This performs
+  // metadata/signing requests only (no image compression/download), so Cast
+  // mounts with crisp original-resolution references while localStorage holds
+  // only short URL strings for the current browser session.
+  await hydrateCloudRosterReferenceUrls(db, userId, epoch);
+
+  // Legacy local creators can migrate in the background after cloud creators
+  // are fully hydrated. Cloud creators are excluded from this migration.
+  queueMicrotask(() => void migrateLegacyCastReferences(db, userId, epoch));
 }
 
 async function writeDocument(key, value, sourceRuntime = runtime) {
@@ -299,9 +283,12 @@ async function writeDocument(key, value, sourceRuntime = runtime) {
 export function persistCloudDocument(key, value) {
   if (!runtime || !SYNCED_KEYS.includes(key)) return Promise.resolve();
   const sourceRuntime = runtime;
+  const persistedValue = key === 'ts_characters'
+    ? compactCloudCharacterDocument(value)
+    : value;
   writeChain = writeChain
     .catch(() => undefined)
-    .then(() => writeDocument(key, value, sourceRuntime))
+    .then(() => writeDocument(key, persistedValue, sourceRuntime))
     .catch(error => {
       announceSync('thee:cloud-sync-error', { message: error.message, key });
       reportStudioError(error, { key, operation: 'cloud_document_write' });

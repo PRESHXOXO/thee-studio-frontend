@@ -13,16 +13,19 @@ describe('Guided Director contract', () => {
     expect(source).not.toContain('identityLocked={!!creator?.locked}');
   });
 
-  it('does not silently accept incomplete cloud batches', () => {
+  it('serializes identity-bound cloud batches and does not silently accept incomplete results', () => {
+    expect(source).toContain('for (let index = 0; index < batchSize; index += 1)');
+    expect(source).toContain('batchSize: 1');
+    expect(source).toContain(':guided-image-${index + 1}');
     expect(source).toContain('images.length !== batchSize');
     expect(source).toContain('The incomplete batch was not silently accepted.');
-    expect(source).toContain('castQuickShootPlain({');
   });
 
-  it('advertises and downloads cloud image results as PNG', () => {
+  it('advertises and downloads actual PNG bytes instead of renaming a provider artifact', () => {
     expect(source).toContain('format="PNG"');
-    expect(source).toContain('.png`}');
+    expect(source).toContain("import { downloadImageAsPng } from '../../lib/libraryAssets.js';");
+    expect(source).toContain('downloadImageAsPng(url, `thee-studio-${Date.now()}-${i + 1}.png`)');
     expect(source).toContain('Download PNG');
-    expect(source).not.toContain('.jpg`}');
+    expect(source).not.toContain('<a href={url} download=');
   });
 });

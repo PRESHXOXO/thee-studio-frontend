@@ -21,7 +21,7 @@ describe('Director render gateway', () => {
     pollCastQuickShootStatus.mockReset();
   });
 
-  it('binds a cloud Cast creator by canonical creatorId even when the UI preview is only a signed URL', async () => {
+  it('binds a cloud Cast creator and serializes multi-image Responses renders one at a time', async () => {
     const creator = {
       id: CLOUD_ID,
       cloudCreatorId: CLOUD_ID,
@@ -29,22 +29,47 @@ describe('Director render gateway', () => {
       name: 'Amara',
       refImages: ['https://example.supabase.co/storage/v1/object/sign/creator-references/amara.jpg?token=signed'],
     };
-    characterGenerate.mockResolvedValue({ status: 'succeeded', images: ['one.png', 'two.png'] });
+    characterGenerate
+      .mockResolvedValueOnce({ status: 'succeeded', images: ['one.png'] })
+      .mockResolvedValueOnce({ status: 'succeeded', images: ['two.png'] });
 
     const state = directorIdentityState(creator, []);
     expect(state.locked).toBe(true);
     expect(state.creatorId).toBe(CLOUD_ID);
 
-    const result = await generateDirectorPhoto({ creator, prompt: 'Amara in France.', batchSize: 2 });
+    const result = await generateDirectorPhoto({
+      creator,
+      prompt: 'Amara in France.',
+      batchSize: 2,
+      requestKey: 'director-test',
+    });
 
     expect(result.images).toEqual(['one.png', 'two.png']);
-    expect(characterGenerate).toHaveBeenCalledTimes(1);
-    expect(characterGenerate).toHaveBeenCalledWith(expect.objectContaining({
+    expect(characterGenerate).toHaveBeenCalledTimes(2);
+    expect(characterGenerate.mock.calls[0][0]).toEqual(expect.objectContaining({
       creatorId: CLOUD_ID,
       characterImage: null,
-      batchSize: 2,
+      batchSize: 1,
+      requestKey: 'director-test:director-image-1',
+    }));
+    expect(characterGenerate.mock.calls[1][0]).toEqual(expect.objectContaining({
+      creatorId: CLOUD_ID,
+      characterImage: null,
+      batchSize: 1,
+      requestKey: 'director-test:director-image-2',
     }));
     expect(castQuickShootPlain).not.toHaveBeenCalled();
+  });
+
+  it('stops the serialized batch when a render fails instead of launching later images', async () => {
+    const creator = { id: CLOUD_ID, cloudCreatorId: CLOUD_ID, cloudProfile: true, name: 'Amara' };
+    characterGenerate
+      .mockResolvedValueOnce({ status: 'succeeded', images: ['one.png'] })
+      .mockRejectedValueOnce(new Error('provider failed'));
+
+    await expect(generateDirectorPhoto({ creator, prompt: 'Amara in France.', batchSize: 4, requestKey: 'stop-test' }))
+      .rejects.toThrow(/provider failed/i);
+    expect(characterGenerate).toHaveBeenCalledTimes(2);
   });
 
   it('never falls back to a generic subject when a selected Cast member cannot be identity-bound', async () => {
@@ -75,8 +100,17 @@ describe('Director render gateway', () => {
     expect(characterGenerate).toHaveBeenCalledWith(expect.objectContaining({
       characterImage: PIXEL,
       creatorId: null,
+      batchSize: 1,
       anchorReferences: [expect.objectContaining({ role: 'outfit' })],
     }));
     expect(castQuickShootPlain).not.toHaveBeenCalled();
+  });
+
+  it('keeps native batch generation for plain text-to-image with no identity references', async () => {
+    castQuickShootPlain.mockResolvedValue({ status: 'succeeded', images: ['a.png', 'b.png'] });
+    const result = await generateDirectorPhoto({ prompt: 'Empty Paris street at dusk.', batchSize: 2, requestKey: 'plain-test' });
+    expect(result.images).toEqual(['a.png', 'b.png']);
+    expect(castQuickShootPlain).toHaveBeenCalledWith(expect.objectContaining({ batchSize: 2, requestKey: 'plain-test' }));
+    expect(characterGenerate).not.toHaveBeenCalled();
   });
 });

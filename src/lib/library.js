@@ -4,6 +4,7 @@ import { learnCreatorMemory } from './creatorMemory.js';
 
 const KEY = 'ts_library';
 const MAX = 60;
+const PNG_ORIGINAL_SOURCES = new Set(['quick_shoot', 'director', 'prompt_lab', 'scene_flow']);
 
 export function loadLibrary() {
   try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; }
@@ -75,9 +76,10 @@ export async function compressForLibrary(src, maxPx = 640, quality = 0.82) {
 export async function saveToLibrary(src, metadata = {}) {
   metadata = { source: '', engine: '', prompt: '', character: '', ...metadata };
   const id = `lib_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const preferredMimeType = PNG_ORIGINAL_SOURCES.has(metadata.source) ? 'image/png' : null;
   const [url, original] = await Promise.all([
     compressForLibrary(src).catch(() => src),
-    saveLibraryOriginal(id, src).catch(() => ({
+    saveLibraryOriginal(id, src, { preferredMimeType }).catch(() => ({
       originalAssetId: id,
       originalUrl: src.startsWith('data:') ? undefined : src,
     })),

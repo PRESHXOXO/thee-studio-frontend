@@ -1,17 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const characterGenerate = vi.fn();
-const castQuickShootPlain = vi.fn();
-const pollCastQuickShootStatus = vi.fn();
-
-vi.mock('../api/studio.js', () => ({
-  characterGenerate,
-  castQuickShootPlain,
-  pollCastQuickShootStatus,
+const mocks = vi.hoisted(() => ({
+  characterGenerate: vi.fn(),
+  castQuickShootPlain: vi.fn(),
+  pollCastQuickShootStatus: vi.fn(),
 }));
+
+vi.mock('../api/studio.js', () => mocks);
 
 import { directorIdentityState, generateDirectorPhoto } from '../api/directorGeneration.js';
 
+const { characterGenerate, castQuickShootPlain, pollCastQuickShootStatus } = mocks;
 const CLOUD_ID = '2b421abb-b8a5-4f45-b153-1376ee684be8';
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ';
 

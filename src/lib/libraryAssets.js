@@ -44,6 +44,35 @@ async function sourceToBlob(source) {
   return response.blob();
 }
 
+async function imageBlobToPng(blob) {
+  if (!(blob instanceof Blob) || !blob.type?.startsWith('image/') || blob.type === 'image/png') return blob;
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d', { alpha: true });
+    if (!context) throw new Error('PNG conversion canvas is unavailable.');
+    context.drawImage(bitmap, 0, 0);
+    const png = await new Promise((resolve, reject) => {
+      canvas.toBlob(result => {
+        if (result) resolve(result);
+        else reject(new Error('PNG conversion failed.'));
+      }, 'image/png');
+    });
+    return png;
+  } finally {
+    bitmap.close?.();
+  }
+}
+
+async function normalizeOriginalBlob(blob, preferredMimeType) {
+  if (preferredMimeType === 'image/png' && blob.type?.startsWith('image/')) {
+    return imageBlobToPng(blob);
+  }
+  return blob;
+}
+
 async function cacheBlob(assetId, blob) {
   try { await useStore('readwrite', store => store.put(blob, assetId)); } catch {}
 }
@@ -53,16 +82,18 @@ async function cachedBlob(assetId) {
   try { return await useStore('readonly', store => store.get(assetId)); } catch { return null; }
 }
 
-export async function saveLibraryOriginal(assetId, source) {
-  const blob = await sourceToBlob(source);
+export async function saveLibraryOriginal(assetId, source, options = {}) {
+  const sourceBlob = await sourceToBlob(source);
+  const blob = await normalizeOriginalBlob(sourceBlob, options.preferredMimeType || null);
   await cacheBlob(assetId, blob);
   let storagePath = null;
   try { storagePath = await persistCloudAsset(assetId, blob); } catch {}
   return {
     originalAssetId: assetId,
     originalStoragePath: storagePath,
-    originalMimeType: blob.type || 'image/png',
+    originalMimeType: blob.type || sourceBlob.type || 'application/octet-stream',
     originalBytes: blob.size,
+    originalSourceMimeType: sourceBlob.type || null,
   };
 }
 
@@ -89,16 +120,26 @@ function extensionFor(type) {
   }[type] || 'bin';
 }
 
-export async function downloadLibraryOriginal(entry) {
-  const blob = await getLibraryOriginalBlob(entry);
+function triggerBlobDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `thee-studio-${entry.id}.${extensionFor(blob.type || entry.originalMimeType)}`;
+  anchor.download = filename;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function downloadImageAsPng(source, filename = 'thee-studio.png') {
+  const sourceBlob = await sourceToBlob(source);
+  const png = await imageBlobToPng(sourceBlob);
+  triggerBlobDownload(png, filename.toLowerCase().endsWith('.png') ? filename : `${filename}.png`);
+}
+
+export async function downloadLibraryOriginal(entry) {
+  const blob = await getLibraryOriginalBlob(entry);
+  triggerBlobDownload(blob, `thee-studio-${entry.id}.${extensionFor(blob.type || entry.originalMimeType)}`);
 }
 
 export async function deleteLibraryOriginal(entry) {

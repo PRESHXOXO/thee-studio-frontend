@@ -1,4 +1,4 @@
-import { referencePromptBlock, serializeDirectorReferences } from '../lib/directorReferences.js';
+import { MAX_DIRECTOR_REFERENCES, MAX_SAVED_CAST_STYLING_REFERENCES, referencePromptBlock, serializeDirectorReferences } from '../lib/directorReferences.js';
 import { finishUsageTelemetry, startUsageTelemetry } from './usageTelemetry.js';
 import { getSupabase, hasSupabaseConfig } from '../lib/supabase.js';
 import { normalizeGenerationBatch } from '../lib/generationBatch.js';
@@ -251,7 +251,7 @@ export async function characterGenerate({
   returnPending = false,
 }) {
   const structuredReferences = normalizeGenerationReferences(anchorReferences)
-    .slice(0, characterImage || creatorId ? 3 : 4);
+    .slice(0, characterImage || creatorId ? MAX_SAVED_CAST_STYLING_REFERENCES : MAX_DIRECTOR_REFERENCES);
   if (structuredReferences.length && !characterImage && !creatorId
       && !structuredReferences.some(reference => reference.role === 'identity')) {
     throw new Error('Add an Identity reference before using outfit, background, makeup, hair, or pose references without a saved creator.');
@@ -517,20 +517,20 @@ export async function generateImage({
   return { images, status: data[1] || '' };
 }
 
-export async function sceneFlowChat({ messagesJson = '[]', userMessage = '', referenceImages = [], refImageB64 = '' } = {}) {
+export async function sceneFlowChat({ messagesJson = '[]', userMessage = '', referenceImages = [], activeReferenceRoles = [], refImageB64 = '' } = {}) {
   const references = referenceImages.length ? serializeDirectorReferences(referenceImages) : refImageB64;
-  if (hasSupabaseConfig()) return invokeCloudFunction('director-scene-flow-chat', { messagesJson, userMessage, references });
+  if (hasSupabaseConfig()) return invokeCloudFunction('director-scene-flow-chat', { messagesJson, userMessage, references, activeReferenceRoles });
   const raw = await callNamedEndpoint('scene_flow_chat', [messagesJson, userMessage, references]);
   return typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
 }
 
 export async function sceneFlowGenerate({ sceneJson = '{}', referenceImages = [], refImageB64 = '', telemetryRequestKey, creatorId = null } = {}) {
-  const references = referenceImages.length ? referenceImages.slice(0, 4) : [];
+  const references = referenceImages.length ? referenceImages.slice(0, MAX_DIRECTOR_REFERENCES) : [];
   if (hasSupabaseConfig()) {
     const scene = typeof sceneJson === 'string' ? JSON.parse(sceneJson || '{}') : (sceneJson || {});
     const contentType = scene.content_type || 'photo';
     if (contentType === 'video') throw new Error('Cloud video generation is not enabled in Scene Flow yet. Photo generation is available.');
-    const positivePrompt = scene.full_prompt || [scene.setting, scene.wardrobe, scene.location, scene.vibe].filter(Boolean).join('. ');
+    const positivePrompt = scene.full_prompt || [scene.setting, scene.wardrobe, scene.location, scene.hair, scene.makeup, scene.pose, scene.vibe].filter(Boolean).join('. ');
     if (!positivePrompt.trim()) throw new Error('Scene Flow has no generation prompt yet.');
     const identity = references.find(reference => reference.role === 'identity' && reference.dataUrl);
     if (identity) {

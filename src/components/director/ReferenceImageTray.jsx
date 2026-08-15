@@ -1,9 +1,9 @@
 import React from 'react';
 import { Icon } from '../core/Icon.jsx';
 import { normalizeImageForVision } from '../../lib/imageUtils.js';
-import { DIRECTOR_REFERENCE_ROLES, MAX_DIRECTOR_REFERENCES, referenceRoleLabel } from '../../lib/directorReferences.js';
+import { DIRECTOR_REFERENCE_ROLES, MAX_DIRECTOR_REFERENCES, MAX_SAVED_CAST_STYLING_REFERENCES, referenceRoleLabel } from '../../lib/directorReferences.js';
 
-const ROLE_SEQUENCE = ['identity', 'outfit', 'background', 'pose', 'makeup', 'hair'];
+const ROLE_SEQUENCE = ['identity', 'outfit', 'background', 'makeup', 'hair', 'pose'];
 function makeReferenceId() { return globalThis.crypto?.randomUUID?.() || `ref-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 function readFileAsDataURL(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = event => resolve(event.target.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
 function nextSuggestedRole(currentRole, references, roleOptions) {
@@ -31,7 +31,12 @@ export function ReferenceImageTray({
   const [nextRole, setNextRole] = React.useState(safeDefaultRole);
   const [reading, setReading] = React.useState(false);
   const [error, setError] = React.useState('');
-  const available = Math.max(0, maxReferences - references.length);
+  // Older Director screens passed 3/4 here. That silently made the complete
+  // Outfit + Background + Makeup + Hair + Pose board impossible for a saved
+  // Cast. Enforce the product contract at the shared tray boundary instead.
+  const minimumRoleCapacity = identityLocked ? MAX_SAVED_CAST_STYLING_REFERENCES : MAX_DIRECTOR_REFERENCES;
+  const effectiveMaxReferences = Math.max(Number(maxReferences) || 0, minimumRoleCapacity);
+  const available = Math.max(0, effectiveMaxReferences - references.length);
 
   React.useEffect(() => {
     if (!roleOptions.some(role => role.id === nextRole)) setNextRole(safeDefaultRole);
@@ -50,7 +55,7 @@ export function ReferenceImageTray({
     const files = Array.from(event.target.files || []);
     event.target.value = '';
     if (!files.length || disabled) return;
-    if (!available) { setError(`This shot supports up to ${maxReferences} reference images.`); return; }
+    if (!available) { setError(`This shot supports up to ${effectiveMaxReferences} reference images.`); return; }
     setReading(true); setError('');
     try {
       const file = files[0];
@@ -79,13 +84,13 @@ export function ReferenceImageTray({
   </div>;
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 8 : 12 }}>
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18 }}><div><div style={{ font: '600 0.86rem/1.15 var(--font-ui)', letterSpacing: '-0.01em', color: 'var(--text-strong)' }}>{title}</div>{!compact && description && <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.5, marginTop: 5, maxWidth: 640 }}>{description}</div>}</div><span style={{ flexShrink: 0, font: '700 0.62rem/1 var(--font-mono)', letterSpacing: '0.08em', color: 'var(--text-faint)', paddingTop: 2 }}>{references.length}/{maxReferences}</span></div>
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18 }}><div><div style={{ font: '600 0.86rem/1.15 var(--font-ui)', letterSpacing: '-0.01em', color: 'var(--text-strong)' }}>{title}</div>{!compact && description && <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.5, marginTop: 5, maxWidth: 640 }}>{description}</div>}</div><span style={{ flexShrink: 0, font: '700 0.62rem/1 var(--font-mono)', letterSpacing: '0.08em', color: 'var(--text-faint)', paddingTop: 2 }}>{references.length}/{effectiveMaxReferences}</span></div>
     {references.length > 0 && <div style={{ display: 'flex', gap: compact ? 8 : 12, overflowX: 'auto', padding: '2px 2px 6px', alignItems: 'stretch' }}>{references.map((reference, index) => <div key={reference.id} style={{ width: compact ? 90 : 118, flex: `0 0 ${compact ? 90 : 118}px`, padding: 0, overflow: 'hidden', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'rgba(255,254,252,0.74)', boxShadow: 'var(--shadow-xs)' }}>
       <div style={{ position: 'relative' }}><img src={reference.dataUrl} alt={`${referenceRoleLabel(reference.role)} reference ${index + 1}`} style={{ width: '100%', height: compact ? 68 : 96, objectFit: 'cover', display: 'block', borderBottom: '1px solid var(--border)' }} /><span style={{ position: 'absolute', left: 7, bottom: 7, padding: '4px 6px', borderRadius: 6, background: 'rgba(19,16,21,0.72)', color: '#fff', font: '700 0.56rem/1 var(--font-ui)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{referenceRoleLabel(reference.role)}</span><button type="button" aria-label={`Remove ${reference.name}`} onClick={() => removeReference(reference.id)} disabled={disabled} style={{ position: 'absolute', top: 6, right: 6, width: compact ? 20 : 24, height: compact ? 20 : 24, display: 'grid', placeItems: 'center', padding: 0, cursor: 'pointer', border: '1px solid rgba(255,255,255,0.16)', borderRadius: '50%', color: '#fff', background: 'rgba(19,16,21,0.68)' }}><Icon name="x" size={12} /></button></div>
       <div style={{ padding: compact ? 6 : 8 }}><select aria-label={`Role for ${reference.name}`} value={reference.role} onChange={event => changeRole(reference.id, event.target.value)} disabled={disabled} style={{ width: '100%', padding: compact ? '5px 4px' : '6px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface-inset)', color: 'var(--text-body)', font: `600 ${compact ? 10 : 11}px/1 var(--font-ui)`, fontFamily: 'inherit' }}>{roleOptions.map(role => <option key={role.id} value={role.id}>{role.label}</option>)}</select>{!compact && <div title={reference.name} style={{ marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', font: '500 0.66rem/1 var(--font-ui)', color: 'var(--text-faint)' }}>{reference.name}</div>}</div>
     </div>)}{compact && addControls}</div>}
     {!compact && addControls}{compact && references.length === 0 && addControls}
-    {identityLocked && <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>Identity is reserved for the selected Cast member and cannot be reassigned here.</div>}
+    {identityLocked && <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>Identity is reserved for the selected Cast member and cannot be reassigned here. Outfit, Background, Makeup, Hair, and Pose can all be attached together.</div>}
     {error && <div role="alert" style={{ font: 'var(--text-xs)', color: 'var(--cherry)' }}>{error}</div>}
   </div>;
 }

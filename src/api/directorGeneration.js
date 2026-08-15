@@ -5,6 +5,7 @@ import {
   retryCastQuickShootSlot,
 } from './studio.js';
 import { canonicalCreatorId } from '../lib/cloudCreators.js';
+import { referencePromptBlock } from '../lib/directorReferences.js';
 import { isTerminalBatchStatus, normalizeGenerationBatch } from '../lib/generationBatch.js';
 
 const POLL_INTERVAL_MS = 2500;
@@ -283,6 +284,14 @@ export async function generateDirectorPhoto({
     anchorReferences = refs.filter(reference => reference !== identity.explicitIdentity && reference.role !== 'identity');
   }
 
+  // The renderer receives the actual images with structured roles. Add the
+  // same mandatory role contract to the provider prompt so Makeup/Hair/Pose
+  // cannot degrade into loose "inspiration" while Outfit/Background dominate.
+  const roleBlock = anchorReferences.length
+    ? referencePromptBlock(anchorReferences, { startsAfterIdentity: Boolean(identity.locked) })
+    : '';
+  const providerPrompt = [prompt.trim(), roleBlock].filter(Boolean).join('\n\n');
+
   const count = normalizedBatchSize(batchSize);
   const baseRequestKey = requestKey || crypto.randomUUID();
   const scopeKey = pendingScope || `director:${identity.creatorId || 'open'}`;
@@ -296,7 +305,7 @@ export async function generateDirectorPhoto({
   if (identity.creatorId || characterImage) {
     submitted = await characterGenerate({
       engineId: 'openai_image',
-      positivePrompt: prompt,
+      positivePrompt: providerPrompt,
       negativePrompt,
       characterImage,
       anchorReferences,
@@ -311,7 +320,7 @@ export async function generateDirectorPhoto({
   } else {
     if (refs.length) throw new Error('Add an Identity reference before using styling or scene references without a saved Cast member.');
     submitted = await castQuickShootPlain({
-      positivePrompt: prompt,
+      positivePrompt: providerPrompt,
       negativePrompt,
       batchSize: count,
       imageSize,

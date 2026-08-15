@@ -1,12 +1,13 @@
-export const MAX_DIRECTOR_REFERENCES = 4;
+export const MAX_DIRECTOR_REFERENCES = 6;
+export const MAX_SAVED_CAST_STYLING_REFERENCES = 5;
 
 export const DIRECTOR_REFERENCE_ROLES = [
-  { id: 'identity', label: 'Identity', instruction: 'Preserve this person’s recognizable identity and facial structure.' },
-  { id: 'outfit', label: 'Outfit', instruction: 'Use the clothing, styling, fit, materials, and accessories from this image.' },
-  { id: 'background', label: 'Background', instruction: 'Use this environment, location design, palette, lighting logic, and spatial mood.' },
-  { id: 'makeup', label: 'Makeup', instruction: 'Use this makeup look, color placement, finish, and beauty styling without copying identity.' },
-  { id: 'hair', label: 'Hair', instruction: 'Use this hairstyle, texture, color, length, and finish without copying identity.' },
-  { id: 'pose', label: 'Pose', instruction: 'Use this pose, framing, body language, and composition without copying identity.' },
+  { id: 'identity', label: 'Identity', instruction: 'IDENTITY AUTHORITY ONLY: preserve this person’s recognizable identity and facial structure. Do not borrow wardrobe, background, hair, makeup, or pose from this image.' },
+  { id: 'outfit', label: 'Outfit', instruction: 'MANDATORY OUTFIT AUTHORITY — not inspiration: reproduce the visible garments, layering, materials, construction, silhouette, fit, colors, patterns, accessories, footwear, jewelry, bag, and styling. Do not copy the reference person identity or body.' },
+  { id: 'background', label: 'Background', instruction: 'MANDATORY BACKGROUND AUTHORITY — not inspiration: reproduce the visible environment, location type, architecture/layout, palette, practical lighting, spatial relationships, surfaces, and atmosphere. Do not copy people or styling from this image.' },
+  { id: 'makeup', label: 'Makeup', instruction: 'MANDATORY MAKEUP AUTHORITY — not generic glam: transfer the visible eyeshadow colors, placement, shape, blending and intensity; liner/lashes; blush hue, placement and intensity; complexion finish; highlight/contour; and lip liner, color, gloss/finish onto the creator while preserving identity. Bold colors must stay visibly bold.' },
+  { id: 'hair', label: 'Hair', instruction: 'MANDATORY HAIR AUTHORITY — not inspiration: transfer the visible hairstyle architecture, parting, texture/pattern, color, length, volume, silhouette, hairline/edges, finish, and hair accessories while preserving identity. Do not fall back to default hair.' },
+  { id: 'pose', label: 'Pose', instruction: 'MANDATORY POSE AUTHORITY — not inspiration: match the visible body orientation, head angle/gaze, shoulder/torso angle, limb positions, hand placement, weight distribution, seated/standing relationship, crop/framing, camera height, and composition as closely as the scene allows.' },
 ];
 
 export function referenceRoleLabel(role) {
@@ -15,22 +16,24 @@ export function referenceRoleLabel(role) {
 
 function authorityLines(references) {
   const roles = new Set(references.map(reference => reference.role));
-  const lines = [];
+  const lines = [
+    'ROLE-LABELED VISUAL REFERENCES ARE MANDATORY AUTHORITIES, NOT LOOSE INSPIRATION. Keep every role separate and preserve each role’s observable visual attributes in the final image.',
+  ];
 
   if (roles.has('outfit')) {
-    lines.push('OUTFIT AUTHORITY: The role-labeled OUTFIT image controls clothing, accessories, materials, fit, and styling. Ignore clothing visible in identity images and any older creator-profile or creator-memory wardrobe defaults.');
+    lines.push('OUTFIT AUTHORITY: Reproduce the role-labeled OUTFIT image as the wardrobe source of truth. Preserve visible garment construction, silhouette, fit, color, materials, accessories, footwear, jewelry, bag, and styling. Ignore clothing visible in identity images and any older creator-profile or memory wardrobe defaults. Do not simplify or substitute the outfit.');
   }
   if (roles.has('makeup')) {
-    lines.push('MAKEUP AUTHORITY: The role-labeled MAKEUP image controls the beauty look. Preserve the creator’s facial identity; do not copy the makeup reference person’s face.');
+    lines.push('MAKEUP AUTHORITY: Transfer the role-labeled MAKEUP image’s visible eye, cheek/complexion, and lip design onto the creator: eyeshadow colors/placement/shape/intensity, liner/lashes, blush hue/placement/intensity, finish/highlight/contour, and lip liner/color/gloss. Preserve the creator’s facial identity. Do not neutralize bold makeup colors and do not copy the makeup-reference person’s face, hair, wardrobe, nails, jewelry, or pose.');
   }
   if (roles.has('hair')) {
-    lines.push('HAIR AUTHORITY: The role-labeled HAIR image controls hairstyle, texture, color, length, and finish. Preserve the creator’s facial identity.');
+    lines.push('HAIR AUTHORITY: Transfer the role-labeled HAIR image’s visible hairstyle structure, parting, texture/pattern, color, length, volume, silhouette, hairline/edges, finish, and hair accessories. Preserve the creator’s facial identity and do not fall back to their default hair.');
   }
   if (roles.has('background')) {
-    lines.push('BACKGROUND AUTHORITY: The role-labeled BACKGROUND image controls the environment and location design. Do not borrow people or wardrobe from that image.');
+    lines.push('BACKGROUND AUTHORITY: Reproduce the role-labeled BACKGROUND image’s environment, architecture/layout, palette, practical lighting logic, spatial relationships, surfaces, and atmosphere. Do not borrow people or styling from that image.');
   }
   if (roles.has('pose')) {
-    lines.push('POSE AUTHORITY: The role-labeled POSE image controls pose, body language, framing, and composition only. Do not copy that person’s identity or clothing.');
+    lines.push('POSE AUTHORITY: Match the role-labeled POSE image’s body orientation, head angle/gaze, shoulder/torso angle, limb positions, hand placement, weight distribution, seated/standing relationship, crop/framing, camera height, and composition. Adapt naturally to the creator without copying the pose-reference person’s identity or styling.');
   }
 
   return lines;
@@ -45,10 +48,10 @@ export function referencePromptBlock(references = [], { startsAfterIdentity = fa
     return `Image ${imageNumber} — ${option.label.toUpperCase()}: ${option.instruction}`;
   });
   return [
-    'VISUAL REFERENCE MAP:',
+    'VISUAL REFERENCE MAP — STRICT ROLE AUTHORITY:',
     ...lines,
     ...authorityLines(references),
-    'Keep each image in its assigned role. Identity images establish the person only. Do not borrow a face from outfit, makeup, hair, background, or pose references. Blend the assigned cues into one coherent new photograph.',
+    'Keep each image in its assigned role. Identity establishes the person only. Outfit, Makeup, Hair, Background, and Pose must not recast identity or overwrite one another. Blend all assigned authorities into one coherent new photograph.',
   ].join('\n');
 }
 

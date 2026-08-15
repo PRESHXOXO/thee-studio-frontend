@@ -81,4 +81,15 @@ describe('useDirectorPendingGeneration', () => {
       expect.objectContaining({ onStatus: expect.any(Function) }),
     ));
   });
+
+  it('does not run server discovery for Guided when there is no saved pointer', async () => {
+    mocks.getPendingDirectorJob.mockReturnValue(null);
+    mocks.getDirectorBatchSnapshot.mockReturnValue(null);
+
+    renderHook(() => useDirectorPendingGeneration('guided:cast-1'));
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mocks.recoverDirectorPendingPointer).not.toHaveBeenCalled();
+    expect(mocks.resumeDirectorGeneration).not.toHaveBeenCalled();
+  });
 });

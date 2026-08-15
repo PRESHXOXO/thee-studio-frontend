@@ -5,6 +5,7 @@ import {
   resumeDirectorGeneration,
   retryDirectorGenerationSlot,
 } from '../api/directorGeneration.js';
+import { recoverDirectorPendingPointer } from '../api/directorRecovery.js';
 import { generationBatchSummary, isTerminalBatchStatus } from '../lib/generationBatch.js';
 
 const RETRY_DELAY_MS = 5000;
@@ -77,13 +78,22 @@ export function useDirectorPendingGeneration(scopeKey, { active = false, onSucce
   }, [scopeKey, deliverTerminal]);
 
   React.useEffect(() => {
-    if (active || !getPendingDirectorJob(scopeKey)) return undefined;
+    if (active) return undefined;
     let disposed = false;
     let retryTimer = null;
 
     const check = async () => {
       if (disposed) return;
       try {
+        if (!getPendingDirectorJob(scopeKey)) {
+          const recovered = await recoverDirectorPendingPointer(scopeKey);
+          if (disposed || !recovered) return;
+          handleStatus({
+            status: recovered.status || 'still_processing',
+            batch: recovered.batch || null,
+            persisted: true,
+          });
+        }
         const result = await resumeDirectorGeneration(scopeKey, { onStatus: handleStatus });
         if (!disposed && result) deliverTerminal(result);
       } catch (error) {

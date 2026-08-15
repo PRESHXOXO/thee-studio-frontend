@@ -15,6 +15,10 @@ function uiStatus(status) {
   return status;
 }
 
+function mayRecoverMissingPointer(scopeKey = '') {
+  return scopeKey.startsWith('describe:') || scopeKey.startsWith('talk:');
+}
+
 export function useDirectorPendingGeneration(scopeKey, { active = false, onSucceeded, onFailed, onBatchUpdate } = {}) {
   const initialRef = React.useRef(null);
   if (!initialRef.current) {
@@ -86,6 +90,7 @@ export function useDirectorPendingGeneration(scopeKey, { active = false, onSucce
       if (disposed) return;
       try {
         if (!getPendingDirectorJob(scopeKey)) {
+          if (!mayRecoverMissingPointer(scopeKey)) return;
           const recovered = await recoverDirectorPendingPointer(scopeKey);
           if (disposed || !recovered) return;
           handleStatus({

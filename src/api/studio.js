@@ -1,6 +1,7 @@
 import { referencePromptBlock, serializeDirectorReferences } from '../lib/directorReferences.js';
 import { finishUsageTelemetry, startUsageTelemetry } from './usageTelemetry.js';
 import { getSupabase, hasSupabaseConfig } from '../lib/supabase.js';
+import { normalizeGenerationBatch } from '../lib/generationBatch.js';
 
 async function invokeCloudFunction(name, body, idempotencyKey = crypto.randomUUID()) {
   const { data, error } = await getSupabase().functions.invoke(name, {
@@ -20,6 +21,25 @@ async function signCastAssets(bucket, assets, pathKey = 'storagePath') {
     if (signError || !signed?.signedUrl) throw new Error('Could not open a generated image.');
     return signed.signedUrl;
   }));
+}
+
+async function signCastAssetRecords(bucket, assets, pathKey = 'storagePath') {
+  return Promise.all((assets || []).map(async asset => {
+    if (typeof asset === 'string') return { url: asset };
+    if (asset?.url || asset?.signedUrl || asset?.imageUrl) {
+      return { ...asset, url: asset.url || asset.signedUrl || asset.imageUrl };
+    }
+    const { data: signed, error: signError } = await getSupabase().storage
+      .from(bucket)
+      .createSignedUrl(asset[pathKey], 3600);
+    if (signError || !signed?.signedUrl) throw new Error('Could not open a generated image.');
+    return { ...asset, url: signed.signedUrl };
+  }));
+}
+
+async function normalizeCastBatchResponse(data, fallback = {}) {
+  const assets = await signCastAssetRecords('generation-assets', data?.assets || []);
+  return normalizeGenerationBatch({ ...data, assets }, fallback);
 }
 
 const BASE = '/gradio_api';
@@ -259,17 +279,15 @@ export async function characterGenerate({
       fashionSafetyMode,
       shootMode: mode,
     }, requestKey || crypto.randomUUID());
-    if (data.status === 'succeeded') {
-      const images = await signCastAssets('generation-assets', data.assets);
-      return { status: 'succeeded', images, summary: data.summary || '' };
-    }
     if (data.status === 'failed' || data.status === 'cancelled') {
+      if (returnPending) return normalizeCastBatchResponse(data, { requestedCount: batchSize });
       const generationError = new Error(data.error || (data.status === 'cancelled' ? 'Generation was cancelled.' : 'Generation failed.'));
       generationError.status = data.status;
       generationError.category = data.errorCategory || 'unknown';
       throw generationError;
     }
-    const submission = { status: 'pending', jobId: data.jobId, images: [] };
+    const submission = await normalizeCastBatchResponse(data, { requestedCount: batchSize });
+    if (submission.status === 'succeeded' || submission.status === 'partial_success') return submission;
     // Legacy callers can keep awaiting here. Director passes returnPending so
     // its shared gateway can persist and resume the exact server job itself.
     return (creatorId || returnPending) ? submission : awaitCastQuickShootResult(submission);
@@ -300,25 +318,34 @@ export async function characterGenerate({
 export async function pollCastQuickShootStatus(jobId) {
   const { data, error } = await getSupabase().functions.invoke('cast-quick-shoot-status', { body: { jobId } });
   if (error) throw new Error(error.message || 'cast-quick-shoot-status failed.');
-  if (data.status === 'succeeded') {
-    const images = await signCastAssets('generation-assets', data.assets);
-    return { status: 'succeeded', images, summary: data.summary || '' };
-  }
-  if (data.status === 'failed' || data.status === 'cancelled') {
-    return { status: data.status, error: data.error || (data.status === 'cancelled' ? 'Image generation was cancelled.' : 'Image generation failed. The provider did not return a specific reason.'), errorCategory: data.errorCategory || 'unknown' };
-  }
-  return { status: 'pending' };
+  const response = {
+    ...data,
+    parentBatchId: data.parentBatchId || data.jobId || jobId,
+    error: data.error || (data.status === 'cancelled'
+      ? 'Image generation was cancelled.'
+      : data.status === 'failed' ? 'Image generation failed. The provider did not return a specific reason.' : undefined),
+    errorCategory: data.errorCategory || (data.status === 'failed' || data.status === 'cancelled' ? 'unknown' : undefined),
+  };
+  return normalizeCastBatchResponse(response, { parentBatchId: jobId, requestedCount: data.requestedCount });
+}
+
+export async function retryCastQuickShootSlot(parentBatchId, slotIndex) {
+  const index = Number(slotIndex);
+  if (!parentBatchId) throw new Error('Retry needs a valid parent batch.');
+  if (!Number.isInteger(index) || index < 0 || index > 4) throw new Error('Retry needs a valid image slot.');
+  const data = await invokeCloudFunction('cast-quick-shoot-retry-slot', { parentBatchId, slotIndex: index });
+  return normalizeCastBatchResponse(data, { parentBatchId, requestedCount: Math.max(index + 1, data?.requestedCount || 1) });
 }
 
 async function awaitCastQuickShootResult(submission, timeoutMs = QUICK_SHOOT_POLL_TIMEOUT_MS) {
-  if (submission?.status === 'succeeded') return submission;
-  if (submission?.status !== 'pending' || !submission.jobId) throw new Error('Generation did not return a valid job.');
+  if (submission?.status === 'succeeded' || submission?.status === 'partial_success') return submission;
+  if (!['queued', 'running'].includes(submission?.status) || !submission.jobId) throw new Error('Generation did not return a valid job.');
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, QUICK_SHOOT_POLL_INTERVAL_MS));
     const status = await pollCastQuickShootStatus(submission.jobId);
-    if (status.status === 'succeeded') return status;
-    if (status.status === 'failed') {
+    if (status.status === 'succeeded' || status.status === 'partial_success') return status;
+    if (status.status === 'failed' || status.status === 'cancelled') {
       const error = new Error(status.error || 'Generation failed.');
       error.category = status.errorCategory || 'unknown';
       throw error;
@@ -341,18 +368,18 @@ export async function castQuickShootPlain({ positivePrompt, negativePrompt, batc
     imageSize,
     fashionSafetyMode,
   }, requestKey || crypto.randomUUID());
-  if (data.status === 'pending') {
-    const submission = { status: 'pending', jobId: data.jobId, images: [] };
+  if (data.status === 'pending' || data.status === 'queued' || data.status === 'running') {
+    const submission = await normalizeCastBatchResponse(data, { requestedCount: batchSize });
     return returnPending ? submission : awaitCastQuickShootResult(submission);
   }
   if (data.status === 'failed' || data.status === 'cancelled') {
+    if (returnPending) return normalizeCastBatchResponse(data, { requestedCount: batchSize });
     const generationError = new Error(data.error || (data.status === 'cancelled' ? 'Generation was cancelled.' : 'Generation failed.'));
     generationError.status = data.status;
     generationError.category = data.errorCategory || 'unknown';
     throw generationError;
   }
-  const images = await signCastAssets('generation-assets', data.assets);
-  return { status: 'succeeded', images, summary: data.summary || '' };
+  return normalizeCastBatchResponse(data, { requestedCount: batchSize });
 }
 
 export async function analyzeCharacterImage(imageDataUrl) {

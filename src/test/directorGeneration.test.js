@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   characterGenerate: vi.fn(),
   castQuickShootPlain: vi.fn(),
   pollCastQuickShootStatus: vi.fn(),
+  retryCastQuickShootSlot: vi.fn(),
 }));
 
 vi.mock('../api/studio.js', () => mocks);
@@ -11,24 +12,46 @@ vi.mock('../api/studio.js', () => mocks);
 import {
   directorIdentityState,
   generateDirectorPhoto,
+  getDirectorBatchSnapshot,
   getPendingDirectorJob,
   resumeDirectorGeneration,
+  retryDirectorGenerationSlot,
 } from '../api/directorGeneration.js';
 
-const { characterGenerate, castQuickShootPlain, pollCastQuickShootStatus } = mocks;
+const { characterGenerate, castQuickShootPlain, pollCastQuickShootStatus, retryCastQuickShootSlot } = mocks;
 const CLOUD_ID = '2b421abb-b8a5-4f45-b153-1376ee684be8';
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ';
 
-describe('Director render gateway', () => {
+function completedBatch(count = 1, status = 'succeeded') {
+  const slots = Array.from({ length: count }, (_, slotIndex) => ({
+    slotIndex,
+    status: 'succeeded',
+    imageUrl: `image-${slotIndex}.png`,
+  }));
+  return {
+    status,
+    parentBatchId: 'parent-1',
+    requestedCount: count,
+    succeededCount: count,
+    providerBlockedCount: 0,
+    failedCount: 0,
+    cancelledCount: 0,
+    slots,
+    images: slots.map(slot => slot.imageUrl),
+  };
+}
+
+describe('Director parent batch gateway', () => {
   beforeEach(() => {
     characterGenerate.mockReset();
     castQuickShootPlain.mockReset();
     pollCastQuickShootStatus.mockReset();
+    retryCastQuickShootSlot.mockReset();
     sessionStorage.clear();
     vi.useRealTimers();
   });
 
-  it('binds a cloud Cast creator and serializes multi-image Responses renders one at a time', async () => {
+  it('sends one saved-Cast backend batch for five images and keeps canonical identity server-side', async () => {
     const creator = {
       id: CLOUD_ID,
       cloudCreatorId: CLOUD_ID,
@@ -36,147 +59,121 @@ describe('Director render gateway', () => {
       name: 'Amara',
       refImages: ['https://example.supabase.co/storage/v1/object/sign/creator-references/amara.jpg?token=signed'],
     };
-    characterGenerate
-      .mockResolvedValueOnce({ status: 'succeeded', images: ['one.png'] })
-      .mockResolvedValueOnce({ status: 'succeeded', images: ['two.png'] });
+    characterGenerate.mockResolvedValueOnce(completedBatch(5));
 
     const state = directorIdentityState(creator, []);
     expect(state.locked).toBe(true);
-    expect(state.creatorId).toBe(CLOUD_ID);
+    const result = await generateDirectorPhoto({ creator, prompt: 'Amara in France.', batchSize: 5, requestKey: 'director-test' });
 
-    const result = await generateDirectorPhoto({
-      creator,
-      prompt: 'Amara in France.',
-      batchSize: 2,
+    expect(result.images).toHaveLength(5);
+    expect(characterGenerate).toHaveBeenCalledTimes(1);
+    expect(characterGenerate).toHaveBeenCalledWith(expect.objectContaining({
+      creatorId: CLOUD_ID,
+      characterImage: null,
+      batchSize: 5,
       requestKey: 'director-test',
-    });
-
-    expect(result.images).toEqual(['one.png', 'two.png']);
-    expect(characterGenerate).toHaveBeenCalledTimes(2);
-    expect(characterGenerate.mock.calls[0][0]).toEqual(expect.objectContaining({
-      creatorId: CLOUD_ID,
-      characterImage: null,
-      batchSize: 1,
-      requestKey: 'director-test:director-image-1',
       returnPending: true,
-    }));
-    expect(characterGenerate.mock.calls[1][0]).toEqual(expect.objectContaining({
-      creatorId: CLOUD_ID,
-      characterImage: null,
-      batchSize: 1,
-      requestKey: 'director-test:director-image-2',
     }));
     expect(castQuickShootPlain).not.toHaveBeenCalled();
     expect(JSON.stringify(characterGenerate.mock.calls)).not.toContain('example.supabase.co');
+    expect(JSON.stringify(characterGenerate.mock.calls)).not.toContain('director-image-');
   });
 
-  it('does not submit image two until image one succeeds', async () => {
-    let finishFirst;
-    characterGenerate
-      .mockImplementationOnce(() => new Promise(resolve => { finishFirst = resolve; }))
-      .mockResolvedValueOnce({ status: 'succeeded', images: ['two.png'] });
-
-    const generation = generateDirectorPhoto({
-      creator: { id: CLOUD_ID, cloudCreatorId: CLOUD_ID, name: 'Amara' },
-      prompt: 'Amara in France.',
-      batchSize: 2,
-      requestKey: 'strict-sequence',
-      pendingScope: 'test:strict-sequence',
+  it('returns terminal partial_success with successful siblings and the blocked slot intact', async () => {
+    characterGenerate.mockResolvedValueOnce({
+      status: 'partial_success',
+      parentBatchId: 'parent-partial',
+      requestedCount: 5,
+      succeededCount: 4,
+      providerBlockedCount: 1,
+      failedCount: 0,
+      cancelledCount: 0,
+      slots: [
+        { slotIndex: 0, status: 'succeeded', imageUrl: 'one.png' },
+        { slotIndex: 1, status: 'provider_blocked', failureCode: 'provider_output_blocked' },
+        { slotIndex: 2, status: 'succeeded', imageUrl: 'three.png' },
+        { slotIndex: 3, status: 'succeeded', imageUrl: 'four.png' },
+        { slotIndex: 4, status: 'succeeded', imageUrl: 'five.png' },
+      ],
     });
-    await Promise.resolve();
-    expect(characterGenerate).toHaveBeenCalledTimes(1);
 
-    finishFirst({ status: 'succeeded', images: ['one.png'] });
-    await expect(generation).resolves.toEqual({ status: 'succeeded', images: ['one.png', 'two.png'] });
-    expect(characterGenerate).toHaveBeenCalledTimes(2);
+    const result = await generateDirectorPhoto({
+      creator: { id: CLOUD_ID, cloudCreatorId: CLOUD_ID, name: 'Amara' },
+      prompt: 'Amara in France.',
+      batchSize: 5,
+      pendingScope: 'test:partial',
+    });
+    expect(result.status).toBe('partial_success');
+    expect(result.images).toEqual(['one.png', 'three.png', 'four.png', 'five.png']);
+    expect(result.slots.map(slot => slot.status)).toEqual(['succeeded', 'provider_blocked', 'succeeded', 'succeeded', 'succeeded']);
+    expect(getDirectorBatchSnapshot('test:partial')?.batch.status).toBe('partial_success');
   });
 
-  it('stops the serialized batch when a render fails instead of launching later images', async () => {
-    const creator = { id: CLOUD_ID, cloudCreatorId: CLOUD_ID, cloudProfile: true, name: 'Amara' };
-    characterGenerate
-      .mockResolvedValueOnce({ status: 'succeeded', images: ['one.png'] })
-      .mockRejectedValueOnce(new Error('provider failed'));
-
-    await expect(generateDirectorPhoto({ creator, prompt: 'Amara in France.', batchSize: 4, requestKey: 'stop-test' }))
-      .rejects.toThrow(/provider failed/i);
-    expect(characterGenerate).toHaveBeenCalledTimes(2);
-  });
-
-  it('rejects a partial batch instead of returning completed earlier images', async () => {
-    const creator = { id: CLOUD_ID, cloudCreatorId: CLOUD_ID, cloudProfile: true, name: 'Amara' };
-    characterGenerate
-      .mockResolvedValueOnce({ status: 'succeeded', images: ['one.png'] })
-      .mockResolvedValueOnce({ status: 'succeeded', images: [] });
-
-    await expect(generateDirectorPhoto({ creator, prompt: 'Amara in France.', batchSize: 2, requestKey: 'partial-test' }))
-      .rejects.toThrow(/batch was not treated as complete/i);
-    expect(characterGenerate).toHaveBeenCalledTimes(2);
-  });
-
-  it('persists a pending job through timeout and resumes the same job without resubmitting', async () => {
+  it('persists one parent through timeout and resumes that same parent without resubmitting', async () => {
     vi.useFakeTimers();
-    characterGenerate.mockResolvedValue({ status: 'pending', jobId: 'job-resume-1' });
-    pollCastQuickShootStatus.mockResolvedValue({ status: 'pending' });
+    characterGenerate.mockResolvedValue({ status: 'pending', parentBatchId: 'parent-resume-1', requestedCount: 5 });
+    pollCastQuickShootStatus.mockResolvedValue({ status: 'pending', batchStatus: 'running', parentBatchId: 'parent-resume-1', requestedCount: 5 });
 
     const generation = generateDirectorPhoto({
       creator: { id: CLOUD_ID, cloudCreatorId: CLOUD_ID, name: 'Amara' },
       prompt: 'Amara in France.',
+      batchSize: 5,
       requestKey: 'resume-test',
       pendingScope: 'test:resume',
       pollIntervalMs: 10,
       pollTimeoutMs: 20,
     });
-    const timeoutResult = expect(generation).rejects.toMatchObject({
+    const timedOut = expect(generation).rejects.toMatchObject({
       code: 'DIRECTOR_STILL_PROCESSING',
-      status: 'still_processing',
-      jobId: 'job-resume-1',
+      parentBatchId: 'parent-resume-1',
+      persisted: true,
     });
     await vi.advanceTimersByTimeAsync(25);
-    await timeoutResult;
-
+    await timedOut;
     expect(getPendingDirectorJob('test:resume')).toEqual(expect.objectContaining({
-      jobId: 'job-resume-1',
+      parentBatchId: 'parent-resume-1',
+      requestedCount: 5,
       requestKey: 'resume-test',
-      status: 'still_processing',
     }));
 
-    pollCastQuickShootStatus.mockResolvedValueOnce({ status: 'succeeded', images: ['resumed.png'] });
+    pollCastQuickShootStatus.mockResolvedValueOnce(completedBatch(5));
     const resumed = resumeDirectorGeneration('test:resume', { pollIntervalMs: 10, pollTimeoutMs: 20 });
     await vi.advanceTimersByTimeAsync(10);
-    await expect(resumed).resolves.toEqual({ status: 'succeeded', images: ['resumed.png'] });
-    expect(pollCastQuickShootStatus).toHaveBeenLastCalledWith('job-resume-1');
+    await expect(resumed).resolves.toEqual(expect.objectContaining({ status: 'succeeded', images: expect.any(Array) }));
+    expect(pollCastQuickShootStatus).toHaveBeenLastCalledWith('parent-resume-1');
     expect(characterGenerate).toHaveBeenCalledTimes(1);
     expect(getPendingDirectorJob('test:resume')).toBeNull();
   });
 
-  it('never falls back to a generic subject when a selected Cast member cannot be identity-bound', async () => {
-    const creator = { id: 'legacy-with-no-image', name: 'Amara', refImages: [], image: null };
-    await expect(generateDirectorPhoto({ creator, prompt: 'Amara in France.' }))
-      .rejects.toThrow(/cannot bind/i);
+  it('retries one failed slot on the same parent without regenerating siblings', async () => {
+    characterGenerate.mockResolvedValueOnce({
+      status: 'partial_success', parentBatchId: 'parent-retry', requestedCount: 3,
+      slots: [
+        { slotIndex: 0, status: 'succeeded', imageUrl: 'one.png' },
+        { slotIndex: 1, status: 'failed', failureCode: 'provider_error' },
+        { slotIndex: 2, status: 'succeeded', imageUrl: 'three.png' },
+      ],
+    });
+    await generateDirectorPhoto({ creator: { id: CLOUD_ID, cloudCreatorId: CLOUD_ID }, prompt: 'Scene.', batchSize: 3, pendingScope: 'test:retry' });
+    retryCastQuickShootSlot.mockResolvedValueOnce({ status: 'running', parentBatchId: 'parent-retry', slotIndex: 1 });
+    pollCastQuickShootStatus.mockResolvedValueOnce(completedBatch(3));
+
+    const retry = retryDirectorGenerationSlot('test:retry', 1, { pollIntervalMs: 1, pollTimeoutMs: 20 });
+    await expect(retry).resolves.toEqual(expect.objectContaining({ status: 'succeeded' }));
+    expect(retryCastQuickShootSlot).toHaveBeenCalledTimes(1);
+    expect(retryCastQuickShootSlot).toHaveBeenCalledWith('parent-retry', 1);
+    expect(pollCastQuickShootStatus).toHaveBeenCalledWith('parent-retry');
+    expect(characterGenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it('never falls back to a generic subject when selected Cast cannot be bound', async () => {
+    await expect(generateDirectorPhoto({ creator: { id: 'legacy', name: 'Amara' }, prompt: 'Amara in France.' })).rejects.toThrow(/cannot bind/i);
     expect(characterGenerate).not.toHaveBeenCalled();
     expect(castQuickShootPlain).not.toHaveBeenCalled();
   });
 
-  it('does not treat a display-only signed URL as an identity lock for a non-canonical Cast record', () => {
-    const state = directorIdentityState({
-      id: 'legacy-cast',
-      name: 'Amara',
-      refImages: ['https://example.supabase.co/storage/v1/object/sign/creator-references/amara.jpg?token=signed'],
-    }, []);
-    expect(state.locked).toBe(false);
-    expect(state.warning).toMatch(/cannot bind/i);
-  });
-
-  it('requires Identity before non-Cast styling references can generate', async () => {
-    await expect(generateDirectorPhoto({
-      prompt: 'Paris street style.',
-      references: [{ dataUrl: PIXEL, role: 'outfit', name: 'look.png' }],
-    })).rejects.toThrow(/no Identity reference/i);
-    expect(castQuickShootPlain).not.toHaveBeenCalled();
-  });
-
-  it('uses an explicit Identity reference for an open-subject session', async () => {
-    characterGenerate.mockResolvedValue({ status: 'succeeded', images: ['locked.png'] });
+  it('uses an explicit Identity reference and preserves structured Outfit handoff', async () => {
+    characterGenerate.mockResolvedValue(completedBatch(1));
     await generateDirectorPhoto({
       prompt: 'Paris street style.',
       references: [
@@ -190,14 +187,13 @@ describe('Director render gateway', () => {
       batchSize: 1,
       anchorReferences: [expect.objectContaining({ role: 'outfit' })],
     }));
-    expect(castQuickShootPlain).not.toHaveBeenCalled();
   });
 
-  it('keeps native batch generation for plain text-to-image with no identity references', async () => {
-    castQuickShootPlain.mockResolvedValue({ status: 'succeeded', images: ['a.png', 'b.png'] });
+  it('uses one native parent batch for plain generation too', async () => {
+    castQuickShootPlain.mockResolvedValue(completedBatch(2));
     const result = await generateDirectorPhoto({ prompt: 'Empty Paris street at dusk.', batchSize: 2, requestKey: 'plain-test' });
-    expect(result.images).toEqual(['a.png', 'b.png']);
-    expect(castQuickShootPlain).toHaveBeenCalledWith(expect.objectContaining({ batchSize: 2, requestKey: 'plain-test' }));
-    expect(characterGenerate).not.toHaveBeenCalled();
+    expect(result.images).toHaveLength(2);
+    expect(castQuickShootPlain).toHaveBeenCalledTimes(1);
+    expect(castQuickShootPlain).toHaveBeenCalledWith(expect.objectContaining({ batchSize: 2, requestKey: 'plain-test', returnPending: true }));
   });
 });

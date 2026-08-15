@@ -7,6 +7,7 @@ import { ImageLightbox } from '../feedback/ImageLightbox.jsx';
 import { Select } from '../forms/Select.jsx';
 import { ReferenceImageTray } from '../director/ReferenceImageTray.jsx';
 import { DirectorStatusCard } from '../director/DirectorStatusCard.jsx';
+import { GenerationBatchResults } from '../director/GenerationBatchResults.jsx';
 import { generateImage, preflightCastReferences } from '../../api/studio.js';
 import { generateDirectorPhoto } from '../../api/directorGeneration.js';
 import { useDirectorPendingGeneration } from '../../hooks/useDirectorPendingGeneration.js';
@@ -18,6 +19,7 @@ import { saveToLibrary } from '../../lib/library.js';
 import { downloadImageAsPng } from '../../lib/libraryAssets.js';
 import { compressImage } from '../../lib/imageUtils.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../../lib/creatorMemory.js';
+import { normalizeGenerationBatch } from '../../lib/generationBatch.js';
 import {
   PORTRAIT_ANGLES, BATCH_OPTIONS, SHOOT_MOODS, SHOOT_LIGHTINGS, SHOOT_OUTFITS,
 } from '../../lib/shootOptions.js';
@@ -137,6 +139,8 @@ export function ShootBuilder({
   const [preflightResult, setPreflightResult] = React.useState(null);
   const [preflighting, setPreflighting] = React.useState(false);
   const [canPreflight, setCanPreflight] = React.useState(false);
+  const persistedSlotsRef = React.useRef(new Set());
+  const acceptedBatchRef = React.useRef('');
 
   const allImages = getAllImages(creator);
   const cloudCreatorId = canonicalCreatorId(creator);
@@ -272,14 +276,20 @@ export function ShootBuilder({
     return { positivePrompt, memory: null, sceneName: scene === 'None' ? '' : scene, selectedCreator: null, source: 'director' };
   };
 
-  const acceptGeneratedImages = (images, details) => {
-    if (images.length !== batchSize) {
-      throw new Error(`Guided requested ${batchSize} image${batchSize === 1 ? '' : 's'} but received ${images.length}. The incomplete batch was not silently accepted.`);
-    }
+  const acceptGeneratedBatch = (rawBatch, details) => {
+    const batch = normalizeGenerationBatch(rawBatch, { requestedCount: batchSize });
+    const images = batch.images || [];
+    const fingerprint = `${batch.parentBatchId || 'local'}:${batch.status}:${batch.slots.map(slot => `${slot.slotIndex}:${slot.status}`).join('|')}`;
+    if (acceptedBatchRef.current === fingerprint) return batch;
+    acceptedBatchRef.current = fingerprint;
     setGenImages(images);
     onGenerated?.(images);
     const character = cloudCreatorId || creator?.id;
-    images.forEach(url => saveToLibrary(url, {
+    batch.slots.filter(slot => slot.status === 'succeeded' && slot.imageUrl).forEach(slot => {
+      const persistenceKey = `${batch.parentBatchId || fingerprint}:${slot.slotIndex}`;
+      if (persistedSlotsRef.current.has(persistenceKey)) return;
+      persistedSlotsRef.current.add(persistenceKey);
+      saveToLibrary(slot.imageUrl, {
       source: details.source,
       character,
       scene: details.sceneName || undefined,
@@ -289,14 +299,21 @@ export function ShootBuilder({
       campaign: campaignId || undefined,
       settings: snapshotSettings(),
       memoryVersion: details.memory?.version,
-    }).catch(() => {}));
+      }).catch(() => { persistedSlotsRef.current.delete(persistenceKey); });
+    });
+    return batch;
   };
 
   const pendingGeneration = useDirectorPendingGeneration(pendingScope, {
     active: generating,
     onSucceeded: result => {
-      try { acceptGeneratedImages(result.images || [], buildGenerationDetails()); }
+      try { acceptGeneratedBatch(result, buildGenerationDetails()); }
       catch (error) { setGenError(error.message || 'Generation failed.'); }
+    },
+    onBatchUpdate: result => {
+      if (result.images?.length) {
+        try { acceptGeneratedBatch(result, buildGenerationDetails()); } catch {}
+      }
     },
     onFailed: error => {
       setGenError(error.message || 'Generation failed.');
@@ -308,6 +325,9 @@ export function ShootBuilder({
     if (generating || pendingGeneration.renderStatus === 'still_processing') return;
     setGenerating(true);
     setGenImages([]);
+    pendingGeneration.setBatch(null);
+    persistedSlotsRef.current = new Set();
+    acceptedBatchRef.current = '';
     setGenError('');
     setGenErrorCategory('');
     pendingGeneration.setRenderStatus('generating');
@@ -318,7 +338,7 @@ export function ShootBuilder({
         result = await generateImage({
           engine: 'OpenAI Image', positivePrompt: details.positivePrompt,
           negativePrompt: STANDARD_NEGATIVE, imageSize: 'Vertical 9:16',
-          quality: 'High', performanceMode: 'Balanced', imageStyle: 'Lifestyle Creator',
+          quality: 'High', performanceMode: 'Balanced', imageStyle: 'Lifestyle Creator', batchSize,
         });
       } else {
         result = await generateDirectorPhoto({
@@ -333,7 +353,8 @@ export function ShootBuilder({
           onStatus: pendingGeneration.handleStatus,
         });
       }
-      acceptGeneratedImages(result.images || [], details);
+      const batch = acceptGeneratedBatch(result, details);
+      pendingGeneration.handleStatus({ status: batch.status, batch });
     } catch (e) {
       if (e?.status !== 'still_processing' && e?.code !== 'DIRECTOR_STILL_PROCESSING') {
         pendingGeneration.setRenderStatus(e?.status === 'cancelled' ? 'cancelled' : 'failed');
@@ -565,7 +586,7 @@ export function ShootBuilder({
         creator={creator}
         workflow="Guided"
         identityLocked={creator ? creatorIdentityBound : shotReferences.some(reference => reference.role === 'identity')}
-        count={batchSize}
+        count={pendingGeneration.batch?.requestedCount || batchSize}
         format="PNG"
         sceneSummary={guidedDirection}
         referenceRoles={shotReferences.map(reference => reference.role)}
@@ -580,7 +601,7 @@ export function ShootBuilder({
         <Button variant="primary" onClick={() => handleGenerate('auto')} loading={generating} disabled={generating || pendingGeneration.renderStatus === 'still_processing' || Boolean(identityWarning)} full={layout === 'split'} style={layout === 'split' ? {} : { alignSelf: 'flex-start' }}>
           <Icon name="zap" size={15} /> {generating ? 'Generating…' : pendingGeneration.renderStatus === 'still_processing' ? 'Render processing' : `Generate ${batchSize === 1 ? 'photo' : `${batchSize} photos`}`}
         </Button>
-        <GenerationProgress active={generating || pendingGeneration.renderStatus === 'still_processing'} identityLocked={creator ? creatorIdentityBound : shotReferences.some(reference => reference.role === 'identity')} batchSize={batchSize} />
+        <GenerationProgress active={generating || pendingGeneration.renderStatus === 'still_processing'} identityLocked={creator ? creatorIdentityBound : shotReferences.some(reference => reference.role === 'identity')} batchSize={pendingGeneration.batch?.requestedCount || batchSize} />
         {creator && hasSupabaseConfig() && !cloudCreatorId && embeddedIdentityAvailable && (
           <p style={{ font: 'var(--text-xs)', color: 'var(--text-faint)', margin: 0 }}>
             This legacy creator can render from its embedded Identity reference, but it is not cloud-linked to profile history yet.
@@ -621,32 +642,15 @@ export function ShootBuilder({
         </div>
       )}
 
-      {genImages.length > 0 && (
-        <div>
-          <div style={{ ...LABEL, marginBottom: 12 }}>Result · {genImages.length} image{genImages.length > 1 ? 's' : ''}</div>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-            {genImages.map((url, i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: layout === 'split' ? '100%' : 160 }}>
-                <div onClick={() => setLightboxSrc(url)} style={{ aspectRatio: '3/4', borderRadius: 'var(--radius-xl)', overflow: 'hidden', boxShadow: 'var(--shadow-md)', cursor: 'zoom-in' }}>
-                  <img src={url} alt={`Generated ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </div>
-                <Button
-                  variant="secondary"
-                  style={{ width: '100%', fontSize: '0.75rem' }}
-                  onClick={() => downloadImageAsPng(url, `thee-studio-${Date.now()}-${i + 1}.png`).catch(error => setGenError(error.message || 'PNG download failed.'))}
-                >
-                  <Icon name="download" size={13} /> Download PNG
-                </Button>
-                {creator && onSaveAsCreator && (
-                  <Button variant="secondary" style={{ width: '100%', fontSize: '0.75rem' }} onClick={() => handleSaveAsAnchor(url)}>
-                    <Icon name="bookmark" size={13} /> Save as Anchor
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {pendingGeneration.batch && <GenerationBatchResults
+        batch={pendingGeneration.batch}
+        compact={layout === 'split'}
+        onOpen={setLightboxSrc}
+        onRetry={slotIndex => pendingGeneration.retrySlot(slotIndex).catch(error => setGenError(error.message || 'Retry failed.'))}
+        retryingSlots={pendingGeneration.retryingSlots}
+        onDownload={(url, slotIndex) => downloadImageAsPng(url, `thee-studio-${Date.now()}-${slotIndex + 1}.png`).catch(error => setGenError(error.message || 'PNG download failed.'))}
+        onSaveAsAnchor={creator && onSaveAsCreator ? handleSaveAsAnchor : null}
+      />}
 
       {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
     </>

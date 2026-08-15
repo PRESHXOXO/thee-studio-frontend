@@ -25,7 +25,7 @@ afterAll(() => {
   global.fetch = originalFetch;
 });
 
-import { analyzeCharacterReferences, characterGenerate, generateReferenceSet, castQuickShootPlain, extractFaceAnchor, pollCastQuickShootStatus, preflightCastReferences, sceneFlowGenerate } from './studio.js';
+import { analyzeCharacterReferences, characterGenerate, generateReferenceSet, castQuickShootPlain, extractFaceAnchor, pollCastQuickShootStatus, preflightCastReferences, retryCastQuickShootSlot, sceneFlowGenerate } from './studio.js';
 
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/6ZcmWQAAAABJRU5ErkJggg==';
 const PIXEL_2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgQIA/2gqWQAAAABJRU5ErkJggg==';
@@ -77,7 +77,7 @@ describe('Cast cloud workflows never call local Gradio', () => {
       creatorId: 'creator-1',
       anchorReferences,
     });
-    expect(result.status).toBe('pending');
+    expect(result.status).toBe('running');
     const body = invoke.mock.calls[0][1].body;
     expect(body.anchorReferences).toEqual([
       { image: PIXEL, role: 'outfit', name: 'look.png' },
@@ -119,8 +119,9 @@ describe('Cast cloud workflows never call local Gradio', () => {
   it('characterGenerate returns a pending job, not images, for a fresh identity-locked submit', async () => {
     invoke.mockResolvedValueOnce({ data: { status: 'pending', jobId: 'job-123' }, error: null });
     const result = await characterGenerate({ positivePrompt: 'p', characterImage: PIXEL, creatorId: 'creator-1' });
-    expect(result.status).toBe('pending');
+    expect(result.status).toBe('running');
     expect(result.jobId).toBe('job-123');
+    expect(result.parentBatchId).toBe('job-123');
     expect(result.images).toEqual([]);
     expect(createSignedUrl).not.toHaveBeenCalled();
   });
@@ -169,7 +170,7 @@ describe('Cast cloud workflows never call local Gradio', () => {
       invoke.mockResolvedValueOnce({ data: { status: 'pending' }, error: null });
       const result = await pollCastQuickShootStatus('job-123');
       expect(invoke).toHaveBeenCalledWith('cast-quick-shoot-status', expect.objectContaining({ body: { jobId: 'job-123' } }));
-      expect(result).toEqual({ status: 'pending' });
+      expect(result).toEqual(expect.objectContaining({ status: 'running', parentBatchId: 'job-123', requestedCount: 1 }));
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
@@ -183,13 +184,13 @@ describe('Cast cloud workflows never call local Gradio', () => {
     it('reports failed without throwing, carrying the server error message and category', async () => {
       invoke.mockResolvedValueOnce({ data: { status: 'failed', error: 'Image generation was blocked by content safety review.', errorCategory: 'safety_moderation' }, error: null });
       const result = await pollCastQuickShootStatus('job-123');
-      expect(result).toEqual({ status: 'failed', error: 'Image generation was blocked by content safety review.', errorCategory: 'safety_moderation' });
+      expect(result).toEqual(expect.objectContaining({ status: 'failed', error: 'Image generation was blocked by content safety review.', errorCategory: 'safety_moderation' }));
     });
 
     it('keeps cancelled distinct from failed for truthful Director UI state', async () => {
       invoke.mockResolvedValueOnce({ data: { status: 'cancelled', error: 'Cancelled by user.' }, error: null });
       const result = await pollCastQuickShootStatus('job-123');
-      expect(result).toEqual({ status: 'cancelled', error: 'Cancelled by user.', errorCategory: 'unknown' });
+      expect(result).toEqual(expect.objectContaining({ status: 'cancelled', error: 'Cancelled by user.', errorCategory: 'unknown' }));
     });
 
     // Regression: never fabricate a specific-sounding reason when the
@@ -216,6 +217,43 @@ describe('Cast cloud workflows never call local Gradio', () => {
       expect(invoke).toHaveBeenCalledTimes(3);
       expect(global.fetch).not.toHaveBeenCalled();
     });
+  });
+
+  it('sends batchSize 5 in one saved-Cast parent request', async () => {
+    invoke.mockResolvedValueOnce({ data: { status: 'pending', parentBatchId: 'parent-five', requestedCount: 5 }, error: null });
+    const result = await characterGenerate({ positivePrompt: 'p', creatorId: 'creator-1', batchSize: 5, returnPending: true });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith('cast-quick-shoot', expect.objectContaining({ body: expect.objectContaining({ creatorId: 'creator-1', batchSize: 5 }) }));
+    expect(result).toEqual(expect.objectContaining({ parentBatchId: 'parent-five', requestedCount: 5 }));
+  });
+
+  it('normalizes partial_success and retains ordered blocked slots plus successful signed assets', async () => {
+    invoke.mockResolvedValueOnce({ data: {
+      status: 'partial_success', parentBatchId: 'parent-partial', requestedCount: 3,
+      succeededCount: 2, providerBlockedCount: 1, failedCount: 0, cancelledCount: 0,
+      assets: [
+        { id: 'a0', storagePath: 'batch/0.png', slotIndex: 0 },
+        { id: 'a2', storagePath: 'batch/2.png', slotIndex: 2 },
+      ],
+      slots: [
+        { slotIndex: 0, status: 'succeeded', assetIds: ['a0'] },
+        { slotIndex: 1, status: 'provider_blocked', failureCode: 'provider_output_blocked' },
+        { slotIndex: 2, status: 'succeeded', assetIds: ['a2'] },
+      ],
+    }, error: null });
+    const result = await pollCastQuickShootStatus('parent-partial');
+    expect(result.status).toBe('partial_success');
+    expect(result.images).toHaveLength(2);
+    expect(result.slots.map(slot => slot.status)).toEqual(['succeeded', 'provider_blocked', 'succeeded']);
+    expect(result.slots[1].imageUrl).toBeNull();
+  });
+
+  it('retries one slot against the same parent batch', async () => {
+    invoke.mockResolvedValueOnce({ data: { status: 'pending', parentBatchId: 'parent-retry', slotIndex: 2, retryCount: 1 }, error: null });
+    const result = await retryCastQuickShootSlot('parent-retry', 2);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith('cast-quick-shoot-retry-slot', expect.objectContaining({ body: { parentBatchId: 'parent-retry', slotIndex: 2 } }));
+    expect(result.parentBatchId).toBe('parent-retry');
   });
 
   it('castQuickShootPlain works without a creatorId (no-creator-selected path)', async () => {

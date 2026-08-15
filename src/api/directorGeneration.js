@@ -1,60 +1,109 @@
-import { castQuickShootPlain, characterGenerate, pollCastQuickShootStatus } from './studio.js';
+import {
+  castQuickShootPlain,
+  characterGenerate,
+  pollCastQuickShootStatus,
+  retryCastQuickShootSlot,
+} from './studio.js';
 import { canonicalCreatorId } from '../lib/cloudCreators.js';
+import { isTerminalBatchStatus, normalizeGenerationBatch } from '../lib/generationBatch.js';
 
 const POLL_INTERVAL_MS = 2500;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
 const DATA_IMAGE = /^data:image\/(?:jpeg|png|webp);base64,/i;
-const PENDING_STORAGE_PREFIX = 'thee-studio:director-pending:v1:';
-const pendingSequences = new Map();
+const PENDING_STORAGE_PREFIX = 'thee-studio:director-pending:v2:';
+const RESULT_STORAGE_PREFIX = 'thee-studio:director-batch:v2:';
+const LEGACY_PENDING_STORAGE_PREFIX = 'thee-studio:director-pending:v1:';
 
-function storageKey(scopeKey) {
-  return `${PENDING_STORAGE_PREFIX}${encodeURIComponent(scopeKey || 'director')}`;
+function storageKey(prefix, scopeKey) {
+  return `${prefix}${encodeURIComponent(scopeKey || 'director')}`;
 }
 
-export function getPendingDirectorJob(scopeKey) {
+function readRecord(prefix, scopeKey) {
   try {
-    const raw = globalThis.sessionStorage?.getItem(storageKey(scopeKey));
+    const raw = globalThis.sessionStorage?.getItem(storageKey(prefix, scopeKey));
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 
-function savePendingDirectorJob(scopeKey, record) {
+function writeRecord(prefix, scopeKey, record) {
   try {
-    globalThis.sessionStorage?.setItem(storageKey(scopeKey), JSON.stringify({
+    globalThis.sessionStorage?.setItem(storageKey(prefix, scopeKey), JSON.stringify({
       ...record,
       scopeKey,
-      status: 'still_processing',
       updatedAt: new Date().toISOString(),
     }));
-    return Boolean(globalThis.sessionStorage?.getItem(storageKey(scopeKey)));
+    return Boolean(globalThis.sessionStorage?.getItem(storageKey(prefix, scopeKey)));
   } catch {
-    // Polling still works in-memory when session storage is unavailable.
     return false;
   }
 }
 
-function clearPendingDirectorJob(scopeKey) {
-  try { globalThis.sessionStorage?.removeItem(storageKey(scopeKey)); } catch {}
+function removeRecord(prefix, scopeKey) {
+  try { globalThis.sessionStorage?.removeItem(storageKey(prefix, scopeKey)); } catch {}
 }
 
-function pendingError(jobId, persisted) {
+export function getPendingDirectorJob(scopeKey) {
+  const current = readRecord(PENDING_STORAGE_PREFIX, scopeKey);
+  if (current?.parentBatchId || current?.jobId) return current;
+  const legacy = readRecord(LEGACY_PENDING_STORAGE_PREFIX, scopeKey);
+  if (!legacy?.jobId) return null;
+  const migrated = {
+    parentBatchId: legacy.jobId,
+    jobId: legacy.jobId,
+    requestedCount: legacy.count || 1,
+    requestKey: legacy.requestKey || null,
+    createdAt: legacy.updatedAt || new Date().toISOString(),
+    status: 'running',
+  };
+  writeRecord(PENDING_STORAGE_PREFIX, scopeKey, migrated);
+  removeRecord(LEGACY_PENDING_STORAGE_PREFIX, scopeKey);
+  return migrated;
+}
+
+export function getDirectorBatchSnapshot(scopeKey) {
+  return readRecord(RESULT_STORAGE_PREFIX, scopeKey);
+}
+
+function savePendingDirectorJob(scopeKey, record) {
+  return writeRecord(PENDING_STORAGE_PREFIX, scopeKey, {
+    ...record,
+    createdAt: record.createdAt || new Date().toISOString(),
+  });
+}
+
+function saveDirectorBatchSnapshot(scopeKey, batch) {
+  return writeRecord(RESULT_STORAGE_PREFIX, scopeKey, {
+    parentBatchId: batch.parentBatchId,
+    requestedCount: batch.requestedCount,
+    status: batch.status,
+    batch,
+  });
+}
+
+function clearPendingDirectorJob(scopeKey) {
+  removeRecord(PENDING_STORAGE_PREFIX, scopeKey);
+}
+
+function clearDirectorBatchSnapshot(scopeKey) {
+  removeRecord(RESULT_STORAGE_PREFIX, scopeKey);
+}
+
+function pendingError(parentBatchId, persisted) {
   const error = new Error(persisted
     ? 'This render is still processing. Director saved the job and will continue checking it.'
     : 'This render is still processing, but Director could not save the job in this browser session. Keep this tab open and do not submit it again.');
   error.code = 'DIRECTOR_STILL_PROCESSING';
   error.status = 'still_processing';
-  error.jobId = jobId;
+  error.jobId = parentBatchId;
+  error.parentBatchId = parentBatchId;
   error.persisted = persisted;
   return error;
 }
 
 function embeddedCreatorIdentity(creator) {
-  const values = [
-    ...(Array.isArray(creator?.refImages) ? creator.refImages : []),
-    creator?.image,
-  ];
+  const values = [...(Array.isArray(creator?.refImages) ? creator.refImages : []), creator?.image];
   return values.find(value => typeof value === 'string' && DATA_IMAGE.test(value)) || null;
 }
 
@@ -64,7 +113,11 @@ function usableReferences(references = []) {
 
 function normalizedBatchSize(value) {
   const count = Number(value);
-  return Number.isInteger(count) && count >= 1 && count <= 4 ? count : 1;
+  return Number.isInteger(count) && count >= 1 && count <= 5 ? count : 1;
+}
+
+function emitBatch(onStatus, batch, extra = {}) {
+  onStatus?.({ ...extra, status: batch.status, batch, parentBatchId: batch.parentBatchId, count: batch.requestedCount });
 }
 
 export function directorIdentityState(creator, references = []) {
@@ -84,155 +137,118 @@ export function directorIdentityState(creator, references = []) {
 export async function awaitGeneration(result, {
   scopeKey = 'director',
   requestKey = null,
-  index = 0,
-  count = 1,
-  completedImages = [],
+  requestedCount = 1,
   pollIntervalMs = POLL_INTERVAL_MS,
   pollTimeoutMs = POLL_TIMEOUT_MS,
   onStatus = null,
 } = {}) {
-  if (result?.status !== 'pending') return result;
-  if (!result.jobId) throw new Error('Director generation did not return a valid job.');
-  const persisted = savePendingDirectorJob(scopeKey, { jobId: result.jobId, requestKey, index, count, completedImages });
-  onStatus?.({ status: 'still_processing', jobId: result.jobId, index, count, persisted });
+  let batch = normalizeGenerationBatch(result, { requestedCount });
+  const parentBatchId = batch.parentBatchId;
+  if (isTerminalBatchStatus(batch.status)) {
+    clearPendingDirectorJob(scopeKey);
+    saveDirectorBatchSnapshot(scopeKey, batch);
+    emitBatch(onStatus, batch);
+    return batch;
+  }
+  if (!parentBatchId) throw new Error('Director generation did not return a valid parent batch.');
+
+  const baseRecord = {
+    parentBatchId,
+    jobId: parentBatchId,
+    requestedCount: batch.requestedCount,
+    requestKey,
+    status: batch.status,
+    batch,
+  };
+  let persisted = savePendingDirectorJob(scopeKey, baseRecord);
+  clearDirectorBatchSnapshot(scopeKey);
+  emitBatch(onStatus, batch, { persisted });
+
   const deadline = Date.now() + pollTimeoutMs;
   while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    let status;
     try {
-      const status = await pollCastQuickShootStatus(result.jobId);
-      if (status.status === 'succeeded') {
-        clearPendingDirectorJob(scopeKey);
-        onStatus?.({ status: 'succeeded', jobId: result.jobId, index, count });
-        return status;
-      }
-      if (status.status === 'failed' || status.status === 'cancelled') {
-        clearPendingDirectorJob(scopeKey);
-        const error = new Error(status.error || (status.status === 'cancelled' ? 'Image generation was cancelled.' : 'Image generation failed.'));
-        error.category = status.errorCategory || 'unknown';
-        error.status = status.status;
-        onStatus?.({ status: status.status, jobId: result.jobId, index, count, error: error.message });
-        throw error;
-      }
-    } catch (error) {
-      if (error.status === 'failed' || error.status === 'cancelled') throw error;
-      // A transient status-check failure is not proof that provider work
-      // failed. Keep same durable job and try again until UI wait expires.
+      status = await pollCastQuickShootStatus(parentBatchId);
+    } catch {
+      // Transient status-check failure is not evidence the parent failed.
+      continue;
     }
+    batch = normalizeGenerationBatch(status, {
+      parentBatchId,
+      requestedCount: batch.requestedCount,
+    });
+    if (isTerminalBatchStatus(batch.status)) {
+      clearPendingDirectorJob(scopeKey);
+      saveDirectorBatchSnapshot(scopeKey, batch);
+      emitBatch(onStatus, batch);
+      return batch;
+    }
+    persisted = savePendingDirectorJob(scopeKey, { ...baseRecord, status: batch.status, batch });
+    emitBatch(onStatus, batch, { persisted });
   }
-  throw pendingError(result.jobId, persisted);
-}
-
-async function generateIdentityBoundSequence({
-  count,
-  baseRequestKey,
-  prompt,
-  negativePrompt,
-  characterImage,
-  anchorReferences,
-  mode,
-  imageSize,
-  creatorId,
-  fashionSafetyMode,
-  pendingScope,
-  pollIntervalMs,
-  pollTimeoutMs,
-  onStatus,
-  startIndex = 0,
-  completedImages = [],
-}) {
-  const images = [...completedImages];
-  const sequence = {
-    count, baseRequestKey, prompt, negativePrompt, characterImage,
-    anchorReferences, mode, imageSize, creatorId, fashionSafetyMode,
-    pendingScope, pollIntervalMs, pollTimeoutMs, onStatus,
-  };
-  try {
-    for (let index = startIndex; index < count; index += 1) {
-      pendingSequences.set(pendingScope, { sequence, index, completedImages: [...images] });
-      onStatus?.({ status: 'generating', index, count });
-      const submitted = await characterGenerate({
-        engineId: 'openai_image',
-        positivePrompt: prompt,
-        negativePrompt,
-        characterImage,
-        anchorReferences,
-        mode,
-        imageSize,
-        // Responses image generation is intentionally serialized here. The
-        // provider proved stable for this identity/reference contract one render
-        // at a time; Director must not fan multiple heavy vision renders out in
-        // parallel and turn a healthy Cast lock into an opaque tool failure.
-        batchSize: 1,
-        creatorId,
-        fashionSafetyMode,
-        requestKey: `${baseRequestKey}:director-image-${index + 1}`,
-        returnPending: true,
-      });
-      const result = await awaitGeneration(submitted, {
-        scopeKey: pendingScope,
-        requestKey: baseRequestKey,
-        index,
-        count,
-        completedImages: images,
-        pollIntervalMs,
-        pollTimeoutMs,
-        onStatus,
-      });
-      const image = result?.images?.[0];
-      if (!image) {
-        throw new Error(`Director render ${index + 1} of ${count} finished without an image. The batch was not treated as complete.`);
-      }
-      images.push(image);
-    }
-  } catch (error) {
-    if (error?.status !== 'still_processing' && error?.code !== 'DIRECTOR_STILL_PROCESSING') {
-      pendingSequences.delete(pendingScope);
-      clearPendingDirectorJob(pendingScope);
-      const status = error?.status === 'cancelled' ? 'cancelled' : 'failed';
-      onStatus?.({ status, error: error?.message, count });
-    }
-    throw error;
-  }
-  pendingSequences.delete(pendingScope);
-  clearPendingDirectorJob(pendingScope);
-  onStatus?.({ status: 'succeeded', count, images });
-  return { status: 'succeeded', images };
+  throw pendingError(parentBatchId, persisted);
 }
 
 export async function resumeDirectorGeneration(scopeKey, options = {}) {
   const pending = getPendingDirectorJob(scopeKey);
-  if (!pending?.jobId) return null;
-  const result = await awaitGeneration({ status: 'pending', jobId: pending.jobId }, {
+  const parentBatchId = pending?.parentBatchId || pending?.jobId;
+  if (!parentBatchId) return getDirectorBatchSnapshot(scopeKey)?.batch || null;
+  return awaitGeneration(pending.batch || {
+    status: pending.status || 'running',
+    parentBatchId,
+    requestedCount: pending.requestedCount || 1,
+  }, {
     scopeKey,
     requestKey: pending.requestKey,
-    index: pending.index,
-    count: pending.count,
-    completedImages: pending.completedImages || [],
+    requestedCount: pending.requestedCount || 1,
     pollIntervalMs: options.pollIntervalMs,
     pollTimeoutMs: options.pollTimeoutMs,
     onStatus: options.onStatus,
   });
-  const image = result?.images?.[0];
-  if (!image) throw new Error('Director resumed a completed job without an image.');
-  const completedImages = [...(pending.completedImages || []), image];
-  const continuation = pendingSequences.get(scopeKey);
-  if (continuation && pending.index + 1 < pending.count) {
-    return generateIdentityBoundSequence({
-      ...continuation.sequence,
-      startIndex: pending.index + 1,
-      completedImages,
-      onStatus: options.onStatus || continuation.sequence.onStatus,
-    });
+}
+
+export async function retryDirectorGenerationSlot(scopeKey, slotIndex, options = {}) {
+  const pending = getPendingDirectorJob(scopeKey);
+  const snapshot = getDirectorBatchSnapshot(scopeKey);
+  const record = pending || snapshot;
+  const parentBatchId = options.parentBatchId || record?.parentBatchId || record?.jobId;
+  if (!parentBatchId) throw new Error('Director cannot retry this image because its parent batch is unavailable.');
+  const previous = record?.batch || normalizeGenerationBatch({}, { parentBatchId, requestedCount: slotIndex + 1 });
+  const slot = previous.slots?.find(item => item.slotIndex === slotIndex);
+  if (slot && !['provider_blocked', 'failed'].includes(slot.status)) {
+    throw new Error('Only provider-blocked or failed images can be retried.');
   }
-  pendingSequences.delete(scopeKey);
-  if (completedImages.length !== pending.count) {
-    const error = new Error(`Director resumed job ${pending.jobId}, but the ${pending.count}-image batch stopped at ${completedImages.length}. The partial batch was not accepted and no replacement provider job was started.`);
-    error.status = 'failed';
-    options.onStatus?.({ status: 'failed', error: error.message, count: pending.count });
-    throw error;
-  }
-  options.onStatus?.({ status: 'succeeded', count: pending.count, images: completedImages });
-  return { status: 'succeeded', images: completedImages };
+
+  await retryCastQuickShootSlot(parentBatchId, slotIndex);
+  const retrying = normalizeGenerationBatch({
+    ...previous,
+    status: 'running',
+    batchStatus: 'running',
+    succeededCount: undefined,
+    providerBlockedCount: undefined,
+    failedCount: undefined,
+    cancelledCount: undefined,
+    slots: previous.slots.map(item => item.slotIndex === slotIndex
+      ? { ...item, status: 'running', imageUrl: null }
+      : item),
+  }, { parentBatchId, requestedCount: previous.requestedCount });
+  savePendingDirectorJob(scopeKey, {
+    parentBatchId,
+    jobId: parentBatchId,
+    requestedCount: previous.requestedCount,
+    status: 'running',
+    batch: retrying,
+  });
+  clearDirectorBatchSnapshot(scopeKey);
+  emitBatch(options.onStatus, retrying);
+  return awaitGeneration(retrying, {
+    scopeKey,
+    requestedCount: previous.requestedCount,
+    pollIntervalMs: options.pollIntervalMs,
+    pollTimeoutMs: options.pollTimeoutMs,
+    onStatus: options.onStatus,
+  });
 }
 
 export async function generateDirectorPhoto({
@@ -257,10 +273,9 @@ export async function generateDirectorPhoto({
 
   let characterImage = null;
   let anchorReferences = refs;
-
   if (identity.selectedCreator) {
-    // Cloud Cast identity is loaded server-side from creatorId. Display signed
-    // URLs are UI-only and must never masquerade as provider input images.
+    // Canonical Cast identity resolves server-side. Display signed URLs remain
+    // UI-only and are never sent as provider identity inputs.
     characterImage = identity.creatorId ? null : identity.embeddedIdentity;
     anchorReferences = refs.filter(reference => reference.role !== 'identity');
   } else if (identity.explicitIdentity) {
@@ -271,60 +286,47 @@ export async function generateDirectorPhoto({
   const count = normalizedBatchSize(batchSize);
   const baseRequestKey = requestKey || crypto.randomUUID();
   const scopeKey = pendingScope || `director:${identity.creatorId || 'open'}`;
-
-  if (getPendingDirectorJob(scopeKey)?.jobId) {
+  if (getPendingDirectorJob(scopeKey)) {
     return resumeDirectorGeneration(scopeKey, { pollIntervalMs, pollTimeoutMs, onStatus });
   }
+  clearDirectorBatchSnapshot(scopeKey);
+  onStatus?.({ status: 'generating', count, requestedCount: count });
 
+  let submitted;
   if (identity.creatorId || characterImage) {
-    return await generateIdentityBoundSequence({
-      count,
-      baseRequestKey,
-      prompt,
+    submitted = await characterGenerate({
+      engineId: 'openai_image',
+      positivePrompt: prompt,
       negativePrompt,
       characterImage,
       anchorReferences,
       mode,
       imageSize,
+      batchSize: count,
       creatorId: identity.creatorId,
       fashionSafetyMode,
-      pendingScope: scopeKey,
-      pollIntervalMs,
-      pollTimeoutMs,
-      onStatus,
+      requestKey: baseRequestKey,
+      returnPending: true,
+    });
+  } else {
+    if (refs.length) throw new Error('Add an Identity reference before using styling or scene references without a saved Cast member.');
+    submitted = await castQuickShootPlain({
+      positivePrompt: prompt,
+      negativePrompt,
+      batchSize: count,
+      imageSize,
+      fashionSafetyMode,
+      requestKey: baseRequestKey,
+      returnPending: true,
     });
   }
 
-  if (refs.length) {
-    throw new Error('Add an Identity reference before using styling or scene references without a saved Cast member.');
-  }
-
-  // Plain text-to-image can safely use the Images API's native n parameter;
-  // the serialization rule above is specifically for identity/reference-bound
-  // Responses vision renders.
-  onStatus?.({ status: 'generating', index: 0, count });
-  const submitted = await castQuickShootPlain({
-    positivePrompt: prompt,
-    negativePrompt,
-    batchSize: count,
-    imageSize,
-    fashionSafetyMode,
-    requestKey: baseRequestKey,
-    returnPending: true,
-  });
-  const result = await awaitGeneration(submitted, {
+  return awaitGeneration(submitted, {
     scopeKey,
     requestKey: baseRequestKey,
-    index: 0,
-    count,
+    requestedCount: count,
     pollIntervalMs,
     pollTimeoutMs,
     onStatus,
   });
-  if ((result.images || []).length !== count) {
-    throw new Error(`Director requested ${count} image${count === 1 ? '' : 's'} but received ${(result.images || []).length}. The partial batch was not accepted.`);
-  }
-  clearPendingDirectorJob(scopeKey);
-  onStatus?.({ status: 'succeeded', count, images: result.images || [] });
-  return result;
 }

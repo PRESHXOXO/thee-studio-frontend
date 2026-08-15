@@ -20,7 +20,7 @@ export const PORTRAIT_ANGLES = [
   'soft smile, front',
 ];
 
-export const BATCH_OPTIONS = [1, 2, 4];
+export const BATCH_OPTIONS = [1, 2, 3, 4, 5];
 
 // Union of the old Quick Shoot moods and Director energies, deduped.
 export const SHOOT_MOODS = [

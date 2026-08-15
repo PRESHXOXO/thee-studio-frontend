@@ -31,12 +31,15 @@ export function DirectorStatusCard({
   const states = {
     generating: { label: 'Generating', icon: 'loader-circle' },
     still_processing: { label: 'Still processing', icon: 'clock-3' },
+    queued: { label: 'Queued', icon: 'clock-3' },
+    running: { label: 'Still processing', icon: 'loader-circle' },
+    partial_success: { label: 'Partial results', icon: 'circle-check' },
     succeeded: { label: 'Completed', icon: 'circle-check' },
     failed: { label: 'Failed', icon: 'circle-x' },
     cancelled: { label: 'Cancelled', icon: 'circle-x' },
   };
   const currentState = states[generationStatus] || { label: ready ? 'Ready to generate' : 'Generation needs attention', icon: ready ? 'shield-check' : 'triangle-alert' };
-  const positiveState = generationStatus === 'succeeded' || (generationStatus === 'idle' && ready);
+  const positiveState = generationStatus === 'succeeded' || generationStatus === 'partial_success' || (generationStatus === 'idle' && ready);
   return (
     <div aria-label="Director generation preflight" style={{
       display: 'flex', flexDirection: 'column', gap: compact ? 9 : 12,

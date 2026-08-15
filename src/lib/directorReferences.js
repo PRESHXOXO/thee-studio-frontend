@@ -21,7 +21,7 @@ function authorityLines(references) {
   ];
 
   if (roles.has('outfit')) {
-    lines.push('OUTFIT AUTHORITY: Reproduce the role-labeled OUTFIT image as the wardrobe source of truth. Preserve visible garment construction, silhouette, fit, color, materials, accessories, footwear, jewelry, bag, and styling. Ignore clothing visible in identity images and any older creator-profile or memory wardrobe defaults. Do not simplify or substitute the outfit.');
+    lines.push('OUTFIT AUTHORITY: Reproduce the role-labeled OUTFIT image as the wardrobe source of truth. Preserve visible garment construction, silhouette, fit, color, materials, accessories, footwear, jewelry, bag, and styling. Ignore clothing visible in identity images and any creator-memory wardrobe defaults. Do not simplify or substitute the outfit.');
   }
   if (roles.has('makeup')) {
     lines.push('MAKEUP AUTHORITY: Transfer the role-labeled MAKEUP image’s visible eye, cheek/complexion, and lip design onto the creator: eyeshadow colors/placement/shape/intensity, liner/lashes, blush hue/placement/intensity, finish/highlight/contour, and lip liner/color/gloss. Preserve the creator’s facial identity. Do not neutralize bold makeup colors and do not copy the makeup-reference person’s face, hair, wardrobe, nails, jewelry, or pose.');
@@ -51,7 +51,7 @@ export function referencePromptBlock(references = [], { startsAfterIdentity = fa
     'VISUAL REFERENCE MAP — STRICT ROLE AUTHORITY:',
     ...lines,
     ...authorityLines(references),
-    'Keep each image in its assigned role. Identity establishes the person only. Outfit, Makeup, Hair, Background, and Pose must not recast identity or overwrite one another. Blend all assigned authorities into one coherent new photograph.',
+    'Keep each image in its assigned role. Identity images establish the person only. Outfit, Makeup, Hair, Background, and Pose must not recast identity or overwrite one another. Blend all assigned authorities into one coherent new photograph.',
   ].join('\n');
 }
 

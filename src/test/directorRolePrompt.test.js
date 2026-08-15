@@ -1,16 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const characterGenerate = vi.fn();
-const castQuickShootPlain = vi.fn();
-const pollCastQuickShootStatus = vi.fn();
-const retryCastQuickShootSlot = vi.fn();
-
-vi.mock('../api/studio.js', () => ({
-  characterGenerate,
-  castQuickShootPlain,
-  pollCastQuickShootStatus,
-  retryCastQuickShootSlot,
+const mocks = vi.hoisted(() => ({
+  characterGenerate: vi.fn(),
+  castQuickShootPlain: vi.fn(),
+  pollCastQuickShootStatus: vi.fn(),
+  retryCastQuickShootSlot: vi.fn(),
 }));
+
+vi.mock('../api/studio.js', () => mocks);
 
 import { generateDirectorPhoto } from '../api/directorGeneration.js';
 
@@ -22,10 +19,12 @@ function ref(role, index) {
 
 describe('Director provider prompt carries all visual authorities', () => {
   beforeEach(() => {
-    characterGenerate.mockReset();
-    castQuickShootPlain.mockReset();
+    mocks.characterGenerate.mockReset();
+    mocks.castQuickShootPlain.mockReset();
+    mocks.pollCastQuickShootStatus.mockReset();
+    mocks.retryCastQuickShootSlot.mockReset();
     sessionStorage.clear();
-    characterGenerate.mockResolvedValue({
+    mocks.characterGenerate.mockResolvedValue({
       status: 'succeeded',
       requestedCount: 1,
       succeededCount: 1,
@@ -51,8 +50,8 @@ describe('Director provider prompt carries all visual authorities', () => {
       requestKey: 'qa-all-authorities',
     });
 
-    expect(characterGenerate).toHaveBeenCalledTimes(1);
-    const request = characterGenerate.mock.calls[0][0];
+    expect(mocks.characterGenerate).toHaveBeenCalledTimes(1);
+    const request = mocks.characterGenerate.mock.calls[0][0];
     expect(request.anchorReferences.map(reference => reference.role)).toEqual([
       'outfit', 'background', 'makeup', 'hair', 'pose',
     ]);

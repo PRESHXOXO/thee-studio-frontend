@@ -48,7 +48,7 @@ function PromptBlock({ prompt, onCopy, copied }) {
   return <div style={{ position: 'relative' }}><pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: 'var(--surface-inset)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px 18px', font: '400 0.8rem/1.65 var(--font-mono)', color: 'var(--text-body)' }}>{prompt}</pre><button type="button" onClick={onCopy} title="Copy prompt" style={{ position: 'absolute', top: 10, right: 10, display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--surface-card)', border: '1px solid var(--border)', color: copied ? 'var(--status-ready)' : 'var(--text-muted)', font: '500 0.72rem/1 var(--font-ui)', fontFamily: 'inherit' }}><Icon name={copied ? 'check' : 'copy'} size={12} /> {copied ? 'Copied' : 'Copy'}</button></div>;
 }
 
-export function PromptLabV2({ campaignId = null, initialVision = '', initialSettings = null, creator = null }) {
+export function PromptLabV2({ campaignId = null, initialVision = '', initialSettings = null, creator = null, recoveryEnabled = true }) {
   const restored = initialSettings?.workflow === 'describe' ? initialSettings : {};
   const [rawInput, setRawInput] = React.useState(restored.rawInput || initialVision || '');
   const [references, setReferences] = React.useState([]);
@@ -109,6 +109,7 @@ export function PromptLabV2({ campaignId = null, initialVision = '', initialSett
 
   const pendingGeneration = useDirectorPendingGeneration(pendingScope, {
     active: generating,
+    enabled: recoveryEnabled,
     onSucceeded: generated => {
       try {
         const memory = creator ? getCreatorMemory(canonicalCreatorId(creator) || creator.id) : null;

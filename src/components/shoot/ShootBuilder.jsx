@@ -106,6 +106,7 @@ export function ShootBuilder({
   initialSettings = null,
   campaignId = null,
   layout = 'stacked',
+  recoveryEnabled = true,
 }) {
   const restored = initialSettings?.workflow === 'guided' ? initialSettings : {};
   const [identityMode, setIdentityMode] = React.useState(restored.identityMode || 'lifestyle');
@@ -307,6 +308,7 @@ export function ShootBuilder({
 
   const pendingGeneration = useDirectorPendingGeneration(pendingScope, {
     active: generating,
+    enabled: recoveryEnabled,
     onSucceeded: result => {
       try { acceptGeneratedBatch(result, buildGenerationDetails()); }
       catch (error) { setGenError(error.message || 'Generation failed.'); }

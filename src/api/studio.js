@@ -317,8 +317,10 @@ export async function characterGenerate({
   return parsed;
 }
 
-export async function pollCastQuickShootStatus(jobId) {
-  const { data, error } = await getSupabase().functions.invoke('cast-quick-shoot-status', { body: { jobId } });
+export async function pollCastQuickShootStatus(jobId, { continueBatch = false } = {}) {
+  const { data, error } = await getSupabase().functions.invoke('cast-quick-shoot-status', {
+    body: { jobId, continueBatch: continueBatch === true },
+  });
   if (error) throw new Error(error.message || 'cast-quick-shoot-status failed.');
   const response = {
     ...data,
@@ -345,7 +347,7 @@ async function awaitCastQuickShootResult(submission, timeoutMs = QUICK_SHOOT_POL
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, QUICK_SHOOT_POLL_INTERVAL_MS));
-    const status = await pollCastQuickShootStatus(submission.jobId);
+    const status = await pollCastQuickShootStatus(submission.jobId, { continueBatch: true });
     if (status.status === 'succeeded' || status.status === 'partial_success') return status;
     if (status.status === 'failed' || status.status === 'cancelled') {
       const error = new Error(status.error || 'Generation failed.');

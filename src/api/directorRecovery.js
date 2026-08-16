@@ -1,6 +1,6 @@
 import { getSupabase } from '../lib/supabase.js';
 
-const PENDING_STORAGE_PREFIX = 'thee-studio:director-pending:v2:';
+const PENDING_STORAGE_PREFIX = 'thee-studio:director-pending:v3:';
 
 function storageKey(scopeKey) {
   return `${PENDING_STORAGE_PREFIX}${encodeURIComponent(scopeKey || 'director')}`;

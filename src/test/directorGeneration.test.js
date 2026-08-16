@@ -147,7 +147,7 @@ describe('Director parent batch gateway', () => {
     const resumed = resumeDirectorGeneration('test:resume', { pollIntervalMs: 10, pollTimeoutMs: 20 });
     await vi.advanceTimersByTimeAsync(10);
     await expect(resumed).resolves.toEqual(expect.objectContaining({ status: 'succeeded', images: expect.any(Array) }));
-    expect(pollCastQuickShootStatus).toHaveBeenLastCalledWith('parent-resume-1');
+    expect(pollCastQuickShootStatus).toHaveBeenLastCalledWith('parent-resume-1', { continueBatch: true });
     expect(characterGenerate).toHaveBeenCalledTimes(1);
     expect(getPendingDirectorJob('test:resume')).toBeNull();
   });
@@ -169,7 +169,7 @@ describe('Director parent batch gateway', () => {
     await expect(retry).resolves.toEqual(expect.objectContaining({ status: 'succeeded' }));
     expect(retryCastQuickShootSlot).toHaveBeenCalledTimes(1);
     expect(retryCastQuickShootSlot).toHaveBeenCalledWith('parent-retry', 1);
-    expect(pollCastQuickShootStatus).toHaveBeenCalledWith('parent-retry');
+    expect(pollCastQuickShootStatus).toHaveBeenCalledWith('parent-retry', { continueBatch: true });
     expect(characterGenerate).toHaveBeenCalledTimes(1);
   });
 
@@ -205,7 +205,7 @@ describe('Director parent batch gateway', () => {
   });
 
   it('recovers before submission at gateway and never creates a second parent', async () => {
-    const key = `thee-studio:director-pending:v2:${encodeURIComponent('describe:cast-1')}`;
+    const key = `thee-studio:director-pending:v3:${encodeURIComponent('describe:cast-1')}`;
     recoverDirectorPendingPointer.mockImplementation(async () => {
       const record = { parentBatchId: 'existing-parent', status: 'running', requestedCount: 2 };
       localStorage.setItem(key, JSON.stringify(record));
@@ -240,5 +240,16 @@ describe('Director parent batch gateway', () => {
     })).rejects.toMatchObject({ code: 'DIRECTOR_RECOVERY_AMBIGUOUS' });
     expect(characterGenerate).not.toHaveBeenCalled();
     expect(castQuickShootPlain).not.toHaveBeenCalled();
+  });
+
+  it('invalidates pre-scope pending pointers instead of auto-resuming them', () => {
+    const oldKey = `thee-studio:director-pending:v2:${encodeURIComponent('describe:cast-1')}`;
+    localStorage.setItem(oldKey, JSON.stringify({
+      parentBatchId: 'legacy-untagged-parent',
+      status: 'running',
+    }));
+
+    expect(getPendingDirectorJob('describe:cast-1')).toBeNull();
+    expect(localStorage.getItem(oldKey)).toBeNull();
   });
 });

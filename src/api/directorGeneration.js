@@ -12,9 +12,12 @@ import { recoverDirectorPendingPointer } from './directorRecovery.js';
 const POLL_INTERVAL_MS = 2500;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
 const DATA_IMAGE = /^data:image\/(?:jpeg|png|webp);base64,/i;
-const PENDING_STORAGE_PREFIX = 'thee-studio:director-pending:v2:';
+const PENDING_STORAGE_PREFIX = 'thee-studio:director-pending:v3:';
 const RESULT_STORAGE_PREFIX = 'thee-studio:director-batch:v2:';
-const LEGACY_PENDING_STORAGE_PREFIX = 'thee-studio:director-pending:v1:';
+const STALE_PENDING_STORAGE_PREFIXES = [
+  'thee-studio:director-pending:v2:',
+  'thee-studio:director-pending:v1:',
+];
 
 function storageKey(prefix, scopeKey) {
   return `${prefix}${encodeURIComponent(scopeKey || 'director')}`;
@@ -75,19 +78,11 @@ function directorContextForScope(scopeKey = '') {
 export function getPendingDirectorJob(scopeKey) {
   const current = readRecord(PENDING_STORAGE_PREFIX, scopeKey);
   if (current?.parentBatchId || current?.jobId) return current;
-  const legacy = readRecord(LEGACY_PENDING_STORAGE_PREFIX, scopeKey);
-  if (!legacy?.jobId) return null;
-  const migrated = {
-    parentBatchId: legacy.jobId,
-    jobId: legacy.jobId,
-    requestedCount: legacy.count || 1,
-    requestKey: legacy.requestKey || null,
-    createdAt: legacy.updatedAt || new Date().toISOString(),
-    status: 'running',
-  };
-  writeRecord(PENDING_STORAGE_PREFIX, scopeKey, migrated);
-  removeRecord(LEGACY_PENDING_STORAGE_PREFIX, scopeKey);
-  return migrated;
+  // v1/v2 pointers predate strict workflow tagging. Reusing them can attach a
+  // hidden Director mode to unrelated legacy work and start status-driven
+  // continuation before the user presses Generate.
+  STALE_PENDING_STORAGE_PREFIXES.forEach(prefix => removeRecord(prefix, scopeKey));
+  return null;
 }
 
 export function getDirectorBatchSnapshot(scopeKey) {
@@ -197,7 +192,7 @@ export async function awaitGeneration(result, {
     await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
     let status;
     try {
-      status = await pollCastQuickShootStatus(parentBatchId);
+      status = await pollCastQuickShootStatus(parentBatchId, { continueBatch: true });
     } catch {
       // Transient status-check failure is not evidence the parent failed.
       continue;

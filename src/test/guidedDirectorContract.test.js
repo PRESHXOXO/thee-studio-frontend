@@ -44,4 +44,10 @@ describe('Guided Director contract', () => {
     expect(directorSource).toContain('selectedChar && !canonicalCreatorId(selectedChar) ? handleSaveAsAnchorForActive : undefined');
     expect(directorSource).toContain('directorIdentityState(selectedChar, []).locked');
   });
+
+  it('allows only the visible Director mode to recover or poll generation', () => {
+    expect(directorSource).toContain("recoveryEnabled={mode === 'guided'}");
+    expect(directorSource).toContain("recoveryEnabled={mode === 'describe'}");
+    expect(directorSource).toContain("recoveryEnabled={mode === 'talk'}");
+  });
 });

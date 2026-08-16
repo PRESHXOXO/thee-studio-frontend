@@ -19,7 +19,7 @@ function mayRecoverMissingPointer(scopeKey = '') {
   return scopeKey.startsWith('describe:') || scopeKey.startsWith('talk:');
 }
 
-export function useDirectorPendingGeneration(scopeKey, { active = false, onSucceeded, onFailed, onBatchUpdate } = {}) {
+export function useDirectorPendingGeneration(scopeKey, { active = false, enabled = true, onSucceeded, onFailed, onBatchUpdate } = {}) {
   const initialRef = React.useRef(null);
   if (!initialRef.current) {
     const pending = getPendingDirectorJob(scopeKey);
@@ -82,7 +82,10 @@ export function useDirectorPendingGeneration(scopeKey, { active = false, onSucce
   }, [scopeKey, deliverTerminal]);
 
   React.useEffect(() => {
-    if (active) return undefined;
+    // Hidden Director modes remain mounted to preserve form state. They must
+    // never discover or poll a batch because status polling can continue
+    // already-reserved provider work.
+    if (active || !enabled) return undefined;
     let disposed = false;
     let retryTimer = null;
 
@@ -119,7 +122,7 @@ export function useDirectorPendingGeneration(scopeKey, { active = false, onSucce
       disposed = true;
       if (retryTimer) window.clearTimeout(retryTimer);
     };
-  }, [active, scopeKey, handleStatus, deliverTerminal]);
+  }, [active, enabled, scopeKey, handleStatus, deliverTerminal]);
 
   const continueRetryPolling = React.useCallback(() => {
     const check = async () => {

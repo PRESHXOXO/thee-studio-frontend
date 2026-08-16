@@ -169,7 +169,9 @@ describe('Cast cloud workflows never call local Gradio', () => {
     it('reports pending without ever creating a provider request', async () => {
       invoke.mockResolvedValueOnce({ data: { status: 'pending' }, error: null });
       const result = await pollCastQuickShootStatus('job-123');
-      expect(invoke).toHaveBeenCalledWith('cast-quick-shoot-status', expect.objectContaining({ body: { jobId: 'job-123' } }));
+      expect(invoke).toHaveBeenCalledWith('cast-quick-shoot-status', expect.objectContaining({
+        body: { jobId: 'job-123', continueBatch: false },
+      }));
       expect(result).toEqual(expect.objectContaining({ status: 'running', parentBatchId: 'job-123', requestedCount: 1 }));
       expect(global.fetch).not.toHaveBeenCalled();
     });
@@ -216,6 +218,14 @@ describe('Cast cloud workflows never call local Gradio', () => {
       await pollCastQuickShootStatus('job-123');
       expect(invoke).toHaveBeenCalledTimes(3);
       expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('requests provider continuation only when orchestration explicitly enables it', async () => {
+      invoke.mockResolvedValue({ data: { status: 'pending' }, error: null });
+      await pollCastQuickShootStatus('job-123', { continueBatch: true });
+      expect(invoke).toHaveBeenCalledWith('cast-quick-shoot-status', expect.objectContaining({
+        body: { jobId: 'job-123', continueBatch: true },
+      }));
     });
   });
 

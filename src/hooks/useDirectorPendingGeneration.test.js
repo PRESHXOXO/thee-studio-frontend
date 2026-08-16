@@ -126,4 +126,18 @@ describe('useDirectorPendingGeneration', () => {
     expect(mocks.recoverDirectorPendingPointer).not.toHaveBeenCalled();
     expect(mocks.resumeDirectorGeneration).not.toHaveBeenCalled();
   });
+
+  it('does not recover or poll while its Director panel is hidden', async () => {
+    const { rerender } = renderHook(
+      ({ enabled }) => useDirectorPendingGeneration('describe:cast-1', { enabled }),
+      { initialProps: { enabled: false } },
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mocks.recoverDirectorPendingPointer).not.toHaveBeenCalled();
+    expect(mocks.resumeDirectorGeneration).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+    await waitFor(() => expect(mocks.resumeDirectorGeneration).toHaveBeenCalledTimes(1));
+  });
 });

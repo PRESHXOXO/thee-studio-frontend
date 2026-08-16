@@ -7,7 +7,7 @@ vi.mock('../lib/supabase.js', () => ({
 
 import { recoverDirectorPendingPointer } from './directorRecovery.js';
 
-const PREFIX = 'thee-studio:director-pending:v2:';
+const PREFIX = 'thee-studio:director-pending:v3:';
 const key = scope => `${PREFIX}${encodeURIComponent(scope)}`;
 
 describe('recoverDirectorPendingPointer', () => {

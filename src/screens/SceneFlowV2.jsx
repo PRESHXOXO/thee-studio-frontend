@@ -47,7 +47,7 @@ function buildLivedInPrompt(scene, outputType, identityLocked, creatorName) {
   ].filter(Boolean).join('\n\n');
 }
 
-export function SceneFlowV2({ campaignId = null, initialVision = '', initialSettings = null, creator = null }) {
+export function SceneFlowV2({ campaignId = null, initialVision = '', initialSettings = null, creator = null, recoveryEnabled = true }) {
   const restored = initialSettings?.workflow === 'talk' ? initialSettings : {};
   const [messages, setMessages] = React.useState([]);
   const [history, setHistory] = React.useState([]);
@@ -117,6 +117,7 @@ export function SceneFlowV2({ campaignId = null, initialVision = '', initialSett
 
   const pendingGeneration = useDirectorPendingGeneration(pendingScope, {
     active: generating,
+    enabled: recoveryEnabled,
     onSucceeded: result => {
       try {
         if (outputType === 'photo') acceptPhotoResult(result, scene);

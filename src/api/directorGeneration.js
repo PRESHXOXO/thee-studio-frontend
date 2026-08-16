@@ -10,7 +10,10 @@ import { isTerminalBatchStatus, normalizeGenerationBatch } from '../lib/generati
 import { recoverDirectorPendingPointer } from './directorRecovery.js';
 
 const POLL_INTERVAL_MS = 2500;
-const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+// A five-slot reference batch can legitimately exceed five minutes because
+// each provider slot is independent and intentionally sequential. Keep the
+// explicit foreground observer alive; backend slot chaining owns execution.
+const POLL_TIMEOUT_MS = 30 * 60 * 1000;
 const DATA_IMAGE = /^data:image\/(?:jpeg|png|webp);base64,/i;
 const PENDING_STORAGE_PREFIX = 'thee-studio:director-pending:v3:';
 const RESULT_STORAGE_PREFIX = 'thee-studio:director-batch:v2:';

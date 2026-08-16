@@ -297,7 +297,7 @@ export function SceneFlowV2({ campaignId = null, initialVision = '', initialSett
           <button type="button" onClick={() => addShot(shot.id)} disabled={thinking || generating || scene.shots.length >= 12} style={{ justifySelf: 'start' }}>+ Add after</button>
         </article>)}
       </div>}
-      <GenerationProgress active={generating || pendingGeneration.renderStatus === 'still_processing'} identityLocked={identity.locked} batchSize={pendingGeneration.batch?.requestedCount || (outputType === 'photo' ? batchSize : 1)} engine={outputType === 'video' ? 'Managed Video' : 'OpenAI'} mode={outputType === 'video' ? 'video' : 'scene'} />
+      <GenerationProgress active={generating || pendingGeneration.renderStatus === 'still_processing'} identityLocked={identity.locked} batchSize={pendingGeneration.batch?.requestedCount || (outputType === 'photo' ? batchSize : 1)} completedCount={pendingGeneration.batch?.slots?.filter(slot => ['succeeded', 'provider_blocked', 'failed', 'cancelled'].includes(slot.status)).length ?? 0} engine={outputType === 'video' ? 'Managed Video' : 'OpenAI'} mode={outputType === 'video' ? 'video' : 'scene'} />
       {pendingGeneration.batch && <GenerationBatchResults batch={associateBatchSlotsWithShots(pendingGeneration.batch, scene)} compact onRetry={slotIndex => pendingGeneration.retrySlot(slotIndex).catch(error => setMessages(current => [...current, { role: 'assistant', text: `⚠️ Retry failed: ${error.message}` }]))} retryingSlots={pendingGeneration.retryingSlots} />}
     </div>
 

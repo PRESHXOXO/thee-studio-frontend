@@ -67,7 +67,7 @@ function getStages(engine, identityLocked, mode) {
 // easeOutCubic
 function ease(t) { return 1 - Math.pow(1 - t, 3); }
 
-export function GenerationProgress({ active, identityLocked = false, engine = '', batchSize = 1, mode = 'image', style }) {
+export function GenerationProgress({ active, identityLocked = false, engine = '', batchSize = 1, completedCount = null, mode = 'image', style }) {
   const [progress, setProgress]     = React.useState(0);
   const [stageIdx, setStageIdx]     = React.useState(0);
   const [complete, setComplete]     = React.useState(false);
@@ -136,8 +136,16 @@ export function GenerationProgress({ active, identityLocked = false, engine = ''
 
   if (!visible) return null;
 
+  const hasSlotProgress = active && batchSize > 1 && Number.isInteger(completedCount) && completedCount >= 0;
+  const displayedProgress = complete
+    ? 100
+    : hasSlotProgress
+      ? Math.min(99, (completedCount / batchSize) * 100)
+      : progress;
   const label = complete
     ? 'Done'
+    : hasSlotProgress
+      ? `Generating sequence… · ${completedCount} of ${batchSize} slots finished`
     : batchSize > 1
       ? `${currentStage?.label} · ${batchSize} images`
       : currentStage?.label;
@@ -164,7 +172,7 @@ export function GenerationProgress({ active, identityLocked = false, engine = ''
           {label}
         </div>
         <span style={{ font: '500 0.75rem/1 var(--font-mono)', color: 'var(--text-faint)', flexShrink: 0 }}>
-          {complete ? '✓' : `${Math.round(progress)}%`}
+          {complete ? '✓' : `${Math.round(displayedProgress)}%`}
         </span>
       </div>
 
@@ -172,7 +180,7 @@ export function GenerationProgress({ active, identityLocked = false, engine = ''
       <div style={{ height: 5, borderRadius: 999, background: 'var(--cream-deep)', overflow: 'hidden' }}>
         <div style={{
           height: '100%',
-          width: `${Math.round(progress)}%`,
+          width: `${Math.round(displayedProgress)}%`,
           borderRadius: 999,
           background: complete ? 'var(--status-ready)' : 'var(--grad-coral)',
           transition: complete ? 'width 0.3s ease-out, background 0.3s' : 'width 0.6s ease-out',

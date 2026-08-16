@@ -25,6 +25,13 @@ describe('Guided Director contract', () => {
     expect(source).not.toContain('images.length !== batchSize');
   });
 
+  it('exposes all five styling roles for saved Cast and Identity plus five for open subjects', () => {
+    expect(source).toContain('MAX_SAVED_CAST_STYLING_REFERENCES');
+    expect(source).toContain('MAX_DIRECTOR_REFERENCES');
+    expect(source).not.toContain('maxReferences={creator ? 3 : 4}');
+    expect(source).toContain('Add up to five Outfit, Background, Hair, Makeup, or Pose references.');
+  });
+
   it('advertises and downloads actual PNG bytes instead of renaming a provider artifact', () => {
     expect(source).toContain('format="PNG"');
     expect(source).toContain("import { downloadImageAsPng } from '../../lib/libraryAssets.js';");

@@ -8,6 +8,13 @@ describe('generation batch normalization', () => {
     expect(batch.slots).toEqual([expect.objectContaining({ slotIndex: 0, status: 'succeeded', imageUrl: 'one.png' })]);
   });
 
+  it('fails closed on an explicit malformed parent status', () => {
+    const batch = normalizeGenerationBatch({ status: 'mystery_provider_state', requestedCount: 1 });
+    expect(batch.status).toBe('failed');
+    expect(batch.slots[0]).toEqual(expect.objectContaining({ status: 'failed', imageUrl: null }));
+    expect(batch.images).toEqual([]);
+  });
+
   it('preserves original slot order in a partial-success batch', () => {
     const batch = normalizeGenerationBatch({
       status: 'partial_success', parentBatchId: 'parent-1', requestedCount: 3,

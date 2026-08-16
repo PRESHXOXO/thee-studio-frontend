@@ -36,7 +36,7 @@ function compatibleScope(currentScope, candidateScope) {
   const candidate = scopeParts(candidateScope);
   if (!current.workflow || current.workflow !== candidate.workflow) return false;
   if (current.outputType && current.outputType !== candidate.outputType) return false;
-  if (current.creatorId && current.creatorId !== candidate.creatorId) return false;
+  if (current.creatorId !== candidate.creatorId) return false;
   return true;
 }
 
@@ -66,7 +66,18 @@ function persistRecoveredPointer(scopeKey, record) {
   const value = JSON.stringify(normalized);
   const key = storageKey(scopeKey);
   try { globalThis.sessionStorage?.setItem(key, value); } catch {}
-  try { globalThis.localStorage?.setItem(key, value); } catch {}
+  const pointerValue = JSON.stringify({
+    parentBatchId: normalized.parentBatchId || normalized.jobId,
+    jobId: normalized.parentBatchId || normalized.jobId,
+    requestedCount: normalized.requestedCount || 1,
+    status: normalized.status || 'running',
+    scopeKey,
+    sourceScopeKey: normalized.sourceScopeKey || null,
+    serverRecovered: Boolean(normalized.serverRecovered),
+    recoveredAt: normalized.recoveredAt,
+    updatedAt: normalized.updatedAt,
+  });
+  try { globalThis.localStorage?.setItem(key, pointerValue); } catch {}
   return normalized;
 }
 
@@ -98,10 +109,17 @@ export async function recoverDirectorPendingPointer(scopeKey) {
   if (browserRecord) return browserRecord;
 
   const { creatorId } = scopeParts(scopeKey);
+  const { workflow, outputType } = scopeParts(scopeKey);
   const { data, error } = await getSupabase().functions.invoke('cast-quick-shoot-recover', {
-    body: { creatorId },
+    body: { creatorId, workflow, outputType },
   });
   if (error) throw new Error(error.message || 'Director could not check for an unfinished render.');
+  if (data?.status === 'ambiguous') {
+    const ambiguity = new Error('Director found more than one unfinished compatible render and will not guess or start another batch.');
+    ambiguity.code = 'DIRECTOR_RECOVERY_AMBIGUOUS';
+    ambiguity.status = 'recovery_ambiguous';
+    throw ambiguity;
+  }
   if (!data || data.status !== 'found' || !data.parentBatchId) return null;
 
   return persistRecoveredPointer(scopeKey, {

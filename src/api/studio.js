@@ -249,6 +249,7 @@ export async function characterGenerate({
   fashionSafetyMode = 'auto',
   requestKey = null,
   returnPending = false,
+  directorContext = null,
 }) {
   const structuredReferences = normalizeGenerationReferences(anchorReferences)
     .slice(0, characterImage || creatorId ? MAX_SAVED_CAST_STYLING_REFERENCES : MAX_DIRECTOR_REFERENCES);
@@ -278,6 +279,7 @@ export async function characterGenerate({
       imageSize,
       fashionSafetyMode,
       shootMode: mode,
+      directorContext,
     }, requestKey || crypto.randomUUID());
     if (data.status === 'failed' || data.status === 'cancelled') {
       if (returnPending) return normalizeCastBatchResponse(data, { requestedCount: batchSize });
@@ -358,7 +360,7 @@ export async function preflightCastReferences(references, creatorId = null) {
   return invokeCloudFunction('cast-reference-preflight', { creatorId, references });
 }
 
-export async function castQuickShootPlain({ positivePrompt, negativePrompt, batchSize = 1, creatorId = null, imageSize = 'Vertical 9:16', fashionSafetyMode = 'auto', requestKey = null, returnPending = false } = {}) {
+export async function castQuickShootPlain({ positivePrompt, negativePrompt, batchSize = 1, creatorId = null, imageSize = 'Vertical 9:16', fashionSafetyMode = 'auto', requestKey = null, returnPending = false, directorContext = null } = {}) {
   const data = await invokeCloudFunction('cast-quick-shoot', {
     creatorId,
     prompt: positivePrompt,
@@ -367,6 +369,7 @@ export async function castQuickShootPlain({ positivePrompt, negativePrompt, batc
     batchSize,
     imageSize,
     fashionSafetyMode,
+    directorContext,
   }, requestKey || crypto.randomUUID());
   if (data.status === 'pending' || data.status === 'queued' || data.status === 'running') {
     const submission = await normalizeCastBatchResponse(data, { requestedCount: batchSize });

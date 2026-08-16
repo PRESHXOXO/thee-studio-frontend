@@ -5,9 +5,13 @@ const mocks = vi.hoisted(() => ({
   castQuickShootPlain: vi.fn(),
   pollCastQuickShootStatus: vi.fn(),
   retryCastQuickShootSlot: vi.fn(),
+  recoverDirectorPendingPointer: vi.fn(),
 }));
 
 vi.mock('../api/studio.js', () => mocks);
+vi.mock('../api/directorRecovery.js', () => ({
+  recoverDirectorPendingPointer: mocks.recoverDirectorPendingPointer,
+}));
 
 import {
   directorIdentityState,
@@ -18,7 +22,7 @@ import {
   retryDirectorGenerationSlot,
 } from '../api/directorGeneration.js';
 
-const { characterGenerate, castQuickShootPlain, pollCastQuickShootStatus, retryCastQuickShootSlot } = mocks;
+const { characterGenerate, castQuickShootPlain, pollCastQuickShootStatus, retryCastQuickShootSlot, recoverDirectorPendingPointer } = mocks;
 const CLOUD_ID = '2b421abb-b8a5-4f45-b153-1376ee684be8';
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ';
 
@@ -47,7 +51,10 @@ describe('Director parent batch gateway', () => {
     castQuickShootPlain.mockReset();
     pollCastQuickShootStatus.mockReset();
     retryCastQuickShootSlot.mockReset();
+    recoverDirectorPendingPointer.mockReset();
+    recoverDirectorPendingPointer.mockResolvedValue(null);
     sessionStorage.clear();
+    localStorage.clear();
     vi.useRealTimers();
   });
 
@@ -195,5 +202,43 @@ describe('Director parent batch gateway', () => {
     expect(result.images).toHaveLength(2);
     expect(castQuickShootPlain).toHaveBeenCalledTimes(1);
     expect(castQuickShootPlain).toHaveBeenCalledWith(expect.objectContaining({ batchSize: 2, requestKey: 'plain-test', returnPending: true }));
+  });
+
+  it('recovers before submission at gateway and never creates a second parent', async () => {
+    const key = `thee-studio:director-pending:v2:${encodeURIComponent('describe:cast-1')}`;
+    recoverDirectorPendingPointer.mockImplementation(async () => {
+      const record = { parentBatchId: 'existing-parent', status: 'running', requestedCount: 2 };
+      localStorage.setItem(key, JSON.stringify(record));
+      return record;
+    });
+    pollCastQuickShootStatus.mockResolvedValueOnce(completedBatch(2));
+
+    const result = generateDirectorPhoto({
+      creator: { id: CLOUD_ID, cloudCreatorId: CLOUD_ID, name: 'Amara' },
+      prompt: 'Scene.',
+      batchSize: 2,
+      pendingScope: 'describe:cast-1',
+      pollIntervalMs: 1,
+      pollTimeoutMs: 20,
+    });
+
+    await expect(result).resolves.toEqual(expect.objectContaining({ status: 'succeeded' }));
+    expect(recoverDirectorPendingPointer).toHaveBeenCalledWith('describe:cast-1');
+    expect(characterGenerate).not.toHaveBeenCalled();
+    expect(castQuickShootPlain).not.toHaveBeenCalled();
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(sessionStorage.getItem(key)).toBeNull();
+  });
+
+  it('does not submit when recovery is ambiguous', async () => {
+    const ambiguity = Object.assign(new Error('ambiguous'), { code: 'DIRECTOR_RECOVERY_AMBIGUOUS' });
+    recoverDirectorPendingPointer.mockRejectedValueOnce(ambiguity);
+    await expect(generateDirectorPhoto({
+      creator: { id: CLOUD_ID, cloudCreatorId: CLOUD_ID, name: 'Amara' },
+      prompt: 'Scene.',
+      pendingScope: 'talk:cast-1:photo',
+    })).rejects.toMatchObject({ code: 'DIRECTOR_RECOVERY_AMBIGUOUS' });
+    expect(characterGenerate).not.toHaveBeenCalled();
+    expect(castQuickShootPlain).not.toHaveBeenCalled();
   });
 });

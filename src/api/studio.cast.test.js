@@ -219,6 +219,25 @@ describe('Cast cloud workflows never call local Gradio', () => {
     });
   });
 
+  it('keeps Identity plus all five styling authority roles without truncation', async () => {
+    invoke.mockResolvedValueOnce({ data: { status: 'pending', parentBatchId: 'all-role-parent', requestedCount: 1 }, error: null });
+    const anchorReferences = ['outfit', 'background', 'makeup', 'hair', 'pose'].map((role, index) => ({
+      dataUrl: `${PIXEL}${index}`,
+      role,
+      name: `${role}.png`,
+    }));
+    await characterGenerate({
+      positivePrompt: 'p',
+      characterImage: PIXEL,
+      anchorReferences,
+      directorContext: { workflow: 'describe', outputType: 'photo' },
+      returnPending: true,
+    });
+    const body = invoke.mock.calls[0][1].body;
+    expect(body.anchorReferences.map(reference => reference.role)).toEqual(['outfit', 'background', 'makeup', 'hair', 'pose']);
+    expect(body.directorContext).toEqual({ workflow: 'describe', outputType: 'photo' });
+  });
+
   it('sends batchSize 5 in one saved-Cast parent request', async () => {
     invoke.mockResolvedValueOnce({ data: { status: 'pending', parentBatchId: 'parent-five', requestedCount: 5 }, error: null });
     const result = await characterGenerate({ positivePrompt: 'p', creatorId: 'creator-1', batchSize: 5, returnPending: true });

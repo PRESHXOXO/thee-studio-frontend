@@ -16,6 +16,7 @@ import { creatorMemoryPrompt, getCreatorMemory } from '../lib/creatorMemory.js';
 import { canonicalCreatorId } from '../lib/cloudCreators.js';
 import { BATCH_OPTIONS } from '../lib/shootOptions.js';
 import { normalizeGenerationBatch } from '../lib/generationBatch.js';
+import { MAX_DIRECTOR_REFERENCES, MAX_SAVED_CAST_STYLING_REFERENCES } from '../lib/directorReferences.js';
 import {
   getAdapter, aspectToImageSize,
   FORMATS, ASPECTS, LIGHTINGS, FINISHES, SURPRISE, STANDING_NEGATIVES,
@@ -206,7 +207,7 @@ export function PromptLabV2({ campaignId = null, initialVision = '', initialSett
 
     <Card style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <textarea style={TEXTAREA} value={rawInput} onChange={event => setRawInput(event.target.value)} placeholder={creator ? `${creator.name} at a rooftop dinner in Paris, golden hour, expensive but not trying` : 'a rooftop dinner in Paris, golden hour, expensive but not trying'} />
-      <ReferenceImageTray references={references} onChange={setReferences} maxReferences={creator ? 3 : 4} defaultRole={creator ? 'outfit' : 'identity'} identityLocked={Boolean(creator)} disabled={building || generating} title={creator ? 'Styling & scene references' : 'Visual references'} description={creator ? `${creator.name} already owns the Identity slot. Add Outfit, Background, Hair, Makeup, or Pose references only.` : 'If references are used without a saved Cast member, assign one as Identity.'} />
+      <ReferenceImageTray references={references} onChange={setReferences} maxReferences={creator ? MAX_SAVED_CAST_STYLING_REFERENCES : MAX_DIRECTOR_REFERENCES} defaultRole={creator ? 'outfit' : 'identity'} identityLocked={Boolean(creator)} disabled={building || generating} title={creator ? 'Styling & scene references' : 'Visual references'} description={creator ? `${creator.name} already owns the Identity slot. Add up to five Outfit, Background, Hair, Makeup, or Pose references.` : 'Assign one image as Identity, then add up to five styling or scene references.'} />
       {error && <div role="alert" style={{ font: 'var(--text-sm)', color: 'var(--cherry)' }}>{error}</div>}
       {refusal && <div style={{ padding: 12, borderRadius: 'var(--radius-md)', background: 'var(--status-warn-bg)', font: 'var(--text-sm)', color: 'var(--text-body)' }}>{refusal}</div>}
       <Button variant="accent" loading={building} disabled={building || !rawInput.trim()} onClick={handleBuild} style={{ alignSelf: 'flex-start' }}><Icon name="wand-2" size={15} />{building ? 'Engineering…' : result ? 'Rebuild direction' : 'Build direction'}</Button>

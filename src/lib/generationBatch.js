@@ -12,7 +12,10 @@ function normalizedStatus(raw = {}) {
   const batchStatus = String(raw.batchStatus || '').toLowerCase();
   if (status === 'pending') return batchStatus === 'queued' ? 'queued' : 'running';
   if (status === 'queued' || status === 'running') return status;
-  return TERMINAL_BATCH_STATUSES.has(status) ? status : 'succeeded';
+  if (TERMINAL_BATCH_STATUSES.has(status)) return status;
+  // Status-less payloads are supported for old one-image success responses.
+  // An explicit unknown status is malformed and must never become success.
+  return status ? 'failed' : 'succeeded';
 }
 
 function assetUrl(asset) {

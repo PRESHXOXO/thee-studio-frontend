@@ -7,6 +7,7 @@ import {
 import { canonicalCreatorId } from '../lib/cloudCreators.js';
 import { referencePromptBlock } from '../lib/directorReferences.js';
 import { isTerminalBatchStatus, normalizeGenerationBatch } from '../lib/generationBatch.js';
+import { recoverDirectorPendingPointer } from './directorRecovery.js';
 
 const POLL_INTERVAL_MS = 2500;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -20,29 +21,55 @@ function storageKey(prefix, scopeKey) {
 }
 
 function readRecord(prefix, scopeKey) {
-  try {
-    const raw = globalThis.sessionStorage?.getItem(storageKey(prefix, scopeKey));
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
+  const key = storageKey(prefix, scopeKey);
+  let raw = null;
+  try { raw = globalThis.sessionStorage?.getItem(key); } catch {}
+  if (!raw && prefix === PENDING_STORAGE_PREFIX) {
+    try { raw = globalThis.localStorage?.getItem(key); } catch {}
   }
+  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
 }
 
 function writeRecord(prefix, scopeKey, record) {
-  try {
-    globalThis.sessionStorage?.setItem(storageKey(prefix, scopeKey), JSON.stringify({
-      ...record,
+  const key = storageKey(prefix, scopeKey);
+  const value = JSON.stringify({
+    ...record,
+    scopeKey,
+    updatedAt: new Date().toISOString(),
+  });
+  let persisted = false;
+  try { globalThis.sessionStorage?.setItem(key, value); persisted = true; } catch {}
+  if (prefix === PENDING_STORAGE_PREFIX) {
+    // Cross-session fallback stores pointer metadata only. Never persist
+    // signed asset URLs, image payloads, or private reference snapshots.
+    const pointerValue = JSON.stringify({
+      parentBatchId: record.parentBatchId || record.jobId,
+      jobId: record.parentBatchId || record.jobId,
+      requestedCount: record.requestedCount || 1,
+      requestKey: record.requestKey || null,
+      status: record.status || 'running',
       scopeKey,
+      createdAt: record.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    }));
-    return Boolean(globalThis.sessionStorage?.getItem(storageKey(prefix, scopeKey)));
-  } catch {
-    return false;
+    });
+    try { globalThis.localStorage?.setItem(key, pointerValue); persisted = true; } catch {}
   }
+  return persisted;
 }
 
 function removeRecord(prefix, scopeKey) {
-  try { globalThis.sessionStorage?.removeItem(storageKey(prefix, scopeKey)); } catch {}
+  const key = storageKey(prefix, scopeKey);
+  try { globalThis.sessionStorage?.removeItem(key); } catch {}
+  try { globalThis.localStorage?.removeItem(key); } catch {}
+}
+
+function directorContextForScope(scopeKey = '') {
+  const [workflow, , outputType] = String(scopeKey).split(':');
+  if (workflow !== 'describe' && workflow !== 'talk' && workflow !== 'guided') return null;
+  return {
+    workflow,
+    outputType: workflow === 'talk' ? outputType || 'photo' : 'photo',
+  };
 }
 
 export function getPendingDirectorJob(scopeKey) {
@@ -298,8 +325,18 @@ export async function generateDirectorPhoto({
   if (getPendingDirectorJob(scopeKey)) {
     return resumeDirectorGeneration(scopeKey, { pollIntervalMs, pollTimeoutMs, onStatus });
   }
+  // Describe/Talk can lose every browser pointer after a refresh or storage
+  // eviction. Discover before provider submission at the shared gateway so a
+  // UI timing race can never create a second paid parent batch.
+  if (scopeKey.startsWith('describe:') || scopeKey.startsWith('talk:')) {
+    await recoverDirectorPendingPointer(scopeKey);
+    if (getPendingDirectorJob(scopeKey)) {
+      return resumeDirectorGeneration(scopeKey, { pollIntervalMs, pollTimeoutMs, onStatus });
+    }
+  }
   clearDirectorBatchSnapshot(scopeKey);
   onStatus?.({ status: 'generating', count, requestedCount: count });
+  const directorContext = directorContextForScope(scopeKey);
 
   let submitted;
   if (identity.creatorId || characterImage) {
@@ -316,6 +353,7 @@ export async function generateDirectorPhoto({
       fashionSafetyMode,
       requestKey: baseRequestKey,
       returnPending: true,
+      directorContext,
     });
   } else {
     if (refs.length) throw new Error('Add an Identity reference before using styling or scene references without a saved Cast member.');
@@ -327,6 +365,7 @@ export async function generateDirectorPhoto({
       fashionSafetyMode,
       requestKey: baseRequestKey,
       returnPending: true,
+      directorContext,
     });
   }
 

@@ -82,6 +82,40 @@ describe('useDirectorPendingGeneration', () => {
     ));
   });
 
+  it('recovers a lost Talk It Through pointer before polling the same parent', async () => {
+    let recovered = false;
+    mocks.getPendingDirectorJob.mockImplementation(() => recovered
+      ? { parentBatchId: 'talk-parent', status: 'running', requestedCount: 2 }
+      : null);
+    mocks.recoverDirectorPendingPointer.mockImplementation(async () => {
+      recovered = true;
+      return { parentBatchId: 'talk-parent', status: 'running', requestedCount: 2 };
+    });
+
+    renderHook(() => useDirectorPendingGeneration('talk:cast-1:photo'));
+
+    await waitFor(() => expect(mocks.recoverDirectorPendingPointer).toHaveBeenCalledWith('talk:cast-1:photo'));
+    await waitFor(() => expect(mocks.resumeDirectorGeneration).toHaveBeenCalledWith(
+      'talk:cast-1:photo',
+      expect.objectContaining({ onStatus: expect.any(Function) }),
+    ));
+  });
+
+  it('does not resume or generate when recovery is ambiguous', async () => {
+    mocks.getPendingDirectorJob.mockReturnValue(null);
+    mocks.recoverDirectorPendingPointer.mockRejectedValue(Object.assign(new Error('ambiguous'), {
+      code: 'DIRECTOR_RECOVERY_AMBIGUOUS',
+    }));
+    const onFailed = vi.fn();
+
+    renderHook(() => useDirectorPendingGeneration('describe:cast-1', { onFailed }));
+
+    await waitFor(() => expect(onFailed).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'DIRECTOR_RECOVERY_AMBIGUOUS',
+    })));
+    expect(mocks.resumeDirectorGeneration).not.toHaveBeenCalled();
+  });
+
   it('does not run server discovery for Guided when there is no saved pointer', async () => {
     mocks.getPendingDirectorJob.mockReturnValue(null);
     mocks.getDirectorBatchSnapshot.mockReturnValue(null);

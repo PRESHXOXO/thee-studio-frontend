@@ -23,13 +23,18 @@ describe('recoverDirectorPendingPointer', () => {
       requestedCount: 3,
       status: 'running',
       scopeKey: 'describe:cast-7',
+      batch: { assets: [{ signedUrl: 'https://private.example/signed' }] },
     }));
 
-    const recovered = await recoverDirectorPendingPointer('describe:open');
+    const recovered = await recoverDirectorPendingPointer('describe:cast-7');
 
     expect(recovered.parentBatchId).toBe('batch-browser');
     expect(invoke).not.toHaveBeenCalled();
-    expect(JSON.parse(sessionStorage.getItem(key('describe:open'))).parentBatchId).toBe('batch-browser');
+    expect(JSON.parse(sessionStorage.getItem(key('describe:cast-7'))).parentBatchId).toBe('batch-browser');
+    const durable = JSON.parse(localStorage.getItem(key('describe:cast-7')));
+    expect(durable.parentBatchId).toBe('batch-browser');
+    expect(durable.batch).toBeUndefined();
+    expect(JSON.stringify(durable)).not.toContain('private.example');
   });
 
   it('discovers exactly one active server batch when browser state is gone', async () => {
@@ -46,16 +51,40 @@ describe('recoverDirectorPendingPointer', () => {
     const recovered = await recoverDirectorPendingPointer('talk:cast-9:photo');
 
     expect(invoke).toHaveBeenCalledWith('cast-quick-shoot-recover', {
-      body: { creatorId: 'cast-9' },
+      body: { creatorId: 'cast-9', workflow: 'talk', outputType: 'photo' },
     });
     expect(recovered.parentBatchId).toBe('batch-server');
     expect(recovered.batch.status).toBe('running');
     expect(JSON.parse(sessionStorage.getItem(key('talk:cast-9:photo'))).parentBatchId).toBe('batch-server');
   });
 
-  it('fails closed instead of guessing when the server cannot identify one batch', async () => {
+  it('fails closed instead of guessing or generating when server discovery is ambiguous', async () => {
     invoke.mockResolvedValue({ data: { status: 'ambiguous', activeBatchCount: 2 }, error: null });
-    await expect(recoverDirectorPendingPointer('describe:open')).resolves.toBeNull();
+    await expect(recoverDirectorPendingPointer('describe:open')).rejects.toMatchObject({
+      code: 'DIRECTOR_RECOVERY_AMBIGUOUS',
+      status: 'recovery_ambiguous',
+    });
     expect(sessionStorage.length).toBe(0);
+    expect(localStorage.length).toBe(0);
+  });
+
+  it('leaves Director idle when no unfinished compatible batch exists', async () => {
+    invoke.mockResolvedValue({ data: { status: 'none' }, error: null });
+    await expect(recoverDirectorPendingPointer('describe:open')).resolves.toBeNull();
+    expect(invoke).toHaveBeenCalledWith('cast-quick-shoot-recover', {
+      body: { creatorId: null, workflow: 'describe', outputType: null },
+    });
+  });
+
+  it('never treats a saved-Cast browser pointer as compatible with an open subject', async () => {
+    localStorage.setItem(key('describe:cast-9'), JSON.stringify({
+      parentBatchId: 'saved-cast-parent',
+      status: 'running',
+    }));
+    invoke.mockResolvedValue({ data: { status: 'none' }, error: null });
+
+    await expect(recoverDirectorPendingPointer('describe:open')).resolves.toBeNull();
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem(key('describe:open'))).toBeNull();
   });
 });

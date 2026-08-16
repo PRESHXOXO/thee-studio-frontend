@@ -20,6 +20,7 @@ import { downloadImageAsPng } from '../../lib/libraryAssets.js';
 import { compressImage } from '../../lib/imageUtils.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../../lib/creatorMemory.js';
 import { normalizeGenerationBatch } from '../../lib/generationBatch.js';
+import { MAX_DIRECTOR_REFERENCES, MAX_SAVED_CAST_STYLING_REFERENCES } from '../../lib/directorReferences.js';
 import {
   PORTRAIT_ANGLES, BATCH_OPTIONS, SHOOT_MOODS, SHOOT_LIGHTINGS, SHOOT_OUTFITS,
 } from '../../lib/shootOptions.js';
@@ -449,14 +450,14 @@ export function ShootBuilder({
         <ReferenceImageTray
           references={shotReferences}
           onChange={handleShotReferencesChange}
-          maxReferences={creator ? 3 : 4}
+          maxReferences={creator ? MAX_SAVED_CAST_STYLING_REFERENCES : MAX_DIRECTOR_REFERENCES}
           defaultRole={!creator ? 'identity' : identityMode === 'portrait' ? 'makeup' : 'outfit'}
           identityLocked={Boolean(creator)}
           disabled={generating}
           title="Shot references"
           description={creator
-            ? `${creator.name} already owns the Identity slot. Add up to three Outfit, Background, Hair, Makeup, or Pose references.`
-            : 'Start with an Identity image, then add up to three styling or scene references.'}
+            ? `${creator.name} already owns the Identity slot. Add up to five Outfit, Background, Hair, Makeup, or Pose references.`
+            : 'Start with an Identity image, then add up to five styling or scene references.'}
         />
       </div>
 

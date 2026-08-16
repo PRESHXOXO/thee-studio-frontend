@@ -102,4 +102,21 @@ describe('Scene Flow planning versus rendering', () => {
     expect(mocks.generateDirectorPhoto).not.toHaveBeenCalled();
     expect(mocks.sceneFlowChat).not.toHaveBeenCalled();
   });
+
+  it('keeps the latest dialogue visible above the shot board', async () => {
+    render(<SceneFlowV2 creator={CREATOR} recoveryEnabled={false} />);
+    const input = await screen.findByPlaceholderText(/Describe the sequence/i);
+    fireEvent.change(input, { target: { value: 'Give me five photos.' } });
+    fireEvent.click(screen.getByTitle('Send'));
+
+    const reply = await screen.findByLabelText('Scene Flow reply');
+    const conversation = screen.getByLabelText('Scene Flow conversation');
+    const messageEnd = screen.getByTestId('scene-flow-message-end');
+    const shotBoard = screen.getByLabelText('Scene Flow shot board');
+
+    expect(reply).toHaveTextContent('Five-shot board ready. Review it below.');
+    expect(conversation).toHaveStyle({ minHeight: '280px' });
+    expect(messageEnd.compareDocumentPosition(shotBoard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(mocks.generateDirectorPhoto).not.toHaveBeenCalled();
+  });
 });

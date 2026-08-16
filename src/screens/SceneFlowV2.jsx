@@ -27,7 +27,8 @@ import {
 import { clearSceneFlowDraft, loadSceneFlowDraft, saveSceneFlowDraft } from '../lib/sceneFlowPersistence.js';
 
 const HINTS = ['Help me brainstorm a scene', 'Make this feel more candid', 'Build a luxury campaign concept', 'What would you improve?'];
-const ROOT = { display: 'flex', flexDirection: 'column', minHeight: 620, maxHeight: 'calc(100dvh - 150px)', background: 'var(--surface-card)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)', overflow: 'hidden' };
+const ROOT = { display: 'flex', flexDirection: 'column', minHeight: 620, background: 'var(--surface-card)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)', overflow: 'hidden' };
+const CONVERSATION = { flex: '1 0 320px', minHeight: 280, maxHeight: 'min(58dvh, 680px)', overflowY: 'auto', padding: 18, display: 'flex', flexDirection: 'column', gap: 14, scrollPaddingBlock: 18 };
 const SMALL = { font: 'var(--text-xs)', color: 'var(--text-faint)', lineHeight: 1.45 };
 
 function cleanReply(text = '') { return String(text || '').trim(); }
@@ -35,7 +36,7 @@ function sceneSummary(scene) { return scene ? [scene.title, scene.globals?.locat
 
 function Message({ message }) {
   const user = message.role === 'user';
-  return <div style={{ display: 'flex', justifyContent: user ? 'flex-end' : 'flex-start', gap: 8 }}>
+  return <div aria-label={user ? 'Your message' : 'Scene Flow reply'} style={{ display: 'flex', justifyContent: user ? 'flex-end' : 'flex-start', gap: 8, flexShrink: 0 }}>
     {!user && <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'grid', placeItems: 'center', font: '600 11px/1 var(--font-ui)', flexShrink: 0 }}>S</div>}
     <div style={{ maxWidth: '78%', padding: '11px 14px', borderRadius: user ? '16px 16px 4px 16px' : '16px 16px 16px 4px', background: user ? 'var(--accent)' : 'var(--surface-inset)', color: user ? '#fff' : 'var(--text-body)', border: user ? '1px solid var(--accent)' : '1px solid var(--border)', font: '400 14px/1.55 var(--font-ui)', whiteSpace: 'pre-wrap' }}>
       {cleanReply(message.text)}
@@ -58,7 +59,7 @@ export function SceneFlowV2({ campaignId = null, initialVision = '', initialSett
   const [resumedKeyframe, setResumedKeyframe] = React.useState(null);
   const [draftHydrated, setDraftHydrated] = React.useState(false);
   const creatorRef = React.useRef(creator?.id ?? null);
-  const bottomRef = React.useRef(null);
+  const messageEndRef = React.useRef(null);
   const persistedSlotsRef = React.useRef(new Set());
   const acceptedBatchRef = React.useRef('');
 
@@ -68,7 +69,7 @@ export function SceneFlowV2({ campaignId = null, initialVision = '', initialSett
     creatorRef.current = next;
     setMessages([]); setHistory([]); setInput(initialVision || ''); setReferences([]); setScene(null); setThinking(false); setGenerating(false); setResumedKeyframe(null);
   }, [creator?.id, initialVision]);
-  React.useEffect(() => { bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' }); }, [messages, thinking, generating]);
+  React.useEffect(() => { messageEndRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' }); }, [messages, thinking]);
 
   const identity = directorIdentityState(creator, references);
   const roleSummary = [...new Set(references.map(reference => reference.role).filter(Boolean))];
@@ -278,9 +279,10 @@ export function SceneFlowV2({ campaignId = null, initialVision = '', initialSett
   return <div style={ROOT}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--border)', background: 'var(--surface-inset)' }}><div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'grid', placeItems: 'center', font: '700 14px/1 var(--font-ui)' }}>S</div><div style={{ flex: 1 }}><div style={{ font: '600 15px/1 var(--font-ui)', color: 'var(--text-strong)' }}>Scene Flow</div><div style={SMALL}>Brainstorm freely. Rendering starts only from the explicit Generate button.</div></div>{messages.length > 0 && <button type="button" onClick={reset} disabled={thinking || generating} style={{ padding: '7px 11px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', font: '500 12px/1 var(--font-ui)' }}>New chat</button>}</div>
 
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div aria-label="Scene Flow conversation" style={CONVERSATION}>
       {!messages.length ? <div style={{ margin: 'auto', textAlign: 'center', maxWidth: 500, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}><div style={{ width: 58, height: 58, borderRadius: '50%', background: 'var(--grad-coral)', color: '#fff', display: 'grid', placeItems: 'center', font: '700 22px/1 var(--font-ui)' }}>S</div><h3 style={{ margin: 0, font: '600 20px/1.2 var(--font-display)', color: 'var(--text-strong)' }}>What are we creating?</h3><p style={{ margin: 0, font: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.5 }}>{creator ? `${creator.name} stays on set while we work through the idea.` : 'Pick a Cast member above or build an open-subject scene.'}</p><div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, justifyContent: 'center' }}>{HINTS.map(hint => <button type="button" key={hint} onClick={() => setInput(hint)} style={{ padding: '7px 11px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border)', background: 'var(--cream-deep)', color: 'var(--text-muted)', cursor: 'pointer', font: 'var(--text-xs)' }}>{hint}</button>)}</div></div> : messages.map((message, index) => <Message key={index} message={message} />)}
       {thinking && <div style={{ font: 'var(--text-sm)', color: 'var(--text-muted)' }}>Scene Flow is thinking…</div>}
+      <div ref={messageEndRef} data-testid="scene-flow-message-end" />
       {scene && <div aria-label="Scene Flow shot board" style={{ display: 'grid', gap: 10 }}>
         <div><strong style={{ color: 'var(--text-strong)' }}>{scene.title}</strong><div style={SMALL}>{scene.sequenceConcept}</div></div>
         <details><summary style={{ cursor: 'pointer', font: '600 12px/1.4 var(--font-ui)', color: 'var(--text-body)' }}>Global continuity</summary><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 8, marginTop: 9 }}>{['location', 'outfit', 'hair', 'makeup', 'background', 'mood', 'visualStyle', 'cameraLanguage', 'lighting', 'timeOfDay', 'continuity'].map(field => {
@@ -297,7 +299,6 @@ export function SceneFlowV2({ campaignId = null, initialVision = '', initialSett
       </div>}
       <GenerationProgress active={generating || pendingGeneration.renderStatus === 'still_processing'} identityLocked={identity.locked} batchSize={pendingGeneration.batch?.requestedCount || (outputType === 'photo' ? batchSize : 1)} engine={outputType === 'video' ? 'Managed Video' : 'OpenAI'} mode={outputType === 'video' ? 'video' : 'scene'} />
       {pendingGeneration.batch && <GenerationBatchResults batch={associateBatchSlotsWithShots(pendingGeneration.batch, scene)} compact onRetry={slotIndex => pendingGeneration.retrySlot(slotIndex).catch(error => setMessages(current => [...current, { role: 'assistant', text: `⚠️ Retry failed: ${error.message}` }]))} retryingSlots={pendingGeneration.retryingSlots} />}
-      <div ref={bottomRef} />
     </div>
 
     <div style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-inset)', padding: 14, display: 'flex', flexDirection: 'column', gap: 11 }}>

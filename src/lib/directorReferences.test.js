@@ -18,8 +18,15 @@ describe('Director visual authority contract', () => {
     expect(MAX_DIRECTOR_REFERENCES).toBe(6);
     expect(MAX_SAVED_CAST_STYLING_REFERENCES).toBe(5);
     expect(DIRECTOR_REFERENCE_ROLES.map(role => role.id)).toEqual([
-      'identity', 'outfit', 'background', 'makeup', 'hair', 'pose',
+      'identity', 'outfit', 'background', 'makeup', 'hair', 'pose', 'supporting',
     ]);
+  });
+
+  it('keeps Supporting subordinate to every specific authority', () => {
+    const block = referencePromptBlock([ref('supporting', 0), ref('outfit', 1)], { startsAfterIdentity: true });
+    expect(block).toContain('SUPPORTING CUES ONLY');
+    expect(block).toContain('Supporting must never recast Identity');
+    expect(block).toContain('MANDATORY OUTFIT AUTHORITY');
   });
 
   it('serializes the complete six-role board without truncating Makeup Hair or Pose', () => {

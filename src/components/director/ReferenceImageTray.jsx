@@ -3,7 +3,7 @@ import { Icon } from '../core/Icon.jsx';
 import { normalizeImageForVision } from '../../lib/imageUtils.js';
 import { DIRECTOR_REFERENCE_ROLES, MAX_DIRECTOR_REFERENCES, MAX_SAVED_CAST_STYLING_REFERENCES, referenceRoleLabel } from '../../lib/directorReferences.js';
 
-const ROLE_SEQUENCE = ['identity', 'outfit', 'background', 'makeup', 'hair', 'pose'];
+const ROLE_SEQUENCE = ['identity', 'outfit', 'background', 'makeup', 'hair', 'pose', 'supporting'];
 function makeReferenceId() { return globalThis.crypto?.randomUUID?.() || `ref-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 function readFileAsDataURL(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = event => resolve(event.target.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
 function nextSuggestedRole(currentRole, references, roleOptions) {
@@ -23,7 +23,7 @@ export function ReferenceImageTray({
   disabled = false,
   compact = false,
   title = 'Visual references',
-  description = 'Add separate images for the outfit, background, makeup, hair, pose, or identity.',
+  description = 'Add separate images for identity, outfit, background, makeup, hair, pose, or supporting cues.',
 }) {
   const inputRef = React.useRef(null);
   const roleOptions = React.useMemo(() => identityLocked ? DIRECTOR_REFERENCE_ROLES.filter(role => role.id !== 'identity') : DIRECTOR_REFERENCE_ROLES, [identityLocked]);
@@ -90,7 +90,7 @@ export function ReferenceImageTray({
       <div style={{ padding: compact ? 6 : 8 }}><select aria-label={`Role for ${reference.name}`} value={reference.role} onChange={event => changeRole(reference.id, event.target.value)} disabled={disabled} style={{ width: '100%', padding: compact ? '5px 4px' : '6px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface-inset)', color: 'var(--text-body)', font: `600 ${compact ? 10 : 11}px/1 var(--font-ui)`, fontFamily: 'inherit' }}>{roleOptions.map(role => <option key={role.id} value={role.id}>{role.label}</option>)}</select>{!compact && <div title={reference.name} style={{ marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', font: '500 0.66rem/1 var(--font-ui)', color: 'var(--text-faint)' }}>{reference.name}</div>}</div>
     </div>)}{compact && addControls}</div>}
     {!compact && addControls}{compact && references.length === 0 && addControls}
-    {identityLocked && <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>Identity is reserved for the selected Cast member and cannot be reassigned here. Outfit, Background, Makeup, Hair, and Pose can all be attached together.</div>}
+    {identityLocked && <div style={{ font: 'var(--text-xs)', color: 'var(--text-faint)' }}>Identity is reserved for the selected Cast member and cannot be reassigned here. The five styling authorities can all coexist; Supporting is optional when a styling slot is not needed.</div>}
     {error && <div role="alert" style={{ font: 'var(--text-xs)', color: 'var(--cherry)' }}>{error}</div>}
   </div>;
 }

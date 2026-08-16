@@ -250,6 +250,7 @@ export async function characterGenerate({
   requestKey = null,
   returnPending = false,
   directorContext = null,
+  sequenceShots = [],
 }) {
   const structuredReferences = normalizeGenerationReferences(anchorReferences)
     .slice(0, characterImage || creatorId ? MAX_SAVED_CAST_STYLING_REFERENCES : MAX_DIRECTOR_REFERENCES);
@@ -280,6 +281,7 @@ export async function characterGenerate({
       fashionSafetyMode,
       shootMode: mode,
       directorContext,
+      sequenceShots: sequenceShots.length ? sequenceShots : undefined,
     }, requestKey || crypto.randomUUID());
     if (data.status === 'failed' || data.status === 'cancelled') {
       if (returnPending) return normalizeCastBatchResponse(data, { requestedCount: batchSize });
@@ -298,6 +300,7 @@ export async function characterGenerate({
   const localReferenceBlock = structuredReferences.length
     ? referencePromptBlock(structuredReferences, { startsAfterIdentity: Boolean(characterImage) })
     : '';
+  if (sequenceShots.length) throw new Error('Scene Flow sequence rendering requires the staging Cast Quick Shoot backend.');
   const localPositivePrompt = localReferenceBlock
     ? `${positivePrompt}\n\n${localReferenceBlock}`
     : positivePrompt;
@@ -522,9 +525,9 @@ export async function generateImage({
   return { images, status: data[1] || '' };
 }
 
-export async function sceneFlowChat({ messagesJson = '[]', userMessage = '', referenceImages = [], activeReferenceRoles = [], refImageB64 = '' } = {}) {
+export async function sceneFlowChat({ messagesJson = '[]', userMessage = '', referenceImages = [], activeReferenceRoles = [], currentScene = null, creator = null, refImageB64 = '' } = {}) {
   const references = referenceImages.length ? serializeDirectorReferences(referenceImages) : refImageB64;
-  if (hasSupabaseConfig()) return invokeCloudFunction('director-scene-flow-chat', { messagesJson, userMessage, references, activeReferenceRoles });
+  if (hasSupabaseConfig()) return invokeCloudFunction('director-scene-flow-chat', { messagesJson, userMessage, references, activeReferenceRoles, currentScene, creator });
   const raw = await callNamedEndpoint('scene_flow_chat', [messagesJson, userMessage, references]);
   return typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0];
 }

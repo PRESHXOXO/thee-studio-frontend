@@ -164,6 +164,7 @@ export async function awaitGeneration(result, {
   pollIntervalMs = POLL_INTERVAL_MS,
   pollTimeoutMs = POLL_TIMEOUT_MS,
   onStatus = null,
+  continueBatch = false,
 } = {}) {
   let batch = normalizeGenerationBatch(result, { requestedCount });
   const parentBatchId = batch.parentBatchId;
@@ -192,7 +193,7 @@ export async function awaitGeneration(result, {
     await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
     let status;
     try {
-      status = await pollCastQuickShootStatus(parentBatchId, { continueBatch: true });
+      status = await pollCastQuickShootStatus(parentBatchId, { continueBatch: continueBatch === true });
     } catch {
       // Transient status-check failure is not evidence the parent failed.
       continue;
@@ -228,6 +229,7 @@ export async function resumeDirectorGeneration(scopeKey, options = {}) {
     pollIntervalMs: options.pollIntervalMs,
     pollTimeoutMs: options.pollTimeoutMs,
     onStatus: options.onStatus,
+    continueBatch: false,
   });
 }
 
@@ -271,6 +273,7 @@ export async function retryDirectorGenerationSlot(scopeKey, slotIndex, options =
     pollIntervalMs: options.pollIntervalMs,
     pollTimeoutMs: options.pollTimeoutMs,
     onStatus: options.onStatus,
+    continueBatch: false,
   });
 }
 
@@ -288,6 +291,7 @@ export async function generateDirectorPhoto({
   pollIntervalMs = POLL_INTERVAL_MS,
   pollTimeoutMs = POLL_TIMEOUT_MS,
   onStatus = null,
+  shotPrompts = [],
 } = {}) {
   if (!prompt.trim()) throw new Error('Director has no generation prompt yet.');
   const refs = usableReferences(references);
@@ -314,7 +318,19 @@ export async function generateDirectorPhoto({
     : '';
   const providerPrompt = [prompt.trim(), roleBlock].filter(Boolean).join('\n\n');
 
-  const count = normalizedBatchSize(batchSize);
+  const sequenceShots = Array.isArray(shotPrompts) ? shotPrompts.map(shot => ({
+    shotId: typeof shot?.shotId === 'string' ? shot.shotId.trim() : '',
+    prompt: typeof shot?.prompt === 'string' ? shot.prompt.trim() : '',
+  })) : [];
+  if (sequenceShots.length) {
+    if (!identity.locked) throw new Error('Scene Flow sequence rendering requires a saved Cast or Identity reference.');
+    if (sequenceShots.length < 1 || sequenceShots.length > 5
+        || sequenceShots.some(shot => !/^[A-Za-z0-9][A-Za-z0-9_-]{2,99}$/.test(shot.shotId) || !shot.prompt)
+        || new Set(sequenceShots.map(shot => shot.shotId)).size !== sequenceShots.length) {
+      throw new Error('Scene Flow sequence shots are malformed. No generation was started.');
+    }
+  }
+  const count = sequenceShots.length || normalizedBatchSize(batchSize);
   const baseRequestKey = requestKey || crypto.randomUUID();
   const scopeKey = pendingScope || `director:${identity.creatorId || 'open'}`;
   if (getPendingDirectorJob(scopeKey)) {
@@ -349,6 +365,7 @@ export async function generateDirectorPhoto({
       requestKey: baseRequestKey,
       returnPending: true,
       directorContext,
+      sequenceShots,
     });
   } else {
     if (refs.length) throw new Error('Add an Identity reference before using styling or scene references without a saved Cast member.');
@@ -371,5 +388,6 @@ export async function generateDirectorPhoto({
     pollIntervalMs,
     pollTimeoutMs,
     onStatus,
+    continueBatch: true,
   });
 }

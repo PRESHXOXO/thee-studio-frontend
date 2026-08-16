@@ -8,6 +8,7 @@ export const DIRECTOR_REFERENCE_ROLES = [
   { id: 'makeup', label: 'Makeup', instruction: 'MANDATORY MAKEUP AUTHORITY — not generic glam: transfer the visible eyeshadow colors, placement, shape, blending and intensity; liner/lashes; blush hue, placement and intensity; complexion finish; highlight/contour; and lip liner, color, gloss/finish onto the creator while preserving identity. Bold colors must stay visibly bold.' },
   { id: 'hair', label: 'Hair', instruction: 'MANDATORY HAIR AUTHORITY — not inspiration: transfer the visible hairstyle architecture, parting, texture/pattern, color, length, volume, silhouette, hairline/edges, finish, and hair accessories while preserving identity. Do not fall back to default hair.' },
   { id: 'pose', label: 'Pose', instruction: 'MANDATORY POSE AUTHORITY — not inspiration: match the visible body orientation, head angle/gaze, shoulder/torso angle, limb positions, hand placement, weight distribution, seated/standing relationship, crop/framing, camera height, and composition as closely as the scene allows.' },
+  { id: 'supporting', label: 'Supporting', instruction: 'SUPPORTING CUES ONLY: use only clearly relevant visible cues that do not conflict with Identity, Outfit, Background, Makeup, Hair, or Pose. Never copy a recognizable identity or override another assigned authority.' },
 ];
 
 export function referenceRoleLabel(role) {
@@ -35,6 +36,9 @@ function authorityLines(references) {
   if (roles.has('pose')) {
     lines.push('POSE AUTHORITY: Match the role-labeled POSE image’s body orientation, head angle/gaze, shoulder/torso angle, limb positions, hand placement, weight distribution, seated/standing relationship, crop/framing, camera height, and composition. Adapt naturally to the creator without copying the pose-reference person’s identity or styling.');
   }
+  if (roles.has('supporting')) {
+    lines.push('SUPPORTING AUTHORITY: Use only relevant supporting visual cues. Supporting must never recast Identity or override Outfit, Background, Makeup, Hair, or Pose.');
+  }
 
   return lines;
 }
@@ -51,7 +55,7 @@ export function referencePromptBlock(references = [], { startsAfterIdentity = fa
     'VISUAL REFERENCE MAP — STRICT ROLE AUTHORITY:',
     ...lines,
     ...authorityLines(references),
-    'Keep each image in its assigned role. Identity images establish the person only. Outfit, Makeup, Hair, Background, and Pose must not recast identity or overwrite one another. Blend all assigned authorities into one coherent new photograph.',
+    'Keep each image in its assigned role. Identity images establish the person only. Outfit, Makeup, Hair, Background, Pose, and Supporting must not recast identity or overwrite one another. Blend all assigned authorities into one coherent new photograph.',
   ].join('\n');
 }
 

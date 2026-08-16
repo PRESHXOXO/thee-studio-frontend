@@ -147,7 +147,7 @@ describe('Director parent batch gateway', () => {
     const resumed = resumeDirectorGeneration('test:resume', { pollIntervalMs: 10, pollTimeoutMs: 20 });
     await vi.advanceTimersByTimeAsync(10);
     await expect(resumed).resolves.toEqual(expect.objectContaining({ status: 'succeeded', images: expect.any(Array) }));
-    expect(pollCastQuickShootStatus).toHaveBeenLastCalledWith('parent-resume-1', { continueBatch: true });
+    expect(pollCastQuickShootStatus).toHaveBeenLastCalledWith('parent-resume-1', { continueBatch: false });
     expect(characterGenerate).toHaveBeenCalledTimes(1);
     expect(getPendingDirectorJob('test:resume')).toBeNull();
   });
@@ -169,7 +169,7 @@ describe('Director parent batch gateway', () => {
     await expect(retry).resolves.toEqual(expect.objectContaining({ status: 'succeeded' }));
     expect(retryCastQuickShootSlot).toHaveBeenCalledTimes(1);
     expect(retryCastQuickShootSlot).toHaveBeenCalledWith('parent-retry', 1);
-    expect(pollCastQuickShootStatus).toHaveBeenCalledWith('parent-retry', { continueBatch: true });
+    expect(pollCastQuickShootStatus).toHaveBeenCalledWith('parent-retry', { continueBatch: false });
     expect(characterGenerate).toHaveBeenCalledTimes(1);
   });
 
@@ -204,6 +204,43 @@ describe('Director parent batch gateway', () => {
     expect(castQuickShootPlain).toHaveBeenCalledWith(expect.objectContaining({ batchSize: 2, requestKey: 'plain-test', returnPending: true }));
   });
 
+  it('submits one saved-Cast parent with ordered per-shot Scene Flow prompts', async () => {
+    characterGenerate.mockResolvedValue(completedBatch(3));
+    const shotPrompts = [
+      { shotId: 'shot_home', prompt: 'GLOBAL CONTINUITY\nSHOT 1 mirror selfie' },
+      { shotId: 'shot_bag', prompt: 'GLOBAL CONTINUITY\nSHOT 2 bag and shoes detail' },
+      { shotId: 'shot_car', prompt: 'GLOBAL CONTINUITY\nSHOT 3 walking to car' },
+    ];
+    await generateDirectorPhoto({
+      creator: { id: CLOUD_ID, cloudCreatorId: CLOUD_ID, name: 'Amara' },
+      prompt: 'GLOBAL CONTINUITY',
+      batchSize: 3,
+      shotPrompts,
+      pendingScope: 'test:sequence',
+    });
+    expect(characterGenerate).toHaveBeenCalledTimes(1);
+    expect(characterGenerate).toHaveBeenCalledWith(expect.objectContaining({
+      batchSize: 3,
+      sequenceShots: shotPrompts,
+      creatorId: CLOUD_ID,
+    }));
+    expect(castQuickShootPlain).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before submission when sequence prompts are malformed or open-subject', async () => {
+    await expect(generateDirectorPhoto({
+      creator: { id: CLOUD_ID, cloudCreatorId: CLOUD_ID, name: 'Amara' },
+      prompt: 'Sequence',
+      shotPrompts: [{ shotId: 'duplicate', prompt: 'one' }, { shotId: 'duplicate', prompt: 'two' }],
+    })).rejects.toThrow(/malformed/i);
+    await expect(generateDirectorPhoto({
+      prompt: 'Sequence',
+      shotPrompts: [{ shotId: 'shot_one', prompt: 'one' }],
+    })).rejects.toThrow(/saved Cast or Identity/i);
+    expect(characterGenerate).not.toHaveBeenCalled();
+    expect(castQuickShootPlain).not.toHaveBeenCalled();
+  });
+
   it('recovers before submission at gateway and never creates a second parent', async () => {
     const key = `thee-studio:director-pending:v3:${encodeURIComponent('describe:cast-1')}`;
     recoverDirectorPendingPointer.mockImplementation(async () => {
@@ -226,6 +263,7 @@ describe('Director parent batch gateway', () => {
     expect(recoverDirectorPendingPointer).toHaveBeenCalledWith('describe:cast-1');
     expect(characterGenerate).not.toHaveBeenCalled();
     expect(castQuickShootPlain).not.toHaveBeenCalled();
+    expect(pollCastQuickShootStatus).toHaveBeenCalledWith('existing-parent', { continueBatch: false });
     expect(localStorage.getItem(key)).toBeNull();
     expect(sessionStorage.getItem(key)).toBeNull();
   });

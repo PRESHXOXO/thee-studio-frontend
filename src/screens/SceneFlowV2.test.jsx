@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   handleStatus: vi.fn(),
   setBatch: vi.fn(),
   setRenderStatus: vi.fn(),
+  renderStatus: 'idle',
+  pendingBatch: null,
 }));
 
 vi.mock('../api/studio.js', () => ({ sceneFlowChat: mocks.sceneFlowChat }));
@@ -22,7 +24,7 @@ vi.mock('../api/directorGeneration.js', async importOriginal => {
 vi.mock('../api/sceneFlowVideo.js', () => ({ generateSceneFlowVideo: mocks.generateSceneFlowVideo }));
 vi.mock('../hooks/useDirectorPendingGeneration.js', () => ({
   useDirectorPendingGeneration: () => ({
-    batch: null, renderStatus: 'idle', statusMessage: '', retryingSlots: new Set(),
+    batch: mocks.pendingBatch, renderStatus: mocks.renderStatus, statusMessage: '', retryingSlots: new Set(),
     retrySlot: vi.fn(), handleStatus: mocks.handleStatus, setBatch: mocks.setBatch,
     setRenderStatus: mocks.setRenderStatus,
   }),
@@ -56,6 +58,8 @@ describe('Scene Flow planning versus rendering', () => {
   beforeEach(() => {
     Object.values(mocks).forEach(mock => mock?.mockReset?.());
     mocks.loadSceneFlowDraft.mockResolvedValue(null);
+    mocks.renderStatus = 'idle';
+    mocks.pendingBatch = null;
     mocks.saveSceneFlowDraft.mockResolvedValue(undefined);
     mocks.sceneFlowChat.mockResolvedValue({
       reply: 'Five-shot board ready. Review it below.', scene: scene(),
@@ -79,6 +83,8 @@ describe('Scene Flow planning versus rendering', () => {
     expect(mocks.generateDirectorPhoto).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByLabelText('Shot 2 action'), { target: { value: 'mirror selfie at home' } });
+    fireEvent.click(screen.getByText('Global continuity'));
+    fireEvent.change(screen.getByLabelText('Global hair'), { target: { value: 'sleek ponytail' } });
     fireEvent.click(screen.getByLabelText('Move shot 2 down'));
     fireEvent.click(screen.getAllByText('+ Add after')[0]);
     expect(mocks.generateDirectorPhoto).not.toHaveBeenCalled();
@@ -118,5 +124,57 @@ describe('Scene Flow planning versus rendering', () => {
     expect(conversation).toHaveStyle({ minHeight: '280px' });
     expect(messageEnd.compareDocumentPosition(shotBoard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(mocks.generateDirectorPhoto).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on malformed chat scene and preserves the settled board', async () => {
+    mocks.loadSceneFlowDraft.mockResolvedValue({ scene: scene(), references: [], messages: [], history: [], outputType: 'photo' });
+    const malformed = scene();
+    malformed.shots[1] = { ...malformed.shots[0], index: 2 };
+    mocks.sceneFlowChat.mockResolvedValueOnce({ reply: 'Changed it.', scene: malformed, history: [] });
+    render(<SceneFlowV2 creator={CREATOR} recoveryEnabled={false} />);
+    await screen.findByLabelText('Scene Flow shot board');
+    const input = screen.getByPlaceholderText(/Describe the sequence/i);
+    fireEvent.change(input, { target: { value: 'Change shot two only.' } });
+    fireEvent.click(screen.getByTitle('Send'));
+    await screen.findByText(/Shot IDs must be unique/);
+    expect(screen.getByLabelText('Shot 2 action')).toHaveValue('action 2');
+    expect(mocks.generateDirectorPhoto).not.toHaveBeenCalled();
+  });
+
+  it('locks chat and board edits while an existing render is processing', async () => {
+    mocks.renderStatus = 'still_processing';
+    mocks.loadSceneFlowDraft.mockResolvedValue({ scene: scene(), references: [], messages: [], history: [], outputType: 'photo' });
+    render(<SceneFlowV2 creator={CREATOR} recoveryEnabled={false} />);
+    await screen.findByLabelText('Scene Flow shot board');
+    expect(screen.getByPlaceholderText(/Describe the sequence/i)).toBeDisabled();
+    expect(screen.getByLabelText('Shot 2 action')).toBeDisabled();
+    expect(screen.getByLabelText('Move shot 2 down')).toBeDisabled();
+    expect(screen.getAllByText('+ Add after')[0]).toBeDisabled();
+    expect(mocks.sceneFlowChat).not.toHaveBeenCalled();
+    expect(mocks.generateDirectorPhoto).not.toHaveBeenCalled();
+  });
+
+  it('hands all five saved-Cast styling authorities to one Director batch', async () => {
+    const roles = ['outfit', 'background', 'makeup', 'hair', 'pose'];
+    const roleScene = scene();
+    roleScene.referenceRoles = roles;
+    const references = roles.map((role, index) => ({
+      id: `ref_${index}`, role, name: `${role}.png`, pending: false,
+      dataUrl: `data:image/png;base64,${index}A`,
+    }));
+    mocks.loadSceneFlowDraft.mockResolvedValue({ scene: roleScene, references, messages: [], history: [], outputType: 'photo' });
+    render(<SceneFlowV2 creator={CREATOR} recoveryEnabled={false} />);
+    await screen.findByLabelText('Scene Flow shot board');
+    expect(mocks.generateDirectorPhoto).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate 5 shots' }));
+    await waitFor(() => expect(mocks.generateDirectorPhoto).toHaveBeenCalledTimes(1));
+    const request = mocks.generateDirectorPhoto.mock.calls[0][0];
+    expect(request.creator).toBe(CREATOR);
+    expect(request.batchSize).toBe(5);
+    expect(request.references.map(reference => reference.role)).toEqual(roles);
+    expect(request.references.some(reference => reference.role === 'identity')).toBe(false);
+    for (const fragment of ['assigned Outfit reference', 'assigned Background reference', 'assigned Makeup reference', 'assigned Hair reference', 'assigned Pose reference']) {
+      expect(request.shotPrompts[0].prompt).toContain(fragment);
+    }
   });
 });

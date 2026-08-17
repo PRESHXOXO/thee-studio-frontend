@@ -151,7 +151,7 @@ export function moveSceneShot(scene, shotId, direction) {
 }
 
 export function resolvedSceneShot(scene, shot) {
-  return { ...scene.globals, ...shot.overrides, ...SHOT_FIELDS.reduce((result, field) => ({ ...result, [field]: shot[field] }), {}) };
+  return { ...scene.globals, ...SHOT_FIELDS.reduce((result, field) => ({ ...result, [field]: shot[field] }), {}), ...shot.overrides };
 }
 
 const ROLE_AUTHORITY = {
@@ -188,7 +188,7 @@ export function buildSceneFlowPrompts(sceneInput, authorityInput) {
     const shotLines = SHOT_FIELDS.map(field => line(field.toUpperCase(), resolved[field])).filter(Boolean);
     const roleControlled = new Set(['outfit', 'hair', 'makeup', 'background'].filter(role => roles.has(role)));
     const overrideLines = Object.entries(shot.overrides)
-      .filter(([field, value]) => value && !roleControlled.has(field))
+      .filter(([field, value]) => value && !roleControlled.has(field) && !SHOT_FIELDS.includes(field))
       .map(([field, value]) => `${field.toUpperCase()} OVERRIDE: ${value}`);
     return {
       shotId: shot.id,
@@ -200,8 +200,26 @@ export function buildSceneFlowPrompts(sceneInput, authorityInput) {
 
 export function associateBatchSlotsWithShots(batch, scene) {
   const shots = scene?.shots || [];
+  if (!shots.length) {
+    const slots = batch?.slots || [];
+    const ids = slots.map(slot => typeof slot?.sceneShotId === 'string' ? slot.sceneShotId : '');
+    if (ids.some(id => !id) || new Set(ids).size !== ids.length) {
+      throw new SceneFlowStateError('Generation slots are missing their durable Scene Flow shot IDs.');
+    }
+    return { ...batch, slots: slots.map(slot => ({ ...slot })) };
+  }
   return {
     ...batch,
-    slots: (batch?.slots || []).map(slot => ({ ...slot, sceneShotId: slot.sceneShotId || shots[slot.slotIndex]?.id || null })),
+    slots: (batch?.slots || []).map(slot => {
+      const slotIndex = Number(slot?.slotIndex);
+      if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= shots.length) {
+        throw new SceneFlowStateError('Generation slot cannot be matched to a Scene Flow shot.');
+      }
+      const expectedShotId = shots[slotIndex].id;
+      if (slot.sceneShotId && slot.sceneShotId !== expectedShotId) {
+        throw new SceneFlowStateError('Generation slot returned a conflicting Scene Flow shot ID.');
+      }
+      return { ...slot, sceneShotId: expectedShotId };
+    }),
   };
 }

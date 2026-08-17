@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addSceneShot, associateBatchSlotsWithShots, buildSceneFlowPrompts,
-  deleteSceneShot, moveSceneShot, updateSceneShot, validateSceneFlowScene,
+  deleteSceneShot, moveSceneShot, resolvedSceneShot, updateSceneShot, validateSceneFlowScene,
 } from './sceneFlowState.js';
 
 const authority = {
@@ -76,6 +76,37 @@ describe('Scene Flow structured state', () => {
     expect(batch.slots.map(item => [item.sceneShotId, item.status])).toEqual([
       ['shot_1', 'succeeded'], ['shot_2', 'provider_blocked'], ['shot_3', 'succeeded'],
     ]);
+  });
+
+  it('applies a per-shot Pose override after the base shot direction', () => {
+    const state = scene(2);
+    state.shots[0].pose = 'standing toward camera';
+    state.shots[0].overrides = { pose: 'seated side profile' };
+    expect(resolvedSceneShot(state, state.shots[0]).pose).toBe('seated side profile');
+    const prompt = buildSceneFlowPrompts(state, authority).shotPrompts[0].prompt;
+    expect(prompt).toContain('POSE: seated side profile');
+    expect(prompt).not.toContain('POSE: standing toward camera');
+    expect(prompt).not.toContain('POSE OVERRIDE:');
+  });
+
+  it('fails closed when server slot identity conflicts with stable scene order', () => {
+    expect(() => associateBatchSlotsWithShots({ slots: [
+      { slotIndex: 0, status: 'succeeded', sceneShotId: 'shot_2' },
+    ] }, scene(2))).toThrow(/conflicting Scene Flow shot ID/);
+    expect(() => associateBatchSlotsWithShots({ slots: [
+      { slotIndex: 3, status: 'failed' },
+    ] }, scene(2))).toThrow(/cannot be matched/);
+  });
+
+  it('recovers slot associations without a local draft only from complete durable IDs', () => {
+    const batch = associateBatchSlotsWithShots({ slots: [
+      { slotIndex: 0, status: 'succeeded', sceneShotId: 'shot_1' },
+      { slotIndex: 1, status: 'provider_blocked', sceneShotId: 'shot_2' },
+    ] }, null);
+    expect(batch.slots.map(slot => slot.sceneShotId)).toEqual(['shot_1', 'shot_2']);
+    expect(() => associateBatchSlotsWithShots({ slots: [
+      { slotIndex: 0, status: 'succeeded' },
+    ] }, null)).toThrow(/missing their durable Scene Flow shot IDs/);
   });
 
   it('fails closed for duplicate IDs, bad count, invalid role, and Cast displacement', () => {

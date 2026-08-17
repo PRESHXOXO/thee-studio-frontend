@@ -244,7 +244,12 @@ describe('Director parent batch gateway', () => {
   it('recovers before submission at gateway and never creates a second parent', async () => {
     const key = `thee-studio:director-pending:v3:${encodeURIComponent('describe:cast-1')}`;
     recoverDirectorPendingPointer.mockImplementation(async () => {
-      const record = { parentBatchId: 'existing-parent', status: 'running', requestedCount: 2 };
+      const record = {
+        parentBatchId: 'existing-parent',
+        status: 'running',
+        requestedCount: 2,
+        createdAt: new Date().toISOString(),
+      };
       localStorage.setItem(key, JSON.stringify(record));
       return record;
     });

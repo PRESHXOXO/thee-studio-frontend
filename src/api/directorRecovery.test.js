@@ -23,6 +23,7 @@ describe('recoverDirectorPendingPointer', () => {
       requestedCount: 3,
       status: 'running',
       scopeKey: 'describe:cast-7',
+      createdAt: new Date().toISOString(),
       batch: { assets: [{ signedUrl: 'https://private.example/signed' }] },
     }));
 
@@ -44,6 +45,7 @@ describe('recoverDirectorPendingPointer', () => {
         parentBatchId: 'batch-server',
         batchStatus: 'running',
         requestedCount: 3,
+        createdAt: new Date().toISOString(),
       },
       error: null,
     });
@@ -55,6 +57,7 @@ describe('recoverDirectorPendingPointer', () => {
     });
     expect(recovered.parentBatchId).toBe('batch-server');
     expect(recovered.batch.status).toBe('running');
+    expect(recovered.createdAt).toBeTruthy();
     expect(JSON.parse(sessionStorage.getItem(key('talk:cast-9:photo'))).parentBatchId).toBe('batch-server');
   });
 
@@ -76,15 +79,43 @@ describe('recoverDirectorPendingPointer', () => {
     });
   });
 
+  it('fails closed when server recovery omits the durable creation time', async () => {
+    invoke.mockResolvedValue({
+      data: { status: 'found', parentBatchId: 'malformed-parent', batchStatus: 'running' },
+      error: null,
+    });
+    await expect(recoverDirectorPendingPointer('talk:cast-9:photo')).resolves.toBeNull();
+    expect(sessionStorage.length).toBe(0);
+    expect(localStorage.length).toBe(0);
+  });
+
   it('never treats a saved-Cast browser pointer as compatible with an open subject', async () => {
     localStorage.setItem(key('describe:cast-9'), JSON.stringify({
       parentBatchId: 'saved-cast-parent',
       status: 'running',
+      createdAt: new Date().toISOString(),
     }));
     invoke.mockResolvedValue({ data: { status: 'none' }, error: null });
 
     await expect(recoverDirectorPendingPointer('describe:open')).resolves.toBeNull();
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(sessionStorage.getItem(key('describe:open'))).toBeNull();
+  });
+
+  it('drops yesterday browser pointers and uses read-only server discovery', async () => {
+    const scope = 'talk:cast-9:photo';
+    const stale = {
+      parentBatchId: 'yesterday-parent',
+      status: 'running',
+      createdAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
+    };
+    sessionStorage.setItem(key(scope), JSON.stringify(stale));
+    localStorage.setItem(key(scope), JSON.stringify(stale));
+    invoke.mockResolvedValue({ data: { status: 'none' }, error: null });
+
+    await expect(recoverDirectorPendingPointer(scope)).resolves.toBeNull();
+    expect(sessionStorage.getItem(key(scope))).toBeNull();
+    expect(localStorage.getItem(key(scope))).toBeNull();
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 });

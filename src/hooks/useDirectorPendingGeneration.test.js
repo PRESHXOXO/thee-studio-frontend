@@ -127,6 +127,18 @@ describe('useDirectorPendingGeneration', () => {
     expect(mocks.resumeDirectorGeneration).not.toHaveBeenCalled();
   });
 
+  it('leaves Talk idle when an expired pointer was removed and recovery finds none', async () => {
+    mocks.getPendingDirectorJob.mockReturnValue(null);
+    mocks.getDirectorBatchSnapshot.mockReturnValue(null);
+    mocks.recoverDirectorPendingPointer.mockResolvedValue(null);
+
+    const { result } = renderHook(() => useDirectorPendingGeneration('talk:cast-1:photo'));
+
+    await waitFor(() => expect(mocks.recoverDirectorPendingPointer).toHaveBeenCalledTimes(1));
+    expect(mocks.resumeDirectorGeneration).not.toHaveBeenCalled();
+    expect(result.current.renderStatus).toBe('idle');
+  });
+
   it('does not recover or poll while its Director panel is hidden', async () => {
     const { rerender } = renderHook(
       ({ enabled }) => useDirectorPendingGeneration('describe:cast-1', { enabled }),

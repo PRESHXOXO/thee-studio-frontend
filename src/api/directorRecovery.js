@@ -1,4 +1,5 @@
 import { getSupabase } from '../lib/supabase.js';
+import { isFreshDirectorPendingRecord } from './directorPendingPointer.js';
 
 const PENDING_STORAGE_PREFIX = 'thee-studio:director-pending:v3:';
 
@@ -10,7 +11,7 @@ function parseRecord(raw) {
   if (!raw) return null;
   try {
     const record = JSON.parse(raw);
-    return record?.parentBatchId || record?.jobId ? record : null;
+    return isFreshDirectorPendingRecord(record) ? record : null;
   } catch {
     return null;
   }
@@ -18,8 +19,11 @@ function parseRecord(raw) {
 
 function readExact(scopeKey) {
   const key = storageKey(scopeKey);
-  return parseRecord(globalThis.sessionStorage?.getItem(key))
-    || parseRecord(globalThis.localStorage?.getItem(key));
+  const session = parseRecord(globalThis.sessionStorage?.getItem(key));
+  const durable = parseRecord(globalThis.localStorage?.getItem(key));
+  if (!session) { try { globalThis.sessionStorage?.removeItem(key); } catch {} }
+  if (!durable) { try { globalThis.localStorage?.removeItem(key); } catch {} }
+  return session || durable;
 }
 
 function scopeParts(scopeKey = '') {
@@ -52,16 +56,19 @@ function recordsFromStorage(storage, scopeKey) {
     if (!compatibleScope(scopeKey, candidateScope)) continue;
     const record = parseRecord(storage.getItem(key));
     if (record) found.push({ ...record, sourceScopeKey: candidateScope });
+    else { try { storage.removeItem(key); } catch {} }
   }
   return found;
 }
 
 function persistRecoveredPointer(scopeKey, record) {
+  const now = new Date().toISOString();
   const normalized = {
     ...record,
     scopeKey,
-    recoveredAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: record.createdAt || now,
+    recoveredAt: now,
+    updatedAt: now,
   };
   const value = JSON.stringify(normalized);
   const key = storageKey(scopeKey);
@@ -74,6 +81,7 @@ function persistRecoveredPointer(scopeKey, record) {
     scopeKey,
     sourceScopeKey: normalized.sourceScopeKey || null,
     serverRecovered: Boolean(normalized.serverRecovered),
+    createdAt: normalized.createdAt,
     recoveredAt: normalized.recoveredAt,
     updatedAt: normalized.updatedAt,
   });
@@ -122,9 +130,15 @@ export async function recoverDirectorPendingPointer(scopeKey) {
   }
   if (!data || data.status !== 'found' || !data.parentBatchId) return null;
 
-  return persistRecoveredPointer(scopeKey, {
+  const recoveredRecord = {
     parentBatchId: data.parentBatchId,
     jobId: data.parentBatchId,
+    createdAt: data.createdAt,
+  };
+  if (!isFreshDirectorPendingRecord(recoveredRecord)) return null;
+
+  return persistRecoveredPointer(scopeKey, {
+    ...recoveredRecord,
     requestedCount: data.requestedCount || 1,
     status: data.batchStatus || 'running',
     batch: {

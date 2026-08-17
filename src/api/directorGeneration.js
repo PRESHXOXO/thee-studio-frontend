@@ -8,6 +8,7 @@ import { canonicalCreatorId } from '../lib/cloudCreators.js';
 import { referencePromptBlock } from '../lib/directorReferences.js';
 import { isTerminalBatchStatus, normalizeGenerationBatch } from '../lib/generationBatch.js';
 import { recoverDirectorPendingPointer } from './directorRecovery.js';
+import { isFreshDirectorPendingRecord } from './directorPendingPointer.js';
 
 const POLL_INTERVAL_MS = 2500;
 // A five-slot reference batch can legitimately exceed five minutes because
@@ -80,7 +81,10 @@ function directorContextForScope(scopeKey = '') {
 
 export function getPendingDirectorJob(scopeKey) {
   const current = readRecord(PENDING_STORAGE_PREFIX, scopeKey);
-  if (current?.parentBatchId || current?.jobId) return current;
+  if (isFreshDirectorPendingRecord(current)) return current;
+  // An abandoned browser pointer must not keep yesterday's batch looking
+  // active forever. Server recovery uses the same six-hour boundary.
+  removeRecord(PENDING_STORAGE_PREFIX, scopeKey);
   // v1/v2 pointers predate strict workflow tagging. Reusing them can attach a
   // hidden Director mode to unrelated legacy work and start status-driven
   // continuation before the user presses Generate.
@@ -93,9 +97,12 @@ export function getDirectorBatchSnapshot(scopeKey) {
 }
 
 function savePendingDirectorJob(scopeKey, record) {
+  const existing = readRecord(PENDING_STORAGE_PREFIX, scopeKey);
   return writeRecord(PENDING_STORAGE_PREFIX, scopeKey, {
     ...record,
-    createdAt: record.createdAt || new Date().toISOString(),
+    // Creation time is immutable. Polling may update updatedAt, but it cannot
+    // make an abandoned batch fresh again.
+    createdAt: record.createdAt || existing?.createdAt || new Date().toISOString(),
   });
 }
 

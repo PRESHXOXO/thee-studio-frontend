@@ -1,114 +1,78 @@
-import { persistCloudDocument } from './cloudStore.js';
-import { deleteLibraryOriginal, saveLibraryOriginal } from './libraryAssets.js';
+import {
+  listLibraryItems,
+  registerUploadedLibraryItem,
+  saveGeneratedLibraryItem,
+  softDeleteLibraryItem,
+  updateLibraryReview,
+} from '../api/library.js';
+import { saveLibraryOriginal } from './libraryAssets.js';
 import { learnCreatorMemory } from './creatorMemory.js';
 
 const KEY = 'ts_library';
-const MAX = 60;
 const PNG_ORIGINAL_SOURCES = new Set(['quick_shoot', 'director', 'prompt_lab', 'scene_flow']);
+let mutationChain = Promise.resolve();
+
+function enqueueMutation(action) {
+  const next = mutationChain.catch(() => undefined).then(action);
+  mutationChain = next;
+  return next;
+}
+
+function writeCache(list) {
+  try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {}
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('thee:library-updated', { detail: { count: list.length } }));
+  return list;
+}
 
 export function loadLibrary() {
   try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; }
 }
 
-export function deleteFromLibrary(id) {
-  const current = loadLibrary();
-  const removed = current.find(entry => entry.id === id);
-  const list = current.filter(entry => entry.id !== id);
-  if (removed) void deleteLibraryOriginal(removed);
-  try {
-    const value = JSON.stringify(list);
-    localStorage.setItem(KEY, value);
-    void persistCloudDocument(KEY, value).catch(() => undefined);
-  } catch {}
-  if (removed?.character) learnCreatorMemory(removed.character, list);
+export async function refreshLibrary() {
+  return writeCache(await listLibraryItems());
 }
 
-// Review workflow: patch an entry (status, notes, etc.) in place.
-// status: 'unreviewed' | 'approved' | 'needs_fix' | 'rejected'
-export function updateLibraryEntry(id, patch) {
-  const list = loadLibrary();
-  const idx = list.findIndex(e => e.id === id);
-  if (idx === -1) return null;
-  list[idx] = { ...list[idx], ...patch, reviewedAt: new Date().toISOString() };
-  try {
-    const value = JSON.stringify(list);
-    localStorage.setItem(KEY, value);
-    void persistCloudDocument(KEY, value).catch(() => undefined);
-  } catch {}
-  if (list[idx].character) learnCreatorMemory(list[idx].character, list);
-  return list[idx];
-}
-
-function _compressDataUrl(dataUrl, maxPx, quality) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-      const canvas = document.createElement('canvas');
-      canvas.width  = Math.round(img.width  * scale);
-      canvas.height = Math.round(img.height * scale);
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = reject;
-    img.src = dataUrl;
+export async function deleteFromLibrary(id) {
+  return enqueueMutation(async () => {
+    await softDeleteLibraryItem(id);
+    writeCache(loadLibrary().filter(entry => entry.id !== id));
   });
 }
 
-// Compress any image src to a small JPEG data URL.
-// Fetches non-data URLs first so Gradio file paths don't expire.
-export async function compressForLibrary(src, maxPx = 640, quality = 0.82) {
-  let dataUrl = src;
-  if (!src.startsWith('data:')) {
-    const res = await fetch(src);
-    if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
-    const blob = await res.blob();
-    dataUrl = await new Promise((res, rej) => {
-      const fr = new FileReader();
-      fr.onload = () => res(fr.result);
-      fr.onerror = rej;
-      fr.readAsDataURL(blob);
-    });
-  }
-  return _compressDataUrl(dataUrl, maxPx, quality);
+export async function updateLibraryEntry(id, patch) {
+  return enqueueMutation(async () => {
+    const current = loadLibrary().find(entry => entry.id === id);
+    if (!current) return null;
+    const item = await updateLibraryReview(id, patch.status ?? current.status ?? 'unreviewed', patch.note ?? current.note ?? null);
+    const list = writeCache(loadLibrary().map(entry => entry.id === id ? item : entry));
+    if (item.character) learnCreatorMemory(item.character, list);
+    return item;
+  });
 }
 
 export async function saveToLibrary(src, metadata = {}) {
-  metadata = { source: '', engine: '', prompt: '', character: '', ...metadata };
-  const id = `lib_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const preferredMimeType = PNG_ORIGINAL_SOURCES.has(metadata.source) ? 'image/png' : null;
-  const [url, original] = await Promise.all([
-    compressForLibrary(src).catch(() => src),
-    saveLibraryOriginal(id, src, { preferredMimeType }).catch(() => ({
-      originalAssetId: id,
-      originalUrl: src.startsWith('data:') ? undefined : src,
-    })),
-  ]);
-  const list = loadLibrary();
-  const entry = {
-    id,
-    url,
-    savedAt: new Date().toISOString(),
-    ...original,
-    ...metadata,
-  };
-  list.unshift(entry);
-  if (list.length > MAX) {
-    const pruned = list.splice(MAX);
-    pruned.forEach(item => void deleteLibraryOriginal(item));
-  }
-
-  let value = JSON.stringify(list);
-  try {
-    localStorage.setItem(KEY, value);
-  } catch {
-    // Storage pressure — drop oldest half and retry
-    const pruned = list.splice(Math.floor(MAX / 2));
-    pruned.forEach(item => void deleteLibraryOriginal(item));
-    value = JSON.stringify(list);
-    try { localStorage.setItem(KEY, value); } catch {}
-  }
-  await persistCloudDocument(KEY, value);
-  if (entry.character) learnCreatorMemory(entry.character, list);
-  return entry;
+  return enqueueMutation(async () => {
+    metadata = { source: '', engine: '', prompt: '', character: '', ...metadata };
+    let entry;
+    if (metadata.parentBatchId && Number.isInteger(Number(metadata.slotIndex))) {
+      // Signed URLs and component lifetimes are display-only. Parent + slot is
+      // the immutable server idempotency key for generated results.
+      const existing = loadLibrary().find(item => item.parentBatchId === metadata.parentBatchId
+        && Number(item.slotIndex) === Number(metadata.slotIndex));
+      if (existing) return existing;
+      entry = await saveGeneratedLibraryItem({ ...metadata, slotIndex: Number(metadata.slotIndex) });
+    } else {
+      const id = crypto.randomUUID();
+      const preferredMimeType = PNG_ORIGINAL_SOURCES.has(metadata.source) ? 'image/png' : null;
+      const original = await saveLibraryOriginal(id, src, { preferredMimeType });
+      if (!original.originalStoragePath) throw new Error('The Library asset was not stored.');
+      entry = await registerUploadedLibraryItem(original.originalStoragePath, metadata);
+    }
+    const list = loadLibrary();
+    const index = list.findIndex(item => item.id === entry.id);
+    if (index >= 0) list[index] = entry;
+    else list.unshift(entry);
+    writeCache(list);
+    return entry;
+  });
 }

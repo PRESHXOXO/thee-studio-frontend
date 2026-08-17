@@ -136,10 +136,10 @@ export function SceneFlowV2({ campaignId = null, initialVision = '', initialSett
     const { memory, prompt } = memoryForScene(sceneData);
     const character = canonicalCreatorId(creator) || creator?.id;
     batch.slots.filter(slot => slot.status === 'succeeded' && slot.imageUrl).forEach(slot => {
-      const persistenceKey = `${batch.parentBatchId || 'local'}:${slot.slotIndex}:${slot.imageUrl}`;
+      const persistenceKey = `${batch.parentBatchId || 'local'}:${slot.slotIndex}`;
       if (persistedSlotsRef.current.has(persistenceKey)) return;
       persistedSlotsRef.current.add(persistenceKey);
-      saveToLibrary(slot.imageUrl, { source: 'scene_flow', prompt, campaign: campaignId || undefined, character, mediaType: 'photo', settings: { version: 3, workflow: 'talk', input: sceneData?.sequenceConcept || '', outputType, batchSize: sceneData?.shots?.length || 1, scene: sceneData, sceneShotId: slot.sceneShotId, referenceRoles: roleSummary }, memoryVersion: memory?.version })
+      saveToLibrary(slot.imageUrl, { source: 'scene_flow', parentBatchId: batch.parentBatchId, slotIndex: slot.slotIndex, sceneShotId: slot.sceneShotId, prompt, campaign: campaignId || undefined, character, mediaType: 'photo', settings: { version: 3, workflow: 'talk', input: sceneData?.sequenceConcept || '', outputType, batchSize: sceneData?.shots?.length || 1, scene: sceneData, sceneShotId: slot.sceneShotId, referenceRoles: roleSummary }, memoryVersion: memory?.version })
         .catch(() => { persistedSlotsRef.current.delete(persistenceKey); });
     });
     return batch;

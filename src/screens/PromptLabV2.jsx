@@ -101,7 +101,7 @@ export function PromptLabV2({ campaignId = null, initialVision = '', initialSett
       const persistenceKey = `${batch.parentBatchId || fingerprint}:${slot.slotIndex}`;
       if (persistedSlotsRef.current.has(persistenceKey)) return;
       persistedSlotsRef.current.add(persistenceKey);
-      saveToLibrary(slot.imageUrl, { source: 'prompt_lab', prompt: generationPrompt, campaign: campaignId || undefined, character, settings: snapshotSettings(), memoryVersion: memory?.version })
+      saveToLibrary(slot.imageUrl, { source: 'prompt_lab', parentBatchId: batch.parentBatchId, slotIndex: slot.slotIndex, prompt: generationPrompt, campaign: campaignId || undefined, character, settings: snapshotSettings(), memoryVersion: memory?.version })
         .catch(() => { persistedSlotsRef.current.delete(persistenceKey); });
     });
     return batch;

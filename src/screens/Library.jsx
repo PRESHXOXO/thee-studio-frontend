@@ -4,10 +4,8 @@ import { Button } from '../components/core/Button.jsx';
 import { Icon } from '../components/core/Icon.jsx';
 import { ConfirmDialog } from '../components/feedback/ConfirmDialog.jsx';
 import { LibraryFocusMode } from '../components/feedback/LibraryFocusMode.jsx';
-import { loadLibrary, deleteFromLibrary, updateLibraryEntry } from '../lib/library.js';
-import { persistCloudDocument } from '../lib/cloudStore.js';
-import { deleteLibraryOriginal, downloadLibraryOriginal } from '../lib/libraryAssets.js';
-import { learnCreatorMemory } from '../lib/creatorMemory.js';
+import { loadLibrary, refreshLibrary, deleteFromLibrary, updateLibraryEntry } from '../lib/library.js';
+import { downloadLibraryOriginal } from '../lib/libraryAssets.js';
 
 const SOURCE_LABELS = {
   generator:   { label: 'New Creator', icon: 'image' },
@@ -311,25 +309,31 @@ export function Library({ initialFilter, mobile = false }) {
   const focusedIndex = visible.findIndex(e => e.id === focusedId);
   const focusModeIndex = visible.findIndex(e => e.id === focusModeId);
 
-  const handleSetStatus = (id, status) => {
-    updateLibraryEntry(id, { status });
-    setLibrary(prev => prev.map(e => (e.id === id ? { ...e, status } : e)));
+  const handleSetStatus = async (id, status) => {
+    try {
+      const item = await updateLibraryEntry(id, { status });
+      if (item) setLibrary(prev => prev.map(e => (e.id === id ? item : e)));
+    } catch (error) { setDownloadError(error.message || 'Library update failed.'); }
   };
 
-  const handleSaveNote = (id, note) => {
-    updateLibraryEntry(id, { note });
-    setLibrary(prev => prev.map(e => (e.id === id ? { ...e, note } : e)));
+  const handleSaveNote = async (id, note) => {
+    try {
+      const item = await updateLibraryEntry(id, { note });
+      if (item) setLibrary(prev => prev.map(e => (e.id === id ? item : e)));
+    } catch (error) { setDownloadError(error.message || 'Library update failed.'); }
   };
 
   const handleDelete = (id) => {
     setConfirm({
       title: 'Delete Image?',
-      message: 'This image will be permanently removed from your library.',
-      onConfirm: () => {
-        deleteFromLibrary(id);
-        setLibrary(prev => prev.filter(e => e.id !== id));
-        setSelected(prev => { const next = new Set(prev); next.delete(id); return next; });
-        setConfirm(null);
+      message: 'This image will be moved out of your Library. Its stored file is retained for recovery.',
+      onConfirm: async () => {
+        try {
+          await deleteFromLibrary(id);
+          setLibrary(prev => prev.filter(e => e.id !== id));
+          setSelected(prev => { const next = new Set(prev); next.delete(id); return next; });
+          setConfirm(null);
+        } catch (error) { setDownloadError(error.message || 'Library delete failed.'); setConfirm(null); }
       },
     });
   };
@@ -346,16 +350,15 @@ export function Library({ initialFilter, mobile = false }) {
   const handleClearAll = () => {
     setConfirm({
       title: 'Clear Entire Library?',
-      message: 'All saved images will be permanently removed. This cannot be undone.',
+      message: 'All visible images will be moved out of your Library. Stored files are retained for recovery.',
       confirmLabel: 'Clear All',
-      onConfirm: () => {
-        new Set(library.map(entry => entry.character).filter(Boolean)).forEach(creatorId => learnCreatorMemory(creatorId, []));
-        library.forEach(entry => void deleteLibraryOriginal(entry));
-        localStorage.removeItem('ts_library');
-        void persistCloudDocument('ts_library', JSON.stringify([])).catch(() => undefined);
-        setLibrary([]);
-        setSelected(new Set());
-        setConfirm(null);
+      onConfirm: async () => {
+        try {
+          await Promise.all(library.map(entry => deleteFromLibrary(entry.id)));
+          setLibrary([]);
+          setSelected(new Set());
+          setConfirm(null);
+        } catch (error) { setDownloadError(error.message || 'Library clear failed.'); setConfirm(null); }
       },
     });
   };
@@ -379,19 +382,24 @@ export function Library({ initialFilter, mobile = false }) {
     const ids = [...selected];
     setConfirm({
       title: `Delete ${ids.length} Image${ids.length > 1 ? 's' : ''}?`,
-      message: 'These images will be permanently removed from your library.',
-      onConfirm: () => {
-        ids.forEach(id => deleteFromLibrary(id));
-        setLibrary(prev => prev.filter(e => !ids.includes(e.id)));
-        clearSelection();
-        setConfirm(null);
+      message: 'These images will be moved out of your Library. Stored files are retained for recovery.',
+      onConfirm: async () => {
+        try {
+          await Promise.all(ids.map(id => deleteFromLibrary(id)));
+          setLibrary(prev => prev.filter(e => !ids.includes(e.id)));
+          clearSelection();
+          setConfirm(null);
+        } catch (error) { setDownloadError(error.message || 'Library delete failed.'); setConfirm(null); }
       },
     });
   };
 
-  // Reload from storage when window regains focus (other tabs may have saved)
+  // Server is authoritative. Focus and cross-tab updates refresh signed URLs
+  // and cannot replace newer rows with a stale browser array.
   React.useEffect(() => {
-    const onFocus = () => setLibrary(loadLibrary());
+    const reload = () => void refreshLibrary().then(setLibrary).catch(error => setDownloadError(error.message || 'Library refresh failed.'));
+    reload();
+    const onFocus = () => reload();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, []);

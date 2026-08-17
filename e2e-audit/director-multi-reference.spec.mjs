@@ -64,7 +64,7 @@ test('Guided sends multiple references with distinct visual jobs', async ({ page
   await input.setInputFiles({ name: 'penthouse.png', mimeType: 'image/png', buffer: PIXEL });
   await expect(page.getByLabel('Role for penthouse.png')).toHaveValue('background');
 
-  await page.getByRole('button', { name: 'Build + Generate' }).click();
+  await page.getByRole('button', { name: 'Generate photo' }).click();
   await expect.poll(() => generationPayload).toBeTruthy();
 
   const params = JSON.parse(generationPayload.data[0]);
@@ -75,20 +75,20 @@ test('Guided sends multiple references with distinct visual jobs', async ({ page
   expect(generationPayload.data[1]).toBe(PIXEL_DATA_URL);
 });
 
-test('Scene Flow sends and generates with all labeled references', async ({ page }) => {
+test('Scene Flow sends all labeled references without generating automatically', async ({ page }) => {
   let chatPayload;
-  let generationPayload;
+  let generationCalls = 0;
   await authenticate(page, false);
   await mockConfig(page);
   await page.route('**/gradio_api/run/scene_flow_chat', route => {
     chatPayload = route.request().postDataJSON();
     const scene = {
-      setting: 'dressing room',
-      wardrobe: 'reference look',
-      location: 'reference room',
-      content_type: 'photo',
-      vibe: 'polished candid',
-      full_prompt: 'A polished candid dressing-room portrait.',
+      schemaVersion: 'scene_flow_v3', sceneId: 'scene_refs', title: 'Reference study',
+      sequenceConcept: 'A polished candid dressing-room portrait.',
+      creator: { id: null, name: '', identityLocked: true },
+      referenceRoles: ['identity', 'makeup', 'background'],
+      globals: { location: 'reference room', outfit: '', hair: '', makeup: '', background: '', mood: 'polished candid', visualStyle: 'realistic', cameraLanguage: 'candid', lighting: 'natural', timeOfDay: 'day', contentFormat: 'photo sequence', aspectRatio: '9:16', continuity: 'preserve identity', supporting: '' },
+      shots: [{ id: 'shot_001', index: 1, purpose: 'portrait', action: 'dressing-room portrait', pose: '', expression: '', framing: 'medium', angle: 'eye level', crop: '', environment: 'reference room', props: '', interaction: '', movement: '', composition: '', note: '', overrides: {} }],
     };
     return route.fulfill({
       status: 200,
@@ -97,14 +97,14 @@ test('Scene Flow sends and generates with all labeled references', async ({ page
         data: [JSON.stringify({
           reply: 'I will combine those roles without mixing identities.',
           scene,
-          generate: true,
+          generate: false,
           history: [],
         })],
       }),
     });
   });
   await page.route('**/gradio_api/run/scene_flow_generate', route => {
-    generationPayload = route.request().postDataJSON();
+    generationCalls += 1;
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -123,6 +123,9 @@ test('Scene Flow sends and generates with all labeled references', async ({ page
   const roleSelect = sceneFlowPanel.getByLabel('Role for new references');
   const input = sceneFlowPanel.locator('input[type="file"]');
 
+  await input.setInputFiles({ name: 'identity.png', mimeType: 'image/png', buffer: PIXEL });
+  await expect(page.getByLabel('Role for identity.png')).toHaveValue('identity');
+
   await roleSelect.selectOption('makeup');
   await input.setInputFiles({ name: 'beauty.png', mimeType: 'image/png', buffer: PIXEL });
   await expect(page.getByLabel('Role for beauty.png')).toHaveValue('makeup');
@@ -131,14 +134,13 @@ test('Scene Flow sends and generates with all labeled references', async ({ page
   await input.setInputFiles({ name: 'suite.png', mimeType: 'image/png', buffer: PIXEL });
   await expect(page.getByLabel('Role for suite.png')).toHaveValue('background');
 
+  await page.getByPlaceholder(/Describe the sequence/).fill('Build one polished dressing-room shot.');
   await page.getByTitle('Send').click();
-  await expect(page.getByText('Your scene is ready.')).toBeVisible();
+  await expect(page.getByText(/combine those roles/)).toBeVisible();
 
   const chatReferences = JSON.parse(chatPayload.data[2]);
-  const generationReferences = JSON.parse(generationPayload.data[1]);
-  expect(chatReferences.map(reference => reference.role)).toEqual(['makeup', 'background']);
-  expect(generationReferences.map(reference => reference.role)).toEqual(['makeup', 'background']);
-  expect(JSON.parse(generationPayload.data[0]).full_prompt).not.toContain('VISUAL REFERENCE MAP:');
+  expect(chatReferences.map(reference => reference.role)).toEqual(['identity', 'makeup', 'background']);
+  expect(generationCalls).toBe(0);
 });
 
 test('Scene Flow composer stays visible at 100% zoom with three references', async ({ page }) => {
@@ -151,12 +153,12 @@ test('Scene Flow composer stays visible at 100% zoom with three references', asy
   await panel.evaluate(element => element.scrollIntoView({ block: 'start' }));
   const input = panel.locator('input[type="file"]');
 
+  await input.setInputFiles({ name: 'identity.png', mimeType: 'image/png', buffer: PIXEL });
   await input.setInputFiles({ name: 'outfit.png', mimeType: 'image/png', buffer: PIXEL });
   await input.setInputFiles({ name: 'background.png', mimeType: 'image/png', buffer: PIXEL });
-  await input.setInputFiles({ name: 'pose.png', mimeType: 'image/png', buffer: PIXEL });
 
-  await expect(panel.getByText('3/4')).toBeVisible();
-  const composer = page.getByPlaceholder(/Message Scene Flow/);
+  await expect(panel.getByText('3/6')).toBeVisible();
+  const composer = page.getByPlaceholder(/Describe the sequence/);
   await expect(composer).toBeVisible();
   await expect(composer).toBeInViewport({ ratio: 1 });
   await expect(page.getByTitle('Send')).toBeInViewport({ ratio: 1 });

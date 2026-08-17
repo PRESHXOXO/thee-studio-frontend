@@ -1,150 +1,51 @@
 import { test, expect } from '@playwright/test';
+import { sceneFlowV3 } from './scene-fixtures.mjs';
 
-const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/6ZcmWQAAAABJRU5ErkJggg==';
-
-test('Scene Flow enriches mirror scenes with lived-in spatial prompting', async ({ page }) => {
-  let generationPayload;
-
-  await page.addInitScript(pixel => {
-    localStorage.setItem('ts_auth_session', JSON.stringify({
-      id: 'prompt-tester',
-      name: 'Prompt Tester',
-      email: 'prompt@example.test',
-    }));
-    localStorage.setItem('ts_characters', JSON.stringify([{
-      id: 'maya',
-      name: 'Maya',
-      image: pixel,
-      refImages: [pixel],
-      locked: true,
-      fields: {},
-    }]));
-    localStorage.setItem('ts_active_character_id', 'maya');
-  }, PIXEL);
-
-  await page.route('**/config', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ components: [] }),
-  }));
-
+async function openPlannedScene(page, scene, message) {
+  let generationCalls = 0;
+  await page.addInitScript(() => {
+    localStorage.setItem('ts_auth_session', JSON.stringify({ id: 'prompt-tester', name: 'Prompt Tester', email: 'prompt@example.test' }));
+  });
+  await page.route('**/config', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ components: [] }) }));
   await page.route('**/gradio_api/run/scene_flow_chat', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({
-      data: [JSON.stringify({
-        reply: "Got it, I'm building your scene now.",
-        history: [],
-        scene: {
-          setting: 'luxury hotel bathroom mirror',
-          location: 'boutique hotel suite',
-          vibe: 'casual GRWM',
-          wardrobe: 'white long-sleeve top',
-          content_type: 'photo',
-          full_prompt: 'Maya takes a mirror selfie while getting ready in a luxury hotel bathroom.',
-        },
-      })],
-    }),
+    body: JSON.stringify({ data: [JSON.stringify({ reply: 'The sequence is ready to review.', history: [], generate: false, scene })] }),
   }));
-
   await page.route('**/gradio_api/run/scene_flow_generate', route => {
-    generationPayload = route.request().postDataJSON();
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        data: [JSON.stringify({ result_b64: PIXEL.split(',')[1], content_type: 'photo', status: 'done' })],
-      }),
-    });
+    generationCalls += 1;
+    return route.abort();
   });
-
-  await page.goto('http://127.0.0.1:3000/studio/');
-  await page.getByRole('navigation').getByRole('button', { name: /Thee Director/ }).click();
-  await page.getByRole('tab', { name: 'Talk It Through' }).click();
-  await page.getByPlaceholder(/Describe the vibe/).fill('Hotel mirror GRWM.');
+  await page.goto('http://127.0.0.1:3000/studio/director/scene-flow');
+  await page.getByPlaceholder(/Describe the sequence/).fill(message);
   await page.getByTitle('Send').click();
-  await expect(page.getByText('Your scene is ready.')).toBeVisible();
+  await expect(page.getByText('The sequence is ready to review.')).toBeVisible();
+  return { generationCalls: () => generationCalls };
+}
 
-  const scene = JSON.parse(generationPayload.data[0]);
-  expect(scene.full_prompt).toContain('one coherent exposure');
-  expect(scene.full_prompt).toContain('natural contact shadows');
-  expect(scene.full_prompt).toContain('believable body weight');
-  expect(scene.full_prompt).toContain('Avoid cutout edges');
-  expect(scene.full_prompt).toContain('avoid accidental dead space');
-  expect(scene.full_prompt).toContain('IDENTITY REFERENCE USAGE');
-  expect(scene.full_prompt).toContain('Preserve exact fixed facial geometry');
-  expect(scene.full_prompt).toContain('not a similar-looking model');
-  expect(scene.full_prompt).toContain('true mirror reflection');
-  expect(scene.full_prompt).toContain('do not inherit the reference image composition');
-  expect(JSON.parse(generationPayload.data[1])).toEqual([
-    expect.objectContaining({ image: PIXEL, role: 'identity' }),
-  ]);
+test('Scene Flow builds mirror-specific direction without rendering', async ({ page }) => {
+  const scene = sceneFlowV3({ title: 'Hotel mirror GRWM', concept: 'A lived-in hotel getting-ready moment', location: 'boutique hotel bathroom', outfit: 'white long-sleeve top', action: 'takes a true mirror selfie while getting ready' });
+  scene.shots[0].composition = 'true mirror reflection with believable room geometry';
+  const tracker = await openPlannedScene(page, scene, 'Hotel mirror GRWM.');
+  await expect(page.getByLabel('Shot 1 action')).toHaveValue(/mirror selfie/);
+
+  const built = await page.evaluate(async value => (await import('/src/lib/sceneFlowState.js')).buildSceneFlowPrompts(value, { identityLocked: false, referenceRoles: [] }), scene);
+  expect(built.globalPrompt).toContain('boutique hotel bathroom');
+  expect(built.shotPrompts[0].prompt).toContain('true mirror reflection');
+  expect(built.shotPrompts[0].prompt).toContain('white long-sleeve top');
+  expect(tracker.generationCalls()).toBe(0);
 });
 
-test('Scene Flow gives vehicle scenes grounded body and framing direction', async ({ page }) => {
-  let generationPayload;
+test('Scene Flow builds grounded vehicle direction without rendering', async ({ page }) => {
+  const scene = sceneFlowV3({ title: 'Manhattan car ride', concept: 'A candid city arrival', location: 'rear seat of a black car in Manhattan', outfit: 'navy university hoodie', action: 'checks her phone while riding through Manhattan' });
+  scene.shots[0].pose = 'grounded seated posture';
+  scene.shots[0].framing = 'passenger eye-level medium candid';
+  const tracker = await openPlannedScene(page, scene, 'Candid Manhattan car ride.');
+  await expect(page.getByLabel('Shot 1 action')).toHaveValue(/checks her phone/);
 
-  await page.addInitScript(pixel => {
-    localStorage.setItem('ts_auth_session', JSON.stringify({
-      id: 'vehicle-prompt-tester',
-      name: 'Vehicle Prompt Tester',
-      email: 'vehicle@example.test',
-    }));
-    localStorage.setItem('ts_characters', JSON.stringify([{
-      id: 'maya',
-      name: 'Maya',
-      image: pixel,
-      refImages: [pixel],
-      locked: true,
-      fields: {},
-    }]));
-    localStorage.setItem('ts_active_character_id', 'maya');
-  }, PIXEL);
-
-  await page.route('**/config', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ components: [] }),
-  }));
-  await page.route('**/gradio_api/run/scene_flow_chat', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({
-      data: [JSON.stringify({
-        reply: "Got it, I'm building your scene now.",
-        history: [],
-        scene: {
-          setting: 'rear seat of a black car',
-          location: 'Manhattan',
-          vibe: 'candid city arrival',
-          wardrobe: 'navy university hoodie',
-          content_type: 'photo',
-          full_prompt: 'Maya checks her phone while riding through Manhattan.',
-        },
-      })],
-    }),
-  }));
-  await page.route('**/gradio_api/run/scene_flow_generate', route => {
-    generationPayload = route.request().postDataJSON();
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        data: [JSON.stringify({ result_b64: PIXEL.split(',')[1], content_type: 'photo', status: 'done' })],
-      }),
-    });
-  });
-
-  await page.goto('http://127.0.0.1:3000/studio/director');
-  await page.getByRole('tab', { name: 'Talk It Through' }).click();
-  await page.getByPlaceholder(/Describe the vibe/).fill('Candid Manhattan car ride.');
-  await page.getByTitle('Send').click();
-  await expect(page.getByText('Your scene is ready.')).toBeVisible();
-
-  const scene = JSON.parse(generationPayload.data[0]);
-  expect(scene.full_prompt).toContain('believable passenger viewpoint');
-  expect(scene.full_prompt).toContain('minimal unused ceiling');
-  expect(scene.full_prompt).toContain('realistic pelvis and shoulder support');
-  expect(scene.full_prompt).toContain('never let an arm float');
-  expect(scene.full_prompt).toContain('directional window light');
+  const built = await page.evaluate(async value => (await import('/src/lib/sceneFlowState.js')).buildSceneFlowPrompts(value, { identityLocked: false, referenceRoles: [] }), scene);
+  expect(built.shotPrompts[0].prompt).toContain('grounded seated posture');
+  expect(built.shotPrompts[0].prompt).toContain('passenger eye-level medium candid');
+  expect(built.shotPrompts[0].prompt).toContain('navy university hoodie');
+  expect(tracker.generationCalls()).toBe(0);
 });

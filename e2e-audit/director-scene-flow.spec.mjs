@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { sceneFlowV3 } from './scene-fixtures.mjs';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -13,7 +14,7 @@ const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcS
 
 test('Director keeps Scene Flow state and sends the first brief with its creator reference', async ({ page }) => {
   const chatPayloads = [];
-  let generationPayload;
+  let generationCalls = 0;
 
   await page.addInitScript(pixel => {
     const creator = {
@@ -39,21 +40,15 @@ test('Director keeps Scene Flow state and sends the first brief with its creator
     chatPayloads.push(payload);
     const brief = payload.data[1];
     const ready = chatPayloads.length > 1;
+    const scene = ready ? sceneFlowV3({ creatorId: null, creatorName: 'Maya', identityLocked: true, location: 'Atlanta', outfit: brief, mood: 'cinematic', action: 'rooftop at sunset' }) : null;
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         data: [JSON.stringify({
           reply: ready ? "Got it, I'm building your scene now..." : 'What should Maya wear?',
-          scene: ready ? {
-            setting: 'rooftop at sunset',
-            wardrobe: brief,
-            location: 'Atlanta',
-            content_type: 'photo',
-            vibe: 'cinematic',
-            character_desc: '',
-            full_prompt: '',
-          } : {},
+          scene,
+          generate: false,
           history: [
             { role: 'user', content: brief },
             {
@@ -67,7 +62,7 @@ test('Director keeps Scene Flow state and sends the first brief with its creator
   });
 
   await page.route('**/gradio_api/run/scene_flow_generate', async route => {
-    generationPayload = route.request().postDataJSON();
+    generationCalls += 1;
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -85,36 +80,34 @@ test('Director keeps Scene Flow state and sends the first brief with its creator
   await page.getByRole('button', { name: /Thee Director/ }).first().click();
   await page.getByRole('tab', { name: 'Talk It Through' }).click();
 
-  await expect(page.getByLabel('Role for Maya (creator)')).toBeVisible();
+  await expect(page.getByText('Maya is on set')).toBeVisible();
+  await expect(page.getByText('Identity bound')).toBeVisible();
   const brief = 'Rooftop at sunset in Atlanta with cinematic lighting.';
-  await page.getByPlaceholder(/Describe the vibe/).fill(brief);
+  await page.getByPlaceholder(/Describe the sequence/).fill(brief);
   await page.getByTitle('Send').click();
 
   await expect(page.getByText('What should Maya wear?')).toBeVisible();
-  await expect(page.getByPlaceholder(/Message Scene Flow/)).toBeEnabled();
+  await expect(page.getByPlaceholder(/Describe the sequence/)).toBeEnabled();
   expect(chatPayloads[0].data[1]).toContain(brief);
   expect(chatPayloads[0].data[1]).not.toContain('Requested output format');
   expect(chatPayloads[0].data[1]).not.toContain('locked');
-  expect(JSON.parse(chatPayloads[0].data[2])).toEqual([
-    expect.objectContaining({ image: PIXEL, role: 'identity', name: 'Maya (creator)' }),
-  ]);
+  expect(chatPayloads[0].data[2]).toBe('');
 
   await page.getByRole('tab', { name: 'Guided' }).click();
   await page.getByRole('tab', { name: 'Talk It Through' }).click();
   await expect(page.getByText('What should Maya wear?')).toBeVisible();
 
-  await page.getByPlaceholder(/Message Scene Flow/).fill('A tailored black suit');
+  await page.getByPlaceholder(/Describe the sequence/).fill('A tailored black suit');
   await page.getByTitle('Send').click();
-  await expect(page.getByText('Your scene is ready.')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByLabel('Shot 1 action')).toHaveValue('rooftop at sunset');
+  await expect(page.getByText('Maya is on set')).toBeVisible();
 
-  // The chat sees the reference only once, while the later generation still
-  // receives the same active identity reference after multiple turns.
+  // Saved Cast identity remains canonical and is never flattened into a
+  // styling reference payload. Chat/planning never starts image generation.
   expect(chatPayloads[1].data[2]).toBe('');
-  expect(JSON.parse(generationPayload.data[1])).toEqual([
-    expect.objectContaining({ image: PIXEL, role: 'identity', name: 'Maya (creator)' }),
-  ]);
+  expect(generationCalls).toBe(0);
 
   await page.getByRole('button', { name: 'New chat' }).click();
-  await expect(page.getByLabel('Role for Maya (creator)')).toBeVisible();
-  await expect(page.getByPlaceholder(/Describe the vibe/)).toHaveValue('');
+  await expect(page.getByText('Maya is on set')).toBeVisible();
+  await expect(page.getByPlaceholder(/Describe the sequence/)).toHaveValue('');
 });

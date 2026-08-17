@@ -293,6 +293,8 @@ export function ShootBuilder({
       persistedSlotsRef.current.add(persistenceKey);
       saveToLibrary(slot.imageUrl, {
       source: details.source,
+      parentBatchId: batch.parentBatchId,
+      slotIndex: slot.slotIndex,
       character,
       scene: details.sceneName || undefined,
       prompt: details.positivePrompt,

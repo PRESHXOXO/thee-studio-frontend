@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from './AuthContext.jsx';
 import { bootstrapCloudStore } from '../lib/cloudStore.js';
 
+vi.mock('../lib/library.js', () => ({ refreshLibrary: vi.fn().mockResolvedValue([]) }));
+
 vi.mock('../lib/cloudStore.js', () => ({
   bootstrapCloudStore: vi.fn().mockResolvedValue(undefined),
   installGlobalErrorTelemetry: vi.fn(() => vi.fn()),

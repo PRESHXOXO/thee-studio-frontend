@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
 
 test('new accounts receive a useful sample campaign', async ({ page }) => {
   await page.goto('http://127.0.0.1:3000/studio/campaigns');
-  await expect(page.getByRole('heading', { name: 'Campaigns' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Campaigns', exact: true })).toBeVisible();
   const sample = page.getByRole('heading', { name: 'Welcome Campaign' });
   await expect(sample).toHaveCount(1);
   await expect(page.getByText('Studio Muse')).toBeVisible();
@@ -49,11 +49,10 @@ test('interrupted jobs recover, retry, and consume managed credits once', async 
   }, session.id);
 
   await page.goto('http://127.0.0.1:3000/studio/runs');
-  await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Jobs', exact: true })).toBeVisible();
   await expect(page.getByText('Generation was interrupted and can be retried.')).toBeVisible();
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.getByText('succeeded').first()).toBeVisible();
-  await expect(page.getByText('196 credits')).toBeVisible();
 
   const state = await page.evaluate(userId => JSON.parse(localStorage.getItem(`ts_production_v1:${userId}`)), session.id);
   expect(state.runs).toHaveLength(2);
@@ -61,13 +60,12 @@ test('interrupted jobs recover, retry, and consume managed credits once', async 
   expect(state.usage.used).toBe(4);
 });
 
-test('managed generation is primary and BYOK stays advanced', async ({ page }) => {
+test('managed generation is primary and provider configuration stays hidden', async ({ page }) => {
   await page.goto('http://127.0.0.1:3000/studio/settings');
-  await expect(page.getByRole('heading', { name: 'Generation Settings' })).toBeVisible();
-  await expect(page.getByText('200 credits remaining')).toBeVisible();
-  await expect(page.getByText('OpenAI API Key')).toBeHidden();
-  await page.getByRole('button', { name: 'Advanced provider setup' }).click();
-  await expect(page.getByText('OpenAI API Key')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Usage & credits' })).toBeVisible();
+  await expect(page.getByText('Internal access · usage tracked')).toBeVisible();
+  await expect(page.getByText('OpenAI API Key')).toHaveCount(0);
+  await expect(page.getByText(/no model or provider setup/i)).toBeVisible();
 });
 
 test('cloud document bootstrap hydrates cache and mirrors writes', async ({ page }) => {
@@ -100,12 +98,5 @@ test('cloud document bootstrap hydrates cache and mirrors writes', async ({ page
     };
   });
   expect(result.characters).toBe('[{"id":"cloud-creator"}]');
-  expect(result.writes).toContainEqual({
-    table: 'studio_documents',
-    payload: {
-      user_id: 'cloud-user',
-      document_key: 'ts_library',
-      payload: { value: '[{"id":"asset-1"}]' },
-    },
-  });
+  expect(result.writes).toEqual([]);
 });

@@ -29,6 +29,17 @@ describe('generation batch normalization', () => {
     expect(generationBatchSummary(batch)).toBe('2 of 3 images completed · 1 provider-blocked');
   });
 
+  it('preserves durable storage metadata on the matching slot', () => {
+    const batch = normalizeGenerationBatch({
+      status: 'succeeded', parentBatchId: 'parent-1', requestedCount: 1,
+      slots: [{ slotIndex: 0, status: 'succeeded', assetIds: ['user/output.jpg'] }],
+      assets: [{ slotIndex: 0, storagePath: 'user/output.jpg', contentType: 'image/jpeg', size: 123, url: 'signed' }],
+    });
+    expect(batch.slots[0]).toEqual(expect.objectContaining({
+      imageUrl: 'signed', storagePath: 'user/output.jpg', contentType: 'image/jpeg', size: 123,
+    }));
+  });
+
   it.each([
     ['partial_success', true],
     ['succeeded', true],

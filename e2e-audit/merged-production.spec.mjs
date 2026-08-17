@@ -34,7 +34,7 @@ test.beforeEach(async ({ page }) => {
 
 test('merged Campaigns pipeline reaches reviewed hero and export', async ({ page }) => {
   await page.goto('http://127.0.0.1:3000/studio/campaigns');
-  await expect(page.getByRole('heading', { name: 'Campaigns' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Campaigns', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'New campaign' }).first().click();
   await page.getByLabel('Campaign name').fill('Quiet Luxury Morning');
   await page.getByLabel('Creative brief').fill('A premium vertical creator campaign with restrained motion.');

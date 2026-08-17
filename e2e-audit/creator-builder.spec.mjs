@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/6ZcmWQAAAABJRU5ErkJggg==';
+const PIXEL_BUFFER = Buffer.from(PIXEL.split(',')[1], 'base64');
 
 async function mockGeneration(page, { delayMs = 250 } = {}) {
   let variationCalls = 0;
@@ -58,9 +59,23 @@ async function fillBaseStep(page, name) {
   await pickCombo(page, 7, 'Curvy / Hourglass');
 }
 
-test('full 5-step wizard generates, locks, and Save Creator persists everywhere', async ({ page }) => {
+async function completeCurrentUploadBuilder(page, name) {
+  await fillBaseStep(page, name);
+  await page.getByRole('button', { name: 'Save & Add Headshot' }).click();
+  await expect(page.getByRole('heading', { name: `Add ${name}'s headshot` })).toBeVisible();
+  await page.locator('input[type="file"]').setInputFiles({ name: 'headshot.png', mimeType: 'image/png', buffer: PIXEL_BUFFER });
+  await expect(page.getByAltText(name)).toBeVisible();
+  await page.getByRole('button', { name: /Continue/ }).click();
+  await expect(page.getByRole('heading', { name: `Preserve ${name} references.` })).toBeVisible();
+  await page.getByRole('button', { name: /Continue/ }).click();
+  await page.getByRole('button', { name: 'Define Body' }).click();
+  await page.locator('input[type="file"]').setInputFiles({ name: 'full-body.png', mimeType: 'image/png', buffer: PIXEL_BUFFER });
+  await pickCombo(page, 1, 'Hourglass');
+  await page.getByRole('button', { name: /Continue/ }).click();
+}
+
+test('full upload-first wizard locks and Save Creator persists everywhere without generation', async ({ page }) => {
   page.on('pageerror', error => console.error(`PAGE ERROR: ${error.stack || error.message}`));
-  const getVariationCalls = await mockGeneration(page, { delayMs: 200 });
   await page.addInitScript(pixel => {
     localStorage.setItem('ts_auth_session', JSON.stringify({ id: 't', name: 'T', email: 't@test.local', signedInAt: new Date().toISOString(), provider: 'local-test' }));
     localStorage.setItem('ts_characters', JSON.stringify([{
@@ -73,26 +88,7 @@ test('full 5-step wizard generates, locks, and Save Creator persists everywhere'
   await page.getByRole('button', { name: /Cast/ }).click();
   await page.getByRole('button', { name: /New Creator/ }).first().click();
 
-  // Step 1 — Base
-  await fillBaseStep(page, 'Regression Creator');
-  await page.getByRole('button', { name: 'Generate My Creator' }).click();
-
-  // Step 2 — First Look
-  await expect(page.getByText('Meet Regression Creator')).toBeVisible();
-  await page.getByRole('button', { name: 'Approve This Face' }).click();
-
-  // Step 3 — Identity Lock (four variation shots generate automatically)
-  await expect(page.getByText("Let's lock Regression Creator")).toBeVisible();
-  await expect.poll(getVariationCalls, { timeout: 15000 }).toBe(4);
-  await page.locator('button[title="Use as primary face"]').first().click();
-  await page.getByRole('button', { name: 'Approve All' }).click();
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Lock success screen
-  await expect(page.getByText('Regression Creator is officially locked.')).toBeVisible();
-  await page.getByRole('button', { name: 'Skip to Brand' }).click();
-
-  // Step 5 — Brand, then save
+  await completeCurrentUploadBuilder(page, 'Regression Creator');
   await expect(page.getByText("Build Regression Creator's world")).toBeVisible();
   await page.getByRole('button', { name: 'Save Creator' }).click();
 
@@ -100,7 +96,7 @@ test('full 5-step wizard generates, locks, and Save Creator persists everywhere'
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('ts_characters') || '[]'));
   expect(stored).toHaveLength(2);
   expect(stored[1].name).toBe('Regression Creator');
-  expect(stored[1].refImages).toHaveLength(5);
+  expect(stored[1].refImages).toHaveLength(2);
   expect(stored[1].locked).toBe(true);
   expect(stored[1].status).toBe('identity_locked');
   expect(stored[1].coreIdentity.adultAgeRange).toBe('25-29');
@@ -109,7 +105,6 @@ test('full 5-step wizard generates, locks, and Save Creator persists everywhere'
 });
 
 test('storage failure at final save stays in Builder and shows a recoverable error', async ({ page }) => {
-  const getVariationCalls = await mockGeneration(page, { delayMs: 10 });
   await page.addInitScript(pixel => {
     localStorage.setItem('ts_auth_session', JSON.stringify({ id: 't', name: 'T', email: 't@test.local', signedInAt: new Date().toISOString(), provider: 'local-test' }));
     localStorage.setItem('ts_characters', JSON.stringify([{
@@ -120,15 +115,7 @@ test('storage failure at final save stays in Builder and shows a recoverable err
   await page.goto('http://localhost:3000/studio/');
   await page.getByRole('button', { name: /New Creator/ }).first().click();
 
-  await fillBaseStep(page, 'Unsaved Creator');
-  await page.getByRole('button', { name: 'Generate My Creator' }).click();
-  await expect(page.getByText('Meet Unsaved Creator')).toBeVisible();
-  await page.getByRole('button', { name: 'Approve This Face' }).click();
-  await expect.poll(getVariationCalls, { timeout: 15000 }).toBe(4);
-  await page.locator('button[title="Use as primary face"]').first().click();
-  await page.getByRole('button', { name: 'Approve All' }).click();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Skip to Brand' }).click();
+  await completeCurrentUploadBuilder(page, 'Unsaved Creator');
 
   await page.evaluate(() => {
     const originalSetItem = Storage.prototype.setItem;
@@ -141,7 +128,7 @@ test('storage failure at final save stays in Builder and shows a recoverable err
   });
   await page.getByRole('button', { name: 'Save Creator' }).click();
 
-  await expect(page.getByText(/Save failed: browser storage is full/)).toBeVisible();
+  await expect(page.getByText(/Storage quota exceeded|Creator could not be saved/)).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ts_characters') || '[]'))).toHaveLength(1);
 });
 

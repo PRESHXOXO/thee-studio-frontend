@@ -1,0 +1,41 @@
+export function sceneFlowV3({
+  creatorId = null,
+  creatorName = '',
+  identityLocked = false,
+  referenceRoles = [],
+  title = 'Scene Flow sequence',
+  concept = 'A coherent visual sequence',
+  location = '',
+  outfit = '',
+  mood = 'candid',
+  format = 'photo sequence',
+  shots = 1,
+  action = 'candid scene moment',
+} = {}) {
+  return {
+    schemaVersion: 'scene_flow_v3',
+    sceneId: 'scene_e2e_fixture',
+    title,
+    sequenceConcept: concept,
+    creator: { id: creatorId, name: creatorName, identityLocked },
+    referenceRoles,
+    globals: {
+      location, outfit, hair: '', makeup: '', background: '', mood,
+      visualStyle: 'realistic camera roll', cameraLanguage: 'varied candid coverage',
+      lighting: 'natural practical light', timeOfDay: 'evening',
+      contentFormat: format, aspectRatio: '9:16',
+      continuity: 'preserve identity and settled styling', supporting: '',
+    },
+    shots: Array.from({ length: shots }, (_, index) => ({
+      id: `shot_${String(index + 1).padStart(3, '0')}`,
+      index: index + 1,
+      purpose: index === 0 ? 'establish the scene' : `sequence beat ${index + 1}`,
+      action: index === 0 ? action : `${action}, moment ${index + 1}`,
+      pose: index % 2 ? 'walking candid' : 'relaxed natural posture',
+      expression: 'natural expression',
+      framing: ['wide establishing', 'medium candid', 'close detail', 'over shoulder', 'environmental portrait'][index % 5],
+      angle: index % 2 ? 'eye level' : 'slight low angle',
+      crop: '', environment: location, props: '', interaction: '', movement: '', composition: '', note: '', overrides: {},
+    })),
+  };
+}

@@ -1,11 +1,12 @@
 import React from 'react';
-import { getSupabase, hasSupabaseConfig, normalizeSupabaseSession } from '../lib/supabase.js';
+import { getSupabase, hasSupabaseConfig, isE2eAuthEnabled, normalizeSupabaseSession } from '../lib/supabase.js';
 import {
   bootstrapCloudStore,
   installGlobalErrorTelemetry,
   reportStudioError,
   resetCloudStore,
 } from '../lib/cloudStore.js';
+import { refreshLibrary } from '../lib/library.js';
 
 const AuthContext = React.createContext(null);
 
@@ -21,7 +22,7 @@ export function safeAuthMessage(error) {
   return 'Sign-in failed. Check your details and try again.';
 }
 
-export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupabase() : null }) {
+export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eAuthEnabled()) ? getSupabase() : null }) {
   const [session, setSession] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
@@ -33,7 +34,10 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
     const normalized = normalizeSupabaseSession(nextSession);
     if (normalized) {
       try {
-        await bootstrapCloudStore(client, normalized.id);
+        if (!client?.__e2e) {
+          await bootstrapCloudStore(client, normalized.id);
+          await refreshLibrary();
+        }
         if (transition === transitionRef.current) setSyncError('');
       } catch (bootstrapError) {
         if (transition === transitionRef.current) setSyncError('Cloud sync is unavailable.');
@@ -162,7 +166,7 @@ export function AuthProvider({ children, client = hasSupabaseConfig() ? getSupab
     loading,
     error,
     syncError,
-    mode: client ? 'cloud' : 'misconfigured',
+    mode: client?.__e2e ? 'local' : client ? 'cloud' : 'misconfigured',
     googleEnabled,
     signIn,
     signUp,

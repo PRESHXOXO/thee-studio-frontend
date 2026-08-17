@@ -4,7 +4,6 @@ import { syncCastReferencesToCloud } from './castCreatorSync.js';
 
 export const SYNCED_KEYS = [
   'ts_characters',
-  'ts_library',
   'ts_references',
   'ts_promptlab',
   'ts_campaigns',
@@ -14,6 +13,7 @@ export const SYNCED_KEYS = [
 
 export const USER_SCOPED_CACHE_KEYS = [
   ...SYNCED_KEYS,
+  'ts_library',
   'ts_creator_draft',
   'ts_production_v1',
   'ts_notif_seen_at',
@@ -329,15 +329,15 @@ export async function persistCloudAsset(assetId, blob) {
   return path;
 }
 
-export async function downloadCloudAsset(path) {
+export async function downloadCloudAsset(path, bucket = 'studio-assets') {
   if (!runtime || !path) return null;
   const telemetryKey = createTelemetryRequestKey();
-  const { data, error } = await runtime.db.storage.from('studio-assets').download(path);
+  const { data, error } = await runtime.db.storage.from(bucket).download(path);
   if (error) {
-    await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_read', status: 'failed', bucket: 'studio-assets', objectType: 'library_asset', failureReason: error.message });
+    await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_read', status: 'failed', bucket, objectType: 'library_asset', failureReason: error.message });
     throw new Error(`Could not retrieve the full-resolution asset: ${error.message}`);
   }
-  await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_read', storageDeltaBytes: data?.size || 0, bucket: 'studio-assets', objectType: data?.type || 'library_asset' });
+  await trackStorageOperation({ requestKey: telemetryKey, storageOperation: 'storage_read', storageDeltaBytes: data?.size || 0, bucket, objectType: data?.type || 'library_asset' });
   return data || null;
 }
 

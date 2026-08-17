@@ -7,6 +7,7 @@ const PIXEL = Buffer.from(
 
 test('reference-only send wakes Scene Flow with a real instruction', async ({ page }) => {
   let chatPayload;
+  let generationCalls = 0;
 
   await page.addInitScript(() => {
     localStorage.setItem('ts_auth_session', JSON.stringify({
@@ -30,12 +31,13 @@ test('reference-only send wakes Scene Flow with a real instruction', async ({ pa
       body: JSON.stringify({
         data: [JSON.stringify({
           reply: '',
-          scene: {},
+          scene: null,
           history: [],
         })],
       }),
     });
   });
+  await page.route('**/gradio_api/run/scene_flow_generate', route => { generationCalls += 1; return route.abort(); });
 
   await page.goto('http://127.0.0.1:3000/studio/');
   await page.getByRole('navigation').getByRole('button', { name: /Thee Director/ }).click();
@@ -47,11 +49,12 @@ test('reference-only send wakes Scene Flow with a real instruction', async ({ pa
   });
   await page.getByTitle('Send').click();
 
-  await expect(page.getByText('References received. What kind of scene would you like to create with them?')).toBeVisible();
-  await expect(page.getByPlaceholder(/Message Scene Flow/)).toBeEnabled();
-  expect(chatPayload.data[1]).toMatch(/visual reference image.*identity.*what I want to create/);
+  await expect(page.getByText('I have the direction. Use the shot board to review it.')).toBeVisible();
+  await expect(page.getByPlaceholder(/Describe the sequence/)).toBeEnabled();
+  expect(chatPayload.data[1]).toMatch(/Newly attached visual roles: identity/);
   const references = JSON.parse(chatPayload.data[2]);
   expect(references).toHaveLength(1);
   expect(references[0].role).toBe('identity');
   expect(references[0].image).toMatch(/^data:image\/jpeg;base64,/);
+  expect(generationCalls).toBe(0);
 });

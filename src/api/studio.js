@@ -522,7 +522,14 @@ export async function generateImage({
     url = url.replace(/^https?:\/\/127\.0\.0\.1:7860/, '/gradio_api');
     return url;
   }).filter(Boolean);
-  return { images, status: data[1] || '' };
+  return {
+    images,
+    // Local Gradio returns display text such as "Complete" rather than the
+    // canonical batch enum. Translate this known transport result here so the
+    // shared batch normalizer can continue failing closed on unknown statuses.
+    status: images.length ? 'succeeded' : 'failed',
+    providerStatus: data[1] || '',
+  };
 }
 
 export async function sceneFlowChat({ messagesJson = '[]', userMessage = '', referenceImages = [], activeReferenceRoles = [], currentScene = null, creator = null, refImageB64 = '' } = {}) {

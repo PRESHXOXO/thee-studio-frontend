@@ -1,4 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
+import { createE2eAuthClient } from './e2eAuthClient.js';
+
+const e2eAuthEnabled = import.meta.env.DEV && import.meta.env.VITE_E2E_AUTH === 'true';
 
 export function readSupabaseConfig(env = import.meta.env) {
   const url = env?.VITE_SUPABASE_URL?.trim() || '';
@@ -10,7 +13,9 @@ export function readSupabaseConfig(env = import.meta.env) {
 
 export const supabaseConfig = readSupabaseConfig();
 
-export const supabase = supabaseConfig.configured
+export const supabase = e2eAuthEnabled
+  ? createE2eAuthClient()
+  : supabaseConfig.configured
   ? createClient(supabaseConfig.url, supabaseConfig.publishableKey, {
       auth: {
         persistSession: true,
@@ -24,6 +29,8 @@ export const supabase = supabaseConfig.configured
 export function hasSupabaseConfig() {
   return supabaseConfig.configured;
 }
+
+export function isE2eAuthEnabled() { return e2eAuthEnabled; }
 
 // Staging project ref, extracted from the standard Supabase URL shape
 // (https://<ref>.supabase.co). Used to gate staging-only diagnostic UI —

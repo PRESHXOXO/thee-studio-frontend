@@ -101,7 +101,7 @@ export async function getLibraryOriginalBlob(entry) {
   const assetId = entry.originalAssetId || entry.id;
   let blob = await cachedBlob(assetId);
   if (!blob && entry.originalStoragePath) {
-    blob = await downloadCloudAsset(entry.originalStoragePath);
+    blob = await downloadCloudAsset(entry.originalStoragePath, entry.originalStorageBucket || 'studio-assets');
     if (blob) await cacheBlob(assetId, blob);
   }
   if (!blob) {
@@ -138,7 +138,10 @@ export async function downloadImageAsPng(source, filename = 'thee-studio.png') {
 }
 
 export async function downloadLibraryOriginal(entry) {
-  const blob = await getLibraryOriginalBlob(entry);
+  let blob = await getLibraryOriginalBlob(entry);
+  if (['quick_shoot', 'director', 'prompt_lab', 'scene_flow'].includes(entry.source)) {
+    blob = await imageBlobToPng(blob);
+  }
   triggerBlobDownload(blob, `thee-studio-${entry.id}.${extensionFor(blob.type || entry.originalMimeType)}`);
 }
 

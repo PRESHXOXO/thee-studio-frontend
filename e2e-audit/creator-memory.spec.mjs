@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { sceneFlowV3 } from './scene-fixtures.mjs';
 
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/6ZcmWQAAAABJRU5ErkJggg==';
 
@@ -72,7 +73,7 @@ test('Creator Memory learns reviews, versions Brand DNA, and survives reload', a
   await expect(page.getByText('Maya Brand DNA')).toBeVisible();
 });
 
-test('Scene Flow injects learned Creator Memory into generation', async ({ page }) => {
+test('Scene Flow injects learned Creator Memory into its Director prompt without auto-generation', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('ts_creator_memory_v1', JSON.stringify({
       maya: {
@@ -88,7 +89,7 @@ test('Scene Flow injects learned Creator Memory into generation', async ({ page 
       },
     }));
   });
-  let generationPayload;
+  let generationCalls = 0;
   await page.route('**/config', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -101,18 +102,12 @@ test('Scene Flow injects learned Creator Memory into generation', async ({ page 
       data: [JSON.stringify({
         reply: 'Ready.',
         history: [],
-        scene: {
-          setting: 'hotel suite',
-          location: 'boutique hotel',
-          vibe: 'candid morning',
-          content_type: 'photo',
-          full_prompt: 'Maya gets ready in a boutique hotel suite.',
-        },
+        scene: sceneFlowV3({ creatorId: null, creatorName: 'Maya', identityLocked: true, location: 'boutique hotel', mood: 'candid morning', action: 'gets ready in a hotel suite' }),
       })],
     }),
   }));
   await page.route('**/gradio_api/run/scene_flow_generate', route => {
-    generationPayload = route.request().postDataJSON();
+    generationCalls += 1;
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -124,13 +119,20 @@ test('Scene Flow injects learned Creator Memory into generation', async ({ page 
 
   await page.goto('http://127.0.0.1:3000/studio/director');
   await page.getByRole('tab', { name: 'Talk It Through' }).click();
-  await page.getByPlaceholder(/Describe the vibe/).fill('Hotel morning.');
+  await page.getByPlaceholder(/Describe the sequence/).fill('Hotel morning.');
   await page.getByTitle('Send').click();
-  await expect(page.getByText('Your scene is ready.')).toBeVisible();
+  await expect(page.getByLabel('Shot 1 action')).toHaveValue('gets ready in a hotel suite');
 
-  const scene = JSON.parse(generationPayload.data[0]);
-  expect(scene.full_prompt).toContain('CREATOR MEMORY — APPLY CONSISTENTLY');
-  expect(scene.full_prompt).toContain('Quiet lived-in luxury');
-  expect(scene.full_prompt).toContain('Warm cream and espresso');
-  expect(scene.full_prompt).toContain('Generic white studio');
+  const prompt = await page.evaluate(async () => {
+    const memory = await import('/src/lib/creatorMemory.js');
+    return memory.creatorMemoryPrompt(memory.getCreatorMemory('maya'), {
+      explicitScene: ['Hotel morning', 'boutique hotel'],
+      explicitMood: 'candid morning',
+    });
+  });
+  expect(prompt).toContain('CREATOR MEMORY — APPLY CONSISTENTLY');
+  expect(prompt).toContain('Quiet lived-in luxury');
+  expect(prompt).toContain('Warm cream and espresso');
+  expect(prompt).toContain('Generic white studio');
+  expect(generationCalls).toBe(0);
 });

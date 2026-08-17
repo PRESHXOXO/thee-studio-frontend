@@ -57,9 +57,11 @@ export function normalizeGenerationBatch(raw = {}, { requestedCount = 1, parentB
 
     const directUrl = assetUrl(source);
     let imageUrl = directUrl;
+    let matchedAsset = null;
     if (!imageUrl && matchedAssetIndex >= 0) {
       usedAssetIndexes.add(matchedAssetIndex);
-      imageUrl = assetUrl(assets[matchedAssetIndex]);
+      matchedAsset = assets[matchedAssetIndex];
+      imageUrl = assetUrl(matchedAsset);
     }
     const legacyUrl = legacyImages[slotIndex] || null;
     if (!imageUrl && legacyUrl && (source.status === 'succeeded' || !rawSlots.length)) imageUrl = legacyUrl;
@@ -74,7 +76,16 @@ export function normalizeGenerationBatch(raw = {}, { requestedCount = 1, parentB
       else slotStatus = 'succeeded';
     }
 
-    return { ...source, slotIndex, status: slotStatus, imageUrl };
+    return {
+      ...(matchedAsset || {}),
+      ...source,
+      slotIndex,
+      status: slotStatus,
+      imageUrl,
+      storagePath: source.storagePath || matchedAsset?.storagePath || null,
+      contentType: source.contentType || matchedAsset?.contentType || null,
+      size: source.size || matchedAsset?.size || null,
+    };
   });
 
   // Some legacy/early batch responses omit slot-to-asset metadata. Assign
@@ -88,7 +99,15 @@ export function normalizeGenerationBatch(raw = {}, { requestedCount = 1, parentB
     if (!imageUrl) return slot;
     usedAssetIndexes.add(remainingAssetIndex);
     remainingAssetIndex += 1;
-    return { ...slot, imageUrl };
+    const asset = assets[remainingAssetIndex - 1];
+    return {
+      ...asset,
+      ...slot,
+      imageUrl,
+      storagePath: slot.storagePath || asset?.storagePath || null,
+      contentType: slot.contentType || asset?.contentType || null,
+      size: slot.size || asset?.size || null,
+    };
   });
 
   const derived = orderedSlots.reduce((counts, slot) => {

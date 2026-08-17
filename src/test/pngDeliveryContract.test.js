@@ -15,10 +15,12 @@ describe('Director PNG delivery contract', () => {
     expect(assets).toContain('triggerBlobDownload(png');
   });
 
-  it('stores Director and Quick Shoot originals as PNG while keeping the lightweight preview separate', () => {
+  it('normalizes uploaded originals and delivers generated Library downloads as real PNG without recopying provider assets', () => {
     expect(library).toContain("new Set(['quick_shoot', 'director', 'prompt_lab', 'scene_flow'])");
     expect(library).toContain("preferredMimeType = PNG_ORIGINAL_SOURCES.has(metadata.source) ? 'image/png' : null");
     expect(library).toContain('saveLibraryOriginal(id, src, { preferredMimeType })');
-    expect(library).toContain('compressForLibrary(src)');
+    expect(library).toContain('saveGeneratedLibraryItem');
+    expect(assets).toContain("['quick_shoot', 'director', 'prompt_lab', 'scene_flow'].includes(entry.source)");
+    expect(assets).toContain('blob = await imageBlobToPng(blob)');
   });
 });

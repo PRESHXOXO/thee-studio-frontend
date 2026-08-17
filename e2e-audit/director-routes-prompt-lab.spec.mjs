@@ -35,21 +35,21 @@ test('Director modes have stable links and Describe It builds successfully', asy
   await page.goto('http://127.0.0.1:3000/studio/director/describe-it');
   await expect(page).toHaveURL(/\/studio\/director\/describe-it$/);
   await expect(page.getByRole('tab', { name: 'Describe It' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('heading', { name: /lab brings the lens/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Director builds the shot/i })).toBeVisible();
 
   await page.getByPlaceholder(/rooftop dinner in Paris/).fill('Candid hotel-suite portrait.');
-  await page.getByRole('button', { name: 'Build my prompt' }).click();
-  await expect(page.getByText('Engineered Prompt')).toBeVisible();
-  await expect(page.getByText(/cinematic hotel-suite portrait/)).toBeVisible();
+  await page.getByRole('button', { name: 'Build direction' }).click();
+  await expect(page.getByText('Engineered direction')).toBeVisible();
+  await expect(page.locator('pre')).toHaveText(/cinematic hotel-suite portrait/i);
 
   await page.getByRole('tab', { name: 'Talk It Through' }).click();
   await expect(page).toHaveURL(/\/studio\/director\/scene-flow$/);
-  await expect(page.getByText('Your conversational creative director')).toBeVisible();
+  await expect(page.getByText('Brainstorm freely. Rendering starts only from the explicit Generate button.')).toBeVisible();
 
   await page.goBack();
   await expect(page).toHaveURL(/\/studio\/director\/describe-it$/);
   await expect(page.getByRole('tab', { name: 'Describe It' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('Engineered Prompt')).toBeVisible();
+  await expect(page.getByText('Engineered direction')).toBeVisible();
 
   await page.reload();
   await expect(page.getByRole('tab', { name: 'Describe It' })).toHaveAttribute('aria-selected', 'true');

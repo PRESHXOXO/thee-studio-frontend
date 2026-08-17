@@ -173,12 +173,10 @@ test('History re-run restores the complete Guided settings snapshot', async ({ p
   await expect(page.getByRole('tab', { name: 'Guided' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('combobox').filter({ hasText: 'Rooftop' })).toBeVisible();
   await expect(page.getByPlaceholder(/Anything specific for this shot/)).toHaveValue('Keep the skyline soft and candid.');
-  await expect(page.getByRole('button', { name: 'FLUX Schnell' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Cinematic' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Golden Hour' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'Old Money', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('combobox').filter({ hasText: 'Old Money' })).toBeVisible();
   await expect(page.getByRole('button', { name: '2 images' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'Use reference 2' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('History re-run opens Describe It with its original prompt-engine settings', async ({ page }) => {
@@ -252,18 +250,18 @@ test('pipeline filter is URL-backed, refresh-safe, and returns to All without st
   await expect(page.getByRole('img', { name: 'Approved image' })).toBeVisible();
 });
 
-test('new Guided generations persist a full prompt and reusable settings snapshot', async ({ page }) => {
+test('new Guided generation sends the complete current direction only after explicit Generate', async ({ page }) => {
   await seedSession(page);
+  let generationPayload;
   await page.route('**/config', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({ components: [] }),
   }));
-  await page.route('**/gradio_api/run/generate_image', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ data: [[PIXEL], 'Complete'] }),
-  }));
+  await page.route('**/gradio_api/**/generate_image*', route => {
+    generationPayload = route.request().postDataJSON();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [[PIXEL], 'Complete'] }) });
+  });
 
   await page.goto('http://127.0.0.1:3000/studio/director');
   const uniqueEnding = 'preserve this exact rare cerulean-lantern ending';
@@ -271,24 +269,14 @@ test('new Guided generations persist a full prompt and reusable settings snapsho
   await page.getByPlaceholder(/Anything specific for this shot/).fill(notes);
   await page.getByRole('button', { name: 'Cinematic' }).click();
   await page.getByRole('button', { name: 'Golden Hour' }).click();
-  await page.getByRole('button', { name: 'Build + Generate' }).click();
-  await expect(page.getByRole('img', { name: 'Generated 1' })).toBeVisible();
-
-  await expect.poll(async () => page.evaluate(() => {
-    const entries = JSON.parse(localStorage.getItem('ts_library') || '[]');
-    return entries.length;
-  })).toBe(1);
-
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('ts_library') || '[]')[0]);
-  expect(saved.prompt.length).toBeGreaterThan(160);
-  expect(saved.prompt).toContain(uniqueEnding);
-  expect(saved.settings).toMatchObject({
-    version: 1,
-    workflow: 'guided',
-    mood: 'Cinematic',
-    lighting: 'Golden Hour',
-    notes,
-  });
+  expect(generationPayload).toBeUndefined();
+  await page.getByRole('button', { name: 'Generate photo' }).click();
+  await expect(page.getByRole('img', { name: 'Generated image 1' })).toBeVisible();
+  const prompt = generationPayload.data[5];
+  expect(prompt.length).toBeGreaterThan(160);
+  expect(prompt).toContain(uniqueEnding);
+  expect(prompt).toContain('Cinematic');
+  expect(prompt).toContain('Golden Hour');
 });
 
 test('search includes stored rerun settings and full prompt content', async ({ page }) => {

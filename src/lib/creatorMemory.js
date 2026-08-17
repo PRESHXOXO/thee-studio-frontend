@@ -139,22 +139,28 @@ export function learnCreatorMemory(creatorId, libraryEntries) {
   const needsFix = relevant.filter(entry => entry.status === 'needs_fix');
   const rejected = relevant.filter(entry => entry.status === 'rejected');
   const current = getCreatorMemory(creatorKey);
+  const learned = {
+    favoriteScenes: topValues(approved, sceneValue),
+    favoriteMoods: topValues(approved, moodValue),
+    favoriteWardrobes: topValues(approved, wardrobeValue),
+    favoriteLocations: topValues(approved, locationValue),
+    favoriteEngines: topValues(approved, entry => entry.engine),
+    avoidScenes: topValues([...needsFix, ...rejected], sceneValue),
+  };
+  const feedback = {
+    total: relevant.length,
+    approved: approved.length,
+    needsFix: needsFix.length,
+    rejected: rejected.length,
+  };
+  // Polling, remounts, and signed-URL refreshes cannot manufacture a memory
+  // change. Avoid updatedAt-only writes and their cloud feedback loop.
+  if (JSON.stringify(current.learned) === JSON.stringify(learned)
+      && JSON.stringify(current.feedback) === JSON.stringify(feedback)) return current;
   const next = {
     ...current,
-    learned: {
-      favoriteScenes: topValues(approved, sceneValue),
-      favoriteMoods: topValues(approved, moodValue),
-      favoriteWardrobes: topValues(approved, wardrobeValue),
-      favoriteLocations: topValues(approved, locationValue),
-      favoriteEngines: topValues(approved, entry => entry.engine),
-      avoidScenes: topValues([...needsFix, ...rejected], sceneValue),
-    },
-    feedback: {
-      total: relevant.length,
-      approved: approved.length,
-      needsFix: needsFix.length,
-      rejected: rejected.length,
-    },
+    learned,
+    feedback,
     updatedAt: new Date().toISOString(),
   };
   const store = readStore();

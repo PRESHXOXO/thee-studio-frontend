@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { sceneFlowV3 } from './scene-fixtures.mjs';
 
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/6ZcmWQAAAABJRU5ErkJggg==';
 
@@ -24,23 +25,11 @@ test('Scene Flow chats, remembers revisions, and waits for explicit generation',
   await page.route('**/gradio_api/run/scene_flow_chat', route => {
     chatCalls += 1;
     const request = route.request().postDataJSON();
-    const firstScene = {
-      setting: 'rear seat of a black car',
-      wardrobe: 'navy hoodie',
-      location: 'Manhattan',
-      content_type: 'photo',
-      vibe: 'candid city arrival',
-      character_desc: '',
-      full_prompt: 'A candid passenger portrait during a Manhattan car ride.',
-    };
-    const revisedScene = {
-      ...firstScene,
-      vibe: 'rainy candid city arrival',
-      full_prompt: 'A candid passenger portrait during a rainy Manhattan car ride with window reflections.',
-    };
+    const firstScene = sceneFlowV3({ location: 'Manhattan', outfit: 'navy hoodie', mood: 'candid city arrival', action: 'rear seat of a black car' });
+    const revisedScene = { ...firstScene, globals: { ...firstScene.globals, mood: 'rainy candid city arrival' }, shots: firstScene.shots.map(shot => ({ ...shot, environment: 'rainy Manhattan window reflections' })) };
 
     if (chatCalls === 1) {
-      const reply = `That works. I would keep the camera at passenger eye level and let Manhattan move softly outside.\nSCENE_DRAFT:${JSON.stringify(firstScene)}`;
+      const reply = 'That works. I would keep the camera at passenger eye level and let Manhattan move softly outside.';
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -59,7 +48,7 @@ test('Scene Flow chats, remembers revisions, and waits for explicit generation',
     }
 
     secondTurnHistory = JSON.parse(request.data[0]);
-    const reply = `Rain makes it stronger. I added wet-window reflections and cooler ambient light without changing the wardrobe.\nSCENE_DRAFT:${JSON.stringify(revisedScene)}`;
+    const reply = 'Rain makes it stronger. I added wet-window reflections and cooler ambient light without changing the wardrobe.';
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -94,15 +83,15 @@ test('Scene Flow chats, remembers revisions, and waits for explicit generation',
 
   await page.goto('http://127.0.0.1:3000/studio/director');
   await page.getByRole('tab', { name: 'Talk It Through' }).click();
-  await expect(page.getByText('Your conversational creative director')).toBeVisible();
+  await expect(page.getByText('Brainstorm freely. Rendering starts only from the explicit Generate button.')).toBeVisible();
 
-  const composer = page.getByPlaceholder(/Message Scene Flow/);
+  const composer = page.getByPlaceholder(/Describe the sequence/);
   await composer.fill('I want a candid Manhattan car scene with a navy hoodie.');
   await page.getByTitle('Send').click();
 
   await expect(page.getByText(/keep the camera at passenger eye level/)).toBeVisible();
   await expect(page.getByText(/SCENE_DRAFT/)).toHaveCount(0);
-  await expect(page.getByText(/rear seat of a black car/)).toBeVisible();
+  await expect(page.getByLabel('Shot 1 action')).toHaveValue('rear seat of a black car');
   await expect(page.getByRole('button', { name: 'Generate photo' })).toBeVisible();
   expect(generationCalls).toBe(0);
 
@@ -115,6 +104,6 @@ test('Scene Flow chats, remembers revisions, and waits for explicit generation',
   expect(generationCalls).toBe(0);
 
   await page.getByRole('button', { name: 'Generate photo' }).click();
-  await expect(page.getByText('Your scene is ready.')).toBeVisible();
-  expect(generationCalls).toBe(1);
+  await expect(page.getByText(/requires a saved Cast or Identity reference/)).toBeVisible();
+  expect(generationCalls).toBe(0);
 });

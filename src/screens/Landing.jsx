@@ -34,12 +34,6 @@ const FEATURES = [
   },
 ];
 
-const FREE_FEATURES = [
-  '200 generation credits',
-  'Create and save creators',
-  'Thee Studio workspace',
-];
-
 const PRO_FEATURES = [
   '1,000 generation credits each month',
   'Thee Studio workspace',
@@ -79,7 +73,7 @@ function HeroSection({ onCTA }) {
         Build reusable AI creators, direct image shoots, and organize campaign work from one private creative workspace.
       </p>
       <div className="ts-hero-actions">
-        <button className="ts-primary-cta" onClick={onCTA}>Start for free</button>
+        <button className="ts-primary-cta" onClick={onCTA}>View Studio Pro</button>
         <a className="ts-secondary-cta" href="#features">See how it works</a>
       </div>
 
@@ -156,18 +150,10 @@ function PricingSection({ onCTA }) {
       <div className="ts-pricing-inner">
         <div className="ts-section-heading">
           <div className="ts-eyebrow">Pricing</div>
-          <h2>Start free.<br />Move up when you need more.</h2>
-          <p>No pretend annual discount, no “unlimited” fine print. Your plan page shows the current live catalog before you choose.</p>
+          <h2>One plan.<br />Full Studio access.</h2>
+          <p>Studio Pro is $19 per month with 1,000 Studio credits included each month. No public free tier.</p>
         </div>
         <div className="ts-plan-grid">
-          <PlanCard
-            name="Free"
-            price="$0"
-            detail="200 generation credits"
-            features={FREE_FEATURES}
-            onCTA={onCTA}
-            buttonLabel="Choose Free"
-          />
           <PlanCard
             name="Studio Pro"
             price="$19"
@@ -175,7 +161,7 @@ function PricingSection({ onCTA }) {
             features={PRO_FEATURES}
             accent
             onCTA={onCTA}
-            buttonLabel="Choose Studio Pro"
+            buttonLabel="Subscribe to Studio Pro"
           />
         </div>
       </div>
@@ -194,7 +180,7 @@ function Footer() {
 
 export function Landing() {
   const navigate = useNavigate();
-  const goToSignup = () => navigate('/signup');
+  const goToPlans = () => navigate('/plans');
   const goToLogin = () => navigate('/login');
 
   return (
@@ -245,7 +231,7 @@ export function Landing() {
         .ts-feature-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: var(--radius-md); border: 1px solid var(--blush); background: var(--rose-glass); color: var(--coral); font-size: 1.2rem; }
         .ts-feature-card h3 { margin: 20px 0 9px; font: 600 1.125rem/1.2 var(--font-display); color: var(--text-strong); }
         .ts-feature-card p { margin: 0; font: var(--text-base); line-height: 1.6; color: var(--text-muted); }
-        .ts-plan-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 24px; }
+        .ts-plan-grid { display: grid; grid-template-columns: minmax(0, 520px); justify-content: center; gap: 24px; }
         .ts-plan-card { padding: 34px 30px; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--white); text-align: left; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; }
         .ts-plan-card-accent { background: var(--plum); border-color: transparent; color: #fff; box-shadow: var(--shadow-coral); }
         .ts-plan-name { font: 600 .75rem/1 var(--font-ui); letter-spacing: .13em; text-transform: uppercase; color: var(--text-muted); }
@@ -298,14 +284,14 @@ export function Landing() {
           <a href="#features">Features</a>
           <a href="#pricing">Pricing</a>
           <button className="ts-nav-button" onClick={goToLogin}>Log in</button>
-          <button className="ts-nav-start" onClick={goToSignup}>Start free</button>
+          <button className="ts-nav-start" onClick={goToPlans}>View plans</button>
         </div>
       </nav>
 
       <div className="ts-landing-body">
-        <HeroSection onCTA={goToSignup} />
+        <HeroSection onCTA={goToPlans} />
         <FeaturesSection />
-        <PricingSection onCTA={() => navigate('/plans')} />
+        <PricingSection onCTA={goToPlans} />
         <Footer />
       </div>
     </div>

@@ -227,6 +227,7 @@ export function creatorMemoryPrompt(memory, context = {}) {
   const explicitWardrobe = hasExplicitIntent(context.wardrobeIntent) || hasExplicitIntent(context.explicitWardrobe);
   const explicitHair = hasExplicitIntent(context.hairIntent);
   const explicitMakeup = hasExplicitIntent(context.makeupIntent);
+  const suppressStylingFallbacks = context.suppressStylingFallbacks === true;
   const sceneAuthority = explicitScene || roles.has('background');
   const wardrobeAuthority = explicitWardrobe || roles.has('outfit');
   const hairAuthority = explicitHair || roles.has('hair');
@@ -236,15 +237,15 @@ export function creatorMemoryPrompt(memory, context = {}) {
     preferences.colorPalette && `Color palette: ${preferences.colorPalette}`,
     preferences.cameraLanguage && `Camera language: ${preferences.cameraLanguage}`,
     preferences.lighting && `Lighting rules: ${preferences.lighting}`,
-    !wardrobeAuthority && preferences.wardrobeRules && `Wardrobe rules: ${preferences.wardrobeRules}`,
+    !suppressStylingFallbacks && !wardrobeAuthority && preferences.wardrobeRules && `Wardrobe rules: ${preferences.wardrobeRules}`,
     !sceneAuthority && preferences.locationRules && `Location rules: ${preferences.locationRules}`,
-    !hairAuthority && preferences.hairRules && `Hair rules: ${preferences.hairRules}`,
-    !makeupAuthority && preferences.makeupRules && `Makeup rules: ${preferences.makeupRules}`,
+    !suppressStylingFallbacks && !hairAuthority && preferences.hairRules && `Hair rules: ${preferences.hairRules}`,
+    !suppressStylingFallbacks && !makeupAuthority && preferences.makeupRules && `Makeup rules: ${preferences.makeupRules}`,
     preferences.mustKeep && `Always preserve: ${preferences.mustKeep}`,
     !sceneAuthority && learnedValues(learned.favoriteScenes) && `Learned approved scenes: ${learnedValues(learned.favoriteScenes)}`,
     !sceneAuthority && learnedValues(learned.favoriteLocations) && `Learned approved locations: ${learnedValues(learned.favoriteLocations)}`,
     !explicitMood && learnedValues(learned.favoriteMoods) && `Learned approved moods: ${learnedValues(learned.favoriteMoods)}`,
-    !wardrobeAuthority && learnedValues(learned.favoriteWardrobes) && `Learned approved wardrobe: ${learnedValues(learned.favoriteWardrobes)}`,
+    !suppressStylingFallbacks && !wardrobeAuthority && learnedValues(learned.favoriteWardrobes) && `Learned approved wardrobe: ${learnedValues(learned.favoriteWardrobes)}`,
     preferences.avoid && `Avoid: ${preferences.avoid}`,
     !sceneAuthority && learnedValues(learned.avoidScenes) && `Learned weak/rejected scenes: ${learnedValues(learned.avoidScenes)}`,
   ].filter(Boolean);

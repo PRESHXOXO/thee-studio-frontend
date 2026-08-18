@@ -191,7 +191,7 @@ export function SceneFlowV2({ campaignId = null, initialVision = '', initialSett
       const backendMessage = [message || refsContext, message && refsContext].filter(Boolean).join('\n\n');
       const response = await sceneFlowChat({
         messagesJson: JSON.stringify(history), userMessage: backendMessage,
-        referenceImages: pendingRefs, activeReferenceRoles: roleSummary,
+        referenceImages: references.filter(reference => reference.dataUrl), activeReferenceRoles: roleSummary,
         currentScene: scene ? {
           ...scene,
           creator: { id: sceneAuthority.creatorId, name: sceneAuthority.creatorName, identityLocked: sceneAuthority.identityLocked },

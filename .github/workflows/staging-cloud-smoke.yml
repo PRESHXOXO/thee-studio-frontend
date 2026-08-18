@@ -2,6 +2,9 @@ name: Staging Cloud Smoke
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - release-smoke-2026-08-18
 
 concurrency:
   group: staging-cloud-smoke

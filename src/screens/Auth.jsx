@@ -57,7 +57,7 @@ export function Auth({ mode = 'login' }) {
   }
 
   return (
-    <AuthShell title={signup ? 'Create your account' : 'Welcome back'} subtitle={signup ? 'Start building with Thee Studio' : 'Sign in to your studio'}>
+    <AuthShell title={signup ? 'Create your account' : 'Welcome back'} subtitle={signup ? 'Create your account, then subscribe to Studio Pro' : 'Sign in to your studio'}>
       {auth.googleEnabled && (
         <button type="button" disabled={disabled} onClick={() => auth.signInWithGoogle().catch(failure => setError(failure.message))} style={{ ...authPrimaryButtonStyle, marginBottom: 20, background: 'var(--white)', color: 'var(--text-body)', border: '1px solid var(--border)', boxShadow: 'none' }}>
           Continue with Google

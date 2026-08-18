@@ -76,4 +76,18 @@ describe('creatorMemoryPrompt authority and sanitation', () => {
     expect(prompt).not.toContain('Long center-part waves');
     expect(prompt).not.toContain('Soft bronze beauty');
   });
+
+  it('does not backfill wardrobe, hair, or makeup when a caller supplies authoritative empty styling state', () => {
+    const prompt = creatorMemoryPrompt(memory, {
+      wardrobeIntent: '',
+      hairIntent: '',
+      makeupIntent: '',
+      explicitScene: 'Miami condo',
+    });
+    expect(prompt).toContain('Visual signature: Quiet editorial texture');
+    expect(prompt).not.toContain('Tailored neutrals');
+    expect(prompt).not.toContain('Cream tailoring');
+    expect(prompt).not.toContain('Long center-part waves');
+    expect(prompt).not.toContain('Soft bronze beauty');
+  });
 });

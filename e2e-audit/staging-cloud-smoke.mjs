@@ -22,7 +22,7 @@ const routes = [
   ['history', 'History'],
   ['exports', 'Exports'],
   ['runs', 'Jobs'],
-  ['settings', 'Generation Settings'],
+  ['settings', 'Usage & Credits'],
 ];
 
 const forbiddenText = [

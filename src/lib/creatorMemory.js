@@ -227,7 +227,9 @@ export function creatorMemoryPrompt(memory, context = {}) {
   const explicitWardrobe = hasExplicitIntent(context.wardrobeIntent) || hasExplicitIntent(context.explicitWardrobe);
   const explicitHair = hasExplicitIntent(context.hairIntent);
   const explicitMakeup = hasExplicitIntent(context.makeupIntent);
-  const suppressStylingFallbacks = context.suppressStylingFallbacks === true;
+  const authoritativeStylingContext = ['wardrobeIntent', 'hairIntent', 'makeupIntent']
+    .some(field => Object.prototype.hasOwnProperty.call(context, field));
+  const suppressStylingFallbacks = context.suppressStylingFallbacks === true || authoritativeStylingContext;
   const sceneAuthority = explicitScene || roles.has('background');
   const wardrobeAuthority = explicitWardrobe || roles.has('outfit');
   const hairAuthority = explicitHair || roles.has('hair');

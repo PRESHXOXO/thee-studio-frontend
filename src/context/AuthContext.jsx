@@ -2,13 +2,32 @@ import React from 'react';
 import { getSupabase, hasSupabaseConfig, isE2eAuthEnabled, normalizeSupabaseSession } from '../lib/supabase.js';
 import {
   bootstrapCloudStore,
-  installGlobalErrorTelemetry,
   reportStudioError,
   resetCloudStore,
 } from '../lib/cloudStore.js';
 import { refreshLibrary } from '../lib/library.js';
 
 const AuthContext = React.createContext(null);
+
+function installGlobalErrorTelemetry() {
+  const onError = event => {
+    reportStudioError(event.error || event.message, {
+      code: 'window_error',
+      filename: event.filename,
+      line: event.lineno,
+      column: event.colno,
+    });
+  };
+  const onRejection = event => {
+    reportStudioError(event.reason, { code: 'unhandled_rejection' });
+  };
+  window.addEventListener('error', onError);
+  window.addEventListener('unhandledrejection', onRejection);
+  return () => {
+    window.removeEventListener('error', onError);
+    window.removeEventListener('unhandledrejection', onRejection);
+  };
+}
 
 export function safeAuthMessage(error) {
   const message = String(error?.message || '').toLowerCase();

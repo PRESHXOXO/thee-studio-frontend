@@ -8,6 +8,11 @@ import { LABEL, INPUT_STYLE, TEXTAREA_STYLE } from './styles.js';
 import { AGE_RANGES, UNDERTONES, DISTINCTIVE_FEATURES } from '../../lib/creatorIdentity.js';
 import { GENDERS, SKIN_TONES, HAIR_COLORS, getHairStyleOptions, getPhysiqueOptions } from '../../lib/promptData.js';
 
+const NEW_CREATOR_HAIR_COLORS = [
+  ...HAIR_COLORS,
+  { value: 'vibrant pink', label: 'Pink' },
+];
+
 // Step 1 — highest-impact identity details only. Brand/styling fields
 // (jewelry, clothing, world, energy) deliberately live on Step 5 now, not
 // mixed in here — that was the core complaint with the old single-page form.
@@ -98,7 +103,7 @@ export function BaseIdentityForm({ draft, onChange, onSubmit, submitting }) {
         </div>
         <div>
           <div style={LABEL}>Hair Color</div>
-          <Select value={hair.color} onChange={v => setHair({ ...hair, color: v })} options={HAIR_COLORS} />
+          <Select value={hair.color} onChange={v => setHair({ ...hair, color: v })} options={NEW_CREATOR_HAIR_COLORS} />
         </div>
       </div>
 

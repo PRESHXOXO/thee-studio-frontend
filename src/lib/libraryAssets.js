@@ -3,6 +3,7 @@ import {
   persistCloudAsset,
   removeCloudAsset,
 } from './cloudStore.js';
+import { getSupabase } from './supabase.js';
 
 const DB_NAME = 'thee-studio-library-assets';
 const STORE_NAME = 'originals';
@@ -37,10 +38,53 @@ async function useStore(mode, action) {
   });
 }
 
-async function sourceToBlob(source) {
+function storageLocatorFromSignedUrl(source) {
+  if (typeof source !== 'string' || !/^https?:\/\//i.test(source)) return null;
+  try {
+    const url = new URL(source);
+    const match = url.pathname.match(/\/object\/(?:sign|authenticated)\/([^/]+)\/(.+)$/i);
+    if (!match) return null;
+    return {
+      bucket: decodeURIComponent(match[1]),
+      path: match[2].split('/').map(segment => decodeURIComponent(segment)).join('/'),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function authenticatedStorageBlob(bucket, path) {
+  if (!bucket || !path) return null;
+  const { data, error } = await getSupabase().storage.from(bucket).download(path);
+  if (error || !data) {
+    throw new Error(`Could not retrieve the full-resolution asset: ${error?.message || 'missing file'}`);
+  }
+  return data;
+}
+
+async function sourceToBlob(source, options = {}) {
   if (source instanceof Blob) return source;
+  const locator = options.storagePath
+    ? { bucket: options.storageBucket || 'generation-assets', path: options.storagePath }
+    : storageLocatorFromSignedUrl(source);
+  let storageError = null;
+
+  if (locator) {
+    try {
+      const blob = await authenticatedStorageBlob(locator.bucket, locator.path);
+      if (blob) return blob;
+    } catch (error) {
+      storageError = error;
+    }
+  }
+
+  if (!source) {
+    throw storageError || new Error('Original image source is unavailable.');
+  }
   const response = await fetch(source);
-  if (!response.ok) throw new Error(`Original image fetch failed: ${response.status}`);
+  if (!response.ok) {
+    throw storageError || new Error(`Original image fetch failed: ${response.status}`);
+  }
   return response.blob();
 }
 
@@ -83,7 +127,7 @@ async function cachedBlob(assetId) {
 }
 
 export async function saveLibraryOriginal(assetId, source, options = {}) {
-  const sourceBlob = await sourceToBlob(source);
+  const sourceBlob = await sourceToBlob(source, options);
   const blob = await normalizeOriginalBlob(sourceBlob, options.preferredMimeType || null);
   await cacheBlob(assetId, blob);
   let storagePath = null;
@@ -101,11 +145,22 @@ export async function getLibraryOriginalBlob(entry) {
   const assetId = entry.originalAssetId || entry.id;
   let blob = await cachedBlob(assetId);
   if (!blob && entry.originalStoragePath) {
-    blob = await downloadCloudAsset(entry.originalStoragePath, entry.originalStorageBucket || 'studio-assets');
+    try {
+      blob = await downloadCloudAsset(entry.originalStoragePath, entry.originalStorageBucket || 'studio-assets');
+    } catch {}
+    if (!blob) {
+      blob = await authenticatedStorageBlob(
+        entry.originalStorageBucket || 'studio-assets',
+        entry.originalStoragePath,
+      );
+    }
     if (blob) await cacheBlob(assetId, blob);
   }
   if (!blob) {
-    blob = await sourceToBlob(entry.originalUrl || entry.url);
+    blob = await sourceToBlob(entry.originalUrl || entry.url, {
+      storageBucket: entry.originalStorageBucket,
+      storagePath: entry.originalStoragePath,
+    });
   }
   return blob;
 }
@@ -131,8 +186,8 @@ function triggerBlobDownload(blob, filename) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export async function downloadImageAsPng(source, filename = 'thee-studio.png') {
-  const sourceBlob = await sourceToBlob(source);
+export async function downloadImageAsPng(source, filename = 'thee-studio.png', options = {}) {
+  const sourceBlob = await sourceToBlob(source, options);
   const png = await imageBlobToPng(sourceBlob);
   triggerBlobDownload(png, filename.toLowerCase().endsWith('.png') ? filename : `${filename}.png`);
 }

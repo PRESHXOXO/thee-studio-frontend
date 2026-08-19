@@ -1,4 +1,5 @@
 import { persistCloudDocument } from './cloudStore.js';
+import { creatorMatchesId, linkedCloudCreatorId } from './cloudRosterIdentity.js';
 
 // Persists which creator is "active" across reloads and screens.
 // There is no backend session in this app — this is the local-only
@@ -21,14 +22,15 @@ export function saveActiveCreatorId(id) {
   } catch {}
 }
 
-// Resolves the active creator against a loaded character list.
-// If none is stored and there's exactly one creator, auto-selects it.
+// Resolves the active creator against a loaded character list. Canonical cloud
+// ids and legacy roster ids are both accepted so a partially migrated Cast
+// member cannot disappear from active selection during cloud reconciliation.
 export function resolveActiveCreator(characters) {
   if (!characters?.length) return null;
   let id = loadActiveCreatorId();
   if (id == null && characters.length === 1) {
-    id = characters[0].id;
+    id = linkedCloudCreatorId(characters[0]) || characters[0].id;
     saveActiveCreatorId(id);
   }
-  return characters.find(c => String(c.id) === String(id)) || null;
+  return characters.find(c => creatorMatchesId(c, id)) || null;
 }

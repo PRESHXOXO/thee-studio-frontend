@@ -19,6 +19,7 @@ import { saveToLibrary } from '../../lib/library.js';
 import { downloadImageAsPng } from '../../lib/libraryAssets.js';
 import { compressImage } from '../../lib/imageUtils.js';
 import { creatorMemoryPrompt, getCreatorMemory } from '../../lib/creatorMemory.js';
+import { directorNotesForReferences } from '../../lib/directorPromptNotes.js';
 import { normalizeGenerationBatch } from '../../lib/generationBatch.js';
 import { MAX_DIRECTOR_REFERENCES, MAX_SAVED_CAST_STYLING_REFERENCES } from '../../lib/directorReferences.js';
 import {
@@ -31,13 +32,13 @@ import {
 
 const LABEL = { font: 'var(--label)', letterSpacing: 'var(--label-spacing)', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 };
 const DATA_IMAGE = /^data:image\/(?:jpeg|png|webp);base64,/i;
-const WARDROBE_INTENT = /\b(?:wear(?:ing)?|outfit|wardrobe|dress|gown|suit|jacket|coat|shirt|top|pants|jeans|skirt|hoodie|sweater|shoes|heels|sneakers|bikini|styling|clothing)\b/i;
+const WARDROBE_INTENT = /\b(?:wear(?:ing)?|outfit|wardrobe|dress|gown|suit|jacket|coat|shirt|top|pants|jeans|skirt|hoodie|sweater|shoes|heels|sneakers|bikini|swimsuit|swimwear|one[- ]piece|two[- ]piece|bodysuit|styling|clothing)\b/i;
 const HAIR_INTENT = /\b(?:hair|hairstyle|braids?|locs?|wig|ponytail|bun|bob|curls?|waves?)\b/i;
 const MAKEUP_INTENT = /\b(?:makeup|beauty look|glam|lipstick|eyeshadow|eyeliner|blush|contour)\b/i;
 
 const FASHION_SAFE_RENDER_RULE = [
   'FASHION-SAFE RENDER:',
-  'Preserve the outfit reference as closely as possible: same silhouette, neckline, cutouts, slit, fit, lace or mesh pattern, accessories, and sexy eveningwear/editorial energy.',
+  'Treat the subject as an adult model in a non-sexual commercial fashion campaign. Preserve the outfit reference as closely as possible: same silhouette, neckline, cutouts, slit, fit, lace or mesh pattern, accessories, and fashion-forward editorial styling.',
   'Where transparent fabric would otherwise create unintended exposure, add discreet tonal or illusion lining beneath only those sections while keeping the garment visually sheer-looking and fashion-forward.',
   'Do not add unnecessary coverage elsewhere and do not introduce nudity or sexual activity.',
 ].join(' ');
@@ -239,6 +240,7 @@ export function ShootBuilder({
       if (!creatorIdentityBound) throw new Error(identityWarning);
       const referenceRoles = shotReferences.map(reference => reference.role);
       const hasOutfitReference = referenceRoles.includes('outfit');
+      const effectiveNotes = directorNotesForReferences(notes, referenceRoles);
       const selectedOutfit = SHOOT_OUTFITS.find(option => option.id === outfit)?.prompt || '';
       const outfitOverride = hasOutfitReference
         ? null
@@ -250,13 +252,13 @@ export function ShootBuilder({
       const memoryBlock = creatorMemoryPrompt(memory, {
         explicitScene: sceneName,
         explicitMood: composedMood,
-        wardrobeIntent: hasOutfitReference ? '' : selectedOutfit || legacyOutfitPhotoDesc || (WARDROBE_INTENT.test(notes) ? notes : ''),
-        hairIntent: HAIR_INTENT.test(notes) ? notes : '',
-        makeupIntent: MAKEUP_INTENT.test(notes) ? notes : '',
+        wardrobeIntent: hasOutfitReference ? '' : selectedOutfit || legacyOutfitPhotoDesc || (WARDROBE_INTENT.test(effectiveNotes) ? effectiveNotes : ''),
+        hairIntent: HAIR_INTENT.test(effectiveNotes) ? effectiveNotes : '',
+        makeupIntent: MAKEUP_INTENT.test(effectiveNotes) ? effectiveNotes : '',
         referenceRoles,
       });
       if (memoryBlock) positivePrompt += `\n\n${memoryBlock}`;
-      if (notes.trim()) positivePrompt += `\n\nDIRECTOR'S NOTES:\n${notes.trim()}`;
+      if (effectiveNotes) positivePrompt += `\n\nDIRECTOR'S NOTES:\n${effectiveNotes}`;
       if (fashionSafetyMode === 'coverage') positivePrompt += `\n\n${FASHION_SAFE_RENDER_RULE}`;
       const primaryIdentity = allImages[activeRef] || allImages[0];
       const selectedCreator = cloudCreatorId || !primaryIdentity

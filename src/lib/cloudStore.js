@@ -1,6 +1,7 @@
 import { createTelemetryRequestKey, trackStorageOperation } from '../api/usageTelemetry.js';
 import { SupabasePipelineRepository } from '../production/SupabasePipelineRepository.js';
 import { syncCastReferencesToCloud } from './castCreatorSync.js';
+import { promoteLinkedCloudCreator } from './cloudRosterIdentity.js';
 
 export const SYNCED_KEYS = [
   'ts_characters',
@@ -44,12 +45,17 @@ function compactCloudCharacterDocument(value) {
     if (!Array.isArray(creators)) return value;
     let changed = false;
     const compacted = creators.map(character => {
-      if (!character || character.cloudProfile !== true) return character;
-      const refs = Array.isArray(character.refImages) ? character.refImages : [];
-      const hasDisplayImages = refs.length > 0 || Boolean(character.image);
-      if (!hasDisplayImages) return character;
+      if (!character) return character;
+      const linkedCreatorId = cloudCreatorId(character);
+      if (character.cloudProfile !== true && !linkedCreatorId) return character;
+      const canonical = character.cloudProfile === true
+        ? character
+        : promoteLinkedCloudCreator(character, linkedCreatorId);
+      const refs = Array.isArray(canonical.refImages) ? canonical.refImages : [];
+      const hasDisplayImages = refs.length > 0 || Boolean(canonical.image);
+      if (!hasDisplayImages && canonical === character) return character;
       changed = true;
-      return { ...character, refImages: [], image: null };
+      return { ...canonical, refImages: [], image: null };
     });
     return changed ? JSON.stringify(compacted) : value;
   } catch {
@@ -207,9 +213,9 @@ async function migrateLegacyCastReferences(db, userId, epoch) {
     });
 
     if (mappingChanged && runtime?.epoch === epoch && runtime?.userId === userId) {
-      const localValue = JSON.stringify(reconciledCreators);
+      const localValue = compactCloudCharacterDocument(JSON.stringify(reconciledCreators));
       localStorage.setItem('ts_characters', localValue);
-      await writeDocument('ts_characters', compactCloudCharacterDocument(localValue), runtime);
+      await writeDocument('ts_characters', localValue, runtime);
     }
 
     announceSync('thee:cloud-sync-ok', { key: 'creator_reference_assets' });
@@ -377,24 +383,4 @@ export function reportStudioError(error, context = {}, source = 'frontend') {
     context,
     route: window.location.pathname,
   }).then(() => undefined).catch(() => undefined);
-}
-
-export function installGlobalErrorTelemetry() {
-  const onError = event => {
-    reportStudioError(event.error || event.message, {
-      code: 'window_error',
-      filename: event.filename,
-      line: event.lineno,
-      column: event.colno,
-    });
-  };
-  const onRejection = event => {
-    reportStudioError(event.reason, { code: 'unhandled_rejection' });
-  };
-  window.addEventListener('error', onError);
-  window.addEventListener('unhandledrejection', onRejection);
-  return () => {
-    window.removeEventListener('error', onError);
-    window.removeEventListener('unhandledrejection', onRejection);
-  };
 }

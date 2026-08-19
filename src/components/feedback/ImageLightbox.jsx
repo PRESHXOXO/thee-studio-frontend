@@ -1,12 +1,25 @@
 import React from 'react';
 import { Icon } from '../core/Icon.jsx';
+import { downloadImageAsPng } from '../../lib/libraryAssets.js';
 
 export function ImageLightbox({ src, onClose }) {
+  const [downloadError, setDownloadError] = React.useState('');
+
   React.useEffect(() => {
     const handleKey = e => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
+
+  const handleDownload = async event => {
+    event.stopPropagation();
+    setDownloadError('');
+    try {
+      await downloadImageAsPng(src, `thee-studio-${Date.now()}.png`);
+    } catch (error) {
+      setDownloadError(error.message || 'The image could not be downloaded.');
+    }
+  };
 
   return (
     <div
@@ -44,21 +57,35 @@ export function ImageLightbox({ src, onClose }) {
         alt="Full size preview"
       />
 
-      <a
-        href={src}
-        download={`thee-studio-${Date.now()}.jpg`}
-        onClick={e => e.stopPropagation()}
+      {downloadError && (
+        <div
+          role="alert"
+          onClick={event => event.stopPropagation()}
+          style={{
+            position: 'absolute', bottom: 76, right: 24, maxWidth: 360,
+            padding: '9px 12px', borderRadius: 'var(--radius-md)',
+            background: 'rgba(120,20,20,0.88)', color: '#fff',
+            font: 'var(--text-xs)', backdropFilter: 'blur(8px)',
+          }}
+        >
+          {downloadError}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={handleDownload}
         style={{
           position: 'absolute', bottom: 24, right: 24,
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '8px 16px', borderRadius: 'var(--radius-pill)',
           background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)',
           color: '#fff', font: '500 0.82rem/1 var(--font-ui)',
-          textDecoration: 'none', backdropFilter: 'blur(8px)',
+          cursor: 'pointer', backdropFilter: 'blur(8px)',
         }}
       >
-        <Icon name="download" size={14} /> Download
-      </a>
+        <Icon name="download" size={14} /> Download PNG
+      </button>
     </div>
   );
 }

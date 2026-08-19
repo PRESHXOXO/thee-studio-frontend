@@ -22,7 +22,8 @@ describe('cloud Cast reference display contract', () => {
   });
 
   it('never persists cloud display images or expiring signed URLs in ts_characters', () => {
-    expect(source).toContain("return { ...character, refImages: [], image: null }");
+    expect(source).toContain('promoteLinkedCloudCreator(character, linkedCreatorId)');
+    expect(source).toContain("return { ...canonical, refImages: [], image: null }");
     expect(source).toContain("const persistedValue = key === 'ts_characters'");
     expect(source).toContain('? compactCloudCharacterDocument(value)');
   });

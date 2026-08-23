@@ -32,10 +32,11 @@ const forbiddenText = [
 ];
 
 let stage = 'launch';
+let page;
 const browser = await chromium.launch({ headless: true });
 try {
   const context = await browser.newContext({ viewport: { width: 1365, height: 900 } });
-  const page = await context.newPage();
+  page = await context.newPage();
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(String(error?.message || error)));
 
@@ -82,7 +83,12 @@ try {
   console.log(`ROUTES_CERTIFIED=${routes.length}`);
   console.log('SESSION_REFRESH=passed');
 } catch (error) {
-  const safe = String(error?.message || error)
+  const pageState = page ? await Promise.all([
+    page.title().catch(() => ''),
+    page.locator('body').innerText().catch(() => ''),
+  ]) : ['', ''];
+  const browserContext = ` path=${page ? new URL(page.url()).pathname : 'unavailable'} title=${pageState[0]} body=${pageState[1].replace(/\s+/g, ' ').slice(0, 500)}`;
+  const safe = `${String(error?.message || error)}${browserContext}`
     .replaceAll(email, '[smoke-email]')
     .replace(/https?:\/\/\S+/g, '[url]')
     .slice(0, 1200);

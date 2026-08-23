@@ -2,6 +2,11 @@ name: Staging Cloud Smoke
 
 on:
   workflow_dispatch:
+    inputs:
+      base_url:
+        description: Preview URL to certify against the staging backend
+        required: false
+        default: https://thee-studio-frontend-git-codex-recon-16c428-preshxoxos-projects.vercel.app
 
 concurrency:
   group: staging-cloud-smoke
@@ -12,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      STAGING_BASE_URL: https://thee-studio-frontend-git-codex-recon-16c428-preshxoxos-projects.vercel.app
+      STAGING_BASE_URL: ${{ inputs.base_url }}
       STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
       STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
     steps:

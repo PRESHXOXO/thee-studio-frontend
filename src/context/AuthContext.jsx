@@ -41,6 +41,10 @@ export function safeAuthMessage(error) {
   return 'Sign-in failed. Check your details and try again.';
 }
 
+export function isRefreshableSessionError(error) {
+  return String(error?.message || '').toLowerCase().includes('jwt issued at future');
+}
+
 export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eAuthEnabled()) ? getSupabase() : null }) {
   const [session, setSession] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -50,11 +54,23 @@ export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eA
 
   const applySession = React.useCallback(async nextSession => {
     const transition = ++transitionRef.current;
-    const normalized = normalizeSupabaseSession(nextSession);
+    let normalized = normalizeSupabaseSession(nextSession);
     if (normalized) {
       try {
         if (!client?.__e2e) {
-          await bootstrapCloudStore(client, normalized.id);
+          try {
+            await bootstrapCloudStore(client, normalized.id);
+          } catch (bootstrapError) {
+            if (!isRefreshableSessionError(bootstrapError) || typeof client?.auth?.refreshSession !== 'function') {
+              throw bootstrapError;
+            }
+            const { data: refreshed, error: refreshError } = await client.auth.refreshSession();
+            const refreshedSession = refreshed?.session;
+            const refreshedNormalized = normalizeSupabaseSession(refreshedSession);
+            if (refreshError || !refreshedNormalized) throw bootstrapError;
+            normalized = refreshedNormalized;
+            await bootstrapCloudStore(client, normalized.id);
+          }
           await refreshLibrary();
         }
         if (transition === transitionRef.current) setSyncError('');

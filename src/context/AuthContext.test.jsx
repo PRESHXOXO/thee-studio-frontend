@@ -19,6 +19,7 @@ function fakeClient(initialSession = null) {
     emit(event, session) { listener?.(event, session); },
     auth: {
       getSession: vi.fn().mockResolvedValue({ data: { session: initialSession }, error: null }),
+      refreshSession: vi.fn().mockResolvedValue({ data: { session: initialSession }, error: null }),
       onAuthStateChange: vi.fn(callback => {
         listener = callback;
         return { data: { subscription: { unsubscribe: vi.fn() } } };
@@ -57,6 +58,24 @@ describe('AuthProvider', () => {
     const client = fakeClient(session('owner-1'));
     render(<AuthProvider client={client}><Probe /></AuthProvider>);
     expect(await screen.findByText('owner-1')).toBeInTheDocument();
+  });
+
+  it('refreshes a future-issued JWT once before retrying cloud bootstrap', async () => {
+    bootstrapCloudStore.mockReset();
+    const stale = session('owner-clock-skew');
+    const refreshed = { ...stale, access_token: 'refreshed-token' };
+    const client = fakeClient(stale);
+    client.auth.refreshSession.mockResolvedValue({ data: { session: refreshed }, error: null });
+    bootstrapCloudStore
+      .mockRejectedValueOnce(new Error('Cloud data sync failed: JWT issued at future'))
+      .mockResolvedValueOnce(undefined);
+
+    render(<AuthProvider client={client}><Probe /></AuthProvider>);
+
+    expect(await screen.findByText('owner-clock-skew')).toBeInTheDocument();
+    expect(client.auth.refreshSession).toHaveBeenCalledTimes(1);
+    expect(bootstrapCloudStore).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Cloud sync is unavailable.')).not.toBeInTheDocument();
   });
 
   it('does not expose a signed-out gap when the initial auth event races session restoration', async () => {

@@ -134,7 +134,6 @@ export function ShootBuilder({
   const [rawFeatures, setRawFeatures] = React.useState(restored.rawFeatures || 'None');
 
   const [generating, setGenerating] = React.useState(false);
-  const [genImages, setGenImages]   = React.useState([]);
   const [genError, setGenError]     = React.useState('');
   const [genErrorCategory, setGenErrorCategory] = React.useState('');
   const [lightboxSrc, setLightboxSrc] = React.useState(null);
@@ -182,7 +181,7 @@ export function ShootBuilder({
     const nextCreatorId = creator?.id ?? null;
     if (creatorIdRef.current === nextCreatorId) return;
     creatorIdRef.current = nextCreatorId;
-    setActiveRef(0); setGenImages([]); setGenError(''); setGenErrorCategory('');
+    setActiveRef(0); setGenError(''); setGenErrorCategory('');
     setShotReferences([]);
   }, [creator?.id]);
 
@@ -286,7 +285,6 @@ export function ShootBuilder({
     const fingerprint = `${batch.parentBatchId || 'local'}:${batch.status}:${batch.slots.map(slot => `${slot.slotIndex}:${slot.status}`).join('|')}`;
     if (acceptedBatchRef.current === fingerprint) return batch;
     acceptedBatchRef.current = fingerprint;
-    setGenImages(images);
     onGenerated?.(images);
     const character = cloudCreatorId || creator?.id;
     batch.slots.filter(slot => slot.status === 'succeeded' && slot.imageUrl).forEach(slot => {
@@ -331,7 +329,6 @@ export function ShootBuilder({
   const handleGenerate = async (fashionSafetyMode = 'auto') => {
     if (generating || pendingGeneration.renderStatus === 'still_processing') return;
     setGenerating(true);
-    setGenImages([]);
     pendingGeneration.setBatch(null);
     persistedSlotsRef.current = new Set();
     acceptedBatchRef.current = '';
@@ -526,19 +523,28 @@ export function ShootBuilder({
           />
         </div>
 
-        <div>
+        <div data-shoot-region="batch">
           <div style={FIELD_LABEL}>Batch</div>
           <div style={{ display: 'flex', gap: 8 }}>
             {BATCH_OPTIONS.map(n => (
               <PillButton key={n} active={batchSize === n} onClick={() => setBatchSize(n)}>{n} image{n > 1 ? 's' : ''}</PillButton>
             ))}
           </div>
+          {pendingGeneration.batch && <div style={{ marginTop: 16 }}><GenerationBatchResults
+            batch={pendingGeneration.batch}
+            compact={layout === 'split'}
+            onOpen={setLightboxSrc}
+            onRetry={slotIndex => pendingGeneration.retrySlot(slotIndex).catch(error => setGenError(error.message || 'Retry failed.'))}
+            retryingSlots={pendingGeneration.retryingSlots}
+            onDownload={(url, slotIndex) => downloadImageAsPng(url, `thee-studio-${Date.now()}-${slotIndex + 1}.png`).catch(error => setGenError(error.message || 'PNG download failed.'))}
+            onSaveAsAnchor={creator && onSaveAsCreator ? handleSaveAsAnchor : null}
+          /></div>}
         </div>
       </Section>
     </>
   );
 
-  const showLivePreview = !generating && genImages.length === 0;
+  const showLivePreview = !generating;
   const livePreviewImg = creator ? allImages[activeRef] || allImages[0] : null;
   const guidedDirection = [
     identityMode === 'portrait' ? `Portrait · ${quickAngle}` : scene !== 'None' ? scene : 'Lifestyle scene',
@@ -649,16 +655,6 @@ export function ShootBuilder({
         </div>
       )}
 
-      {pendingGeneration.batch && <GenerationBatchResults
-        batch={pendingGeneration.batch}
-        compact={layout === 'split'}
-        onOpen={setLightboxSrc}
-        onRetry={slotIndex => pendingGeneration.retrySlot(slotIndex).catch(error => setGenError(error.message || 'Retry failed.'))}
-        retryingSlots={pendingGeneration.retryingSlots}
-        onDownload={(url, slotIndex) => downloadImageAsPng(url, `thee-studio-${Date.now()}-${slotIndex + 1}.png`).catch(error => setGenError(error.message || 'PNG download failed.'))}
-        onSaveAsAnchor={creator && onSaveAsCreator ? handleSaveAsAnchor : null}
-      />}
-
       {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
     </>
   );
@@ -670,8 +666,8 @@ export function ShootBuilder({
           {controlsJSX}
         </Card>
         <div style={{ flex: '0 0 340px', minWidth: 300, position: 'sticky', top: 84 }}>
-          <Card style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}>
-            <div style={LABEL}>{genImages.length > 0 ? 'Output' : 'Canvas'}</div>
+          <Card className="ts-shoot-canvas" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}>
+            <div style={LABEL}>Canvas</div>
             {canvasJSX}
           </Card>
         </div>

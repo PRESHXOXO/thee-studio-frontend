@@ -79,3 +79,14 @@ src/screens/ProductionRuns.jsx
 npm run build
 npm run test:e2e
 ```
+
+## Production deployment
+
+Production is built from `main` by `.github/workflows/deploy-cpanel.yml` and
+deployed over SSH to the dedicated cPanel document root. The workflow runs the
+unit and production dependency security gates, builds the Vite application,
+backs up the current server release outside `public_html`, and then deploys the
+new `dist/` contents while preserving cPanel's `.well-known` certificate data.
+
+The Apache fallback in `public/.htaccess` keeps React Router deep links working
+when a route is opened or refreshed directly.

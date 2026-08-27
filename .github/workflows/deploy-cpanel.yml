@@ -1,0 +1,91 @@
+name: Deploy Production to cPanel
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: production-cpanel
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_APP_ENV: production
+      VITE_ALLOW_LOCAL_MODE: "false"
+      VITE_SUPABASE_GOOGLE_AUTH_ENABLED: "false"
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+      CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run audit:mvp
+      - run: npm run build
+
+      - name: Verify deployment configuration
+        run: |
+          test -n "$VITE_SUPABASE_URL"
+          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY"
+          test -n "$CPANEL_SSH_HOST"
+          test -n "$CPANEL_SSH_PORT"
+          test -n "$CPANEL_SSH_USER"
+          test -n "$CPANEL_DEPLOY_PATH"
+          test -n "$CPANEL_BACKUP_ROOT"
+          test -s dist/index.html
+          test -s dist/.htaccess
+
+      - name: Configure SSH
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/cpanel_deploy
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/cpanel_deploy ~/.ssh/known_hosts
+
+      - name: Back up current cPanel release
+        run: |
+          release="$CPANEL_BACKUP_ROOT/${GITHUB_SHA}-$(date -u +%Y%m%dT%H%M%SZ)"
+          ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "mkdir -p '$release' && rsync -a --exclude='.well-known/' '$CPANEL_DEPLOY_PATH/' '$release/'"
+
+      - name: Deploy production build
+        run: |
+          rsync -az --delete-delay --exclude='.well-known/' --chmod=D755,F644 \
+            -e "ssh -i ~/.ssh/cpanel_deploy -p $CPANEL_SSH_PORT" \
+            dist/ "$CPANEL_SSH_USER@$CPANEL_SSH_HOST:$CPANEL_DEPLOY_PATH/"
+
+      - name: Verify deployed files and origin
+        run: |
+          ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "test -s '$CPANEL_DEPLOY_PATH/index.html' && test -s '$CPANEL_DEPLOY_PATH/.htaccess' && test -d '$CPANEL_DEPLOY_PATH/assets'"
+          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
+            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
+            https://studio.myvitaworld.online/ | grep -q '<div id="root"></div>'
+          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
+            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
+            https://studio.myvitaworld.online/studio/library | grep -q '<div id="root"></div>'

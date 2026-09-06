@@ -1,0 +1,60 @@
+name: Temporary DNS Post-Cutover Verify
+
+on:
+  push:
+    branches:
+      - ops/dns-cutover-20260906
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify authoritative DNS and public HTTPS
+        run: |
+          set -eu
+          host=studio.myvitaworld.online
+          target=199.250.200.250
+
+          echo 'dns_begin'
+          echo "resolver_cname=$(dig +short "$host" CNAME | paste -sd, -)"
+          echo "resolver_a=$(dig +short "$host" A | grep -E '^[0-9.]+$' | paste -sd, -)"
+          for ns in ns73.domaincontrol.com ns74.domaincontrol.com; do
+            echo "ns=$ns cname=$(dig +short @$ns "$host" CNAME | paste -sd, -)"
+            echo "ns=$ns a=$(dig +short @$ns "$host" A | grep -E '^[0-9.]+$' | paste -sd, -)"
+          done
+          echo 'dns_end'
+
+          echo 'target_https_begin'
+          curl -sS --max-time 15 --resolve "$host:443:$target" \
+            -o /tmp/target-root -D /tmp/target-root-h \
+            -w 'target_root_status=%{http_code} target_root_ip=%{remote_ip} target_root_type=%{content_type}\n' \
+            "https://$host/"
+          curl -sS --max-time 15 --resolve "$host:443:$target" \
+            -o /tmp/target-ready -D /tmp/target-ready-h \
+            -w 'target_ready_status=%{http_code} target_ready_ip=%{remote_ip} target_ready_type=%{content_type}\n' \
+            "https://$host/api/readyz"
+          echo -n 'target_ready_body='; head -c 1200 /tmp/target-ready | tr '\n' ' '; echo
+          echo 'target_https_end'
+
+          echo 'public_https_begin'
+          curl -sS --max-time 15 \
+            -o /tmp/public-root -D /tmp/public-root-h \
+            -w 'public_root_status=%{http_code} public_root_ip=%{remote_ip} public_root_type=%{content_type}\n' \
+            "https://$host/"
+          curl -sS --max-time 15 \
+            -o /tmp/public-ready -D /tmp/public-ready-h \
+            -w 'public_ready_status=%{http_code} public_ready_ip=%{remote_ip} public_ready_type=%{content_type}\n' \
+            "https://$host/api/readyz"
+          echo -n 'public_ready_body='; head -c 1200 /tmp/public-ready | tr '\n' ' '; echo
+          echo -n 'public_root_prefix='; head -c 500 /tmp/public-root | tr '\n' ' '; echo
+          echo 'public_https_end'
+
+          authoritative_a=$(dig +short @ns73.domaincontrol.com "$host" A | grep -E '^[0-9.]+$' | head -1)
+          test "$authoritative_a" = "$target"
+          grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/target-ready
+          grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/public-ready

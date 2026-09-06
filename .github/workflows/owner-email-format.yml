@@ -1,4 +1,4 @@
-name: Temporary Owner Email Format Check
+name: Temporary Owner Login End-to-End Check
 
 on:
   push:
@@ -15,16 +15,64 @@ jobs:
     environment: production
     env:
       CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
-      CUTOVER_USER_EMAIL: ${{ secrets.CUTOVER_USER_EMAIL }}
+      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
     steps:
-      - name: Report format booleans only
+      - name: Verify owner credentials against live replacement API
+        shell: bash
         run: |
+          set -euo pipefail
           node <<'NODE'
-          for (const [label, raw] of [['owner', process.env.CUTOVER_OWNER_EMAIL || ''], ['user', process.env.CUTOVER_USER_EMAIL || '']]) {
-            const cleaned = raw.normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').trim();
-            console.log(`${label}_present=${Boolean(raw)}`);
-            console.log(`${label}_trim_or_invisible_changed=${cleaned !== raw}`);
-            console.log(`${label}_has_any_whitespace=${/\s/.test(cleaned)}`);
-            console.log(`${label}_simple_email_shape=${/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned)}`);
-          }
+          const fs = require('fs');
+          const email = (process.env.CUTOVER_OWNER_EMAIL || '').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').trim().toLowerCase();
+          const password = process.env.CUTOVER_OWNER_PASSWORD || '';
+          console.log(`owner_email_present=${Boolean(email)}`);
+          console.log(`owner_password_present=${Boolean(password)}`);
+          console.log(`owner_email_shape=${/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)}`);
+          if (!email || !password) process.exit(2);
+          fs.writeFileSync('/tmp/login.json', JSON.stringify({ email, password }), { mode: 0o600 });
+          fs.writeFileSync('/tmp/expected-email', email, { mode: 0o600 });
           NODE
+
+          base='https://studio.myvitaworld.online/api'
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          jar=$(mktemp)
+          login_body=$(mktemp)
+          me_body=$(mktemp)
+          lib_body=$(mktemp)
+          trap 'rm -f "$jar" "$login_body" "$me_body" "$lib_body" /tmp/login.json /tmp/expected-email' EXIT
+
+          login_code=$(curl -sS --compressed -A "$ua" -c "$jar" -b "$jar" -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o "$login_body" -w '%{http_code}' "$base/auth/login")
+          echo "login_status=$login_code"
+          if [ "$login_code" != 200 ]; then
+            node - "$login_body" <<'NODE'
+          const fs = require('fs');
+          const path = process.argv[2];
+          let payload = {};
+          try { payload = JSON.parse(fs.readFileSync(path, 'utf8')); } catch {}
+          console.log(`login_error_code=${payload.code || payload.error || payload.message || 'unknown'}`);
+          NODE
+            exit 10
+          fi
+
+          me_code=$(curl -sS --compressed -A "$ua" -c "$jar" -b "$jar" -o "$me_body" -w '%{http_code}' "$base/auth/me")
+          echo "me_status=$me_code"
+          test "$me_code" = 200
+
+          node - "$me_body" /tmp/expected-email <<'NODE'
+          const fs = require('fs');
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const expected = fs.readFileSync(process.argv[3], 'utf8').trim().toLowerCase();
+          const user = payload.user || payload;
+          const actual = String(user.email || '').trim().toLowerCase();
+          const role = String(user?.appMetadata?.role || user?.app_metadata?.role || user?.role || '').toLowerCase();
+          console.log(`session_user_present=${Boolean(user && user.id)}`);
+          console.log(`session_email_matches=${actual === expected}`);
+          console.log(`session_owner_role=${role === 'owner'}`);
+          if (!user?.id || actual !== expected) process.exit(12);
+          NODE
+
+          lib_code=$(curl -sS --compressed -A "$ua" -c "$jar" -b "$jar" -o "$lib_body" -w '%{http_code}' "$base/library")
+          echo "library_status=$lib_code"
+          test "$lib_code" = 200
+
+          echo 'owner_api_e2e=PASS'

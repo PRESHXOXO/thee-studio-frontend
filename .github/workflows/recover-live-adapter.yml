@@ -14,75 +14,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Map native replacement CRUD routes without credentials
+      - name: Probe account self-delete routes without credentials
         run: |
           set -eu
           base='https://studio.myvitaworld.online/api'
           ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          id='00000000-0000-4000-8000-000000000000'
-          cat > /tmp/routes <<EOF
-          GET /creators
-          POST /creators
-          GET /creators/$id
-          PATCH /creators/$id
-          DELETE /creators/$id
-          GET /creators/$id/references
-          POST /creators/$id/references
-          DELETE /creators/$id/references/$id
-          GET /creator-references
-          POST /creator-references
-          GET /projects
-          POST /projects
-          GET /projects/$id
-          PATCH /projects/$id
-          DELETE /projects/$id
-          GET /projects/$id/shots
-          POST /projects/$id/shots
-          GET /shots/$id
-          PATCH /shots/$id
-          DELETE /shots/$id
-          GET /shots/$id/reviews
-          POST /shots/$id/reviews
-          GET /shots/$id/selection
-          POST /shots/$id/selection
-          GET /generations
-          POST /generation
-          GET /generation/$id
-          POST /generation/$id/retry
-          DELETE /generation/$id
-          GET /library
-          GET /library/items
-          GET /library/$id
-          GET /library/items/$id
-          PATCH /library/$id/review
-          PATCH /library/items/$id/review
-          POST /library/$id/restore
-          POST /library/items/$id/restore
-          DELETE /library/$id
-          DELETE /library/items/$id
-          POST /assets/upload
-          DELETE /assets/$id
-          GET /assets/download/test/test
-          GET /reviews/$id
-          POST /reviews
-          GET /selections/$id
-          POST /selections
-          GET /documents
-          GET /studio-documents
-          PUT /documents/test
-          PUT /studio-documents/test
-          EOF
-          while read -r method path; do
-            [ -n "$method" ] || continue
+          for path in /auth/me /auth/account /account /me /users/me; do
             body=$(mktemp)
-            case "$method" in
-              POST|PATCH|PUT) code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -X "$method" --data '{}' -o "$body" -w '%{http_code}' "$base$path" || true) ;;
-              *) code=$(curl -sS --compressed -A "$ua" -X "$method" -o "$body" -w '%{http_code}' "$base$path" || true) ;;
-            esac
-            if [ "$code" != 404 ]; then
-              printf 'EXISTS method=%s path=%s status=%s body=' "$method" "$path" "$code"
-              head -c 180 "$body" | tr '\n' ' '
-              echo
-            fi
+            code=$(curl -sS --compressed -A "$ua" -X DELETE -o "$body" -w '%{http_code}' "$base$path" || true)
+            printf 'method=DELETE path=%s status=%s body=' "$path" "$code"
+            head -c 250 "$body" | tr '\n' ' '
+            echo
             rm -f "$body"
-          done < /tmp/routes
+          done

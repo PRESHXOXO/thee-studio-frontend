@@ -15,53 +15,40 @@ jobs:
     timeout-minutes: 10
     environment: production
     env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
+      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
     steps:
-      - name: Configure SSH
-        env:
-          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
-        run: |
-          set -euo pipefail
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/cpanel_deploy
-          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/cpanel_deploy ~/.ssh/known_hosts
-
-      - name: Inspect running API configuration names only
+      - name: Create owner account only if missing, then verify login
         shell: bash
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
-          set -eu
-          pid=$(systemctl show thee-studio-api.service -p MainPID --value 2>/dev/null || true)
-          echo "main_pid_present=$([ -n "$pid" ] && [ "$pid" != 0 ] && echo true || echo false)"
-          echo 'runtime_paths_begin'
-          if [ -n "$pid" ] && [ "$pid" != 0 ]; then
-            cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null || true)
-            exe=$(readlink "/proc/$pid/exe" 2>/dev/null || true)
-            [ -n "$cwd" ] && printf 'cwd=%s\n' "$cwd"
-            [ -n "$exe" ] && printf 'exe=%s\n' "$exe"
-          fi
-          echo 'runtime_paths_end'
+          node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||password.length<10)process.exit(2);fs.writeFileSync('/tmp/owner.json',JSON.stringify({email,password,name:'Thee Studio Owner'}),{mode:0o600});"
+          trap 'rm -f /tmp/owner.json /tmp/signup-body /tmp/login-body /tmp/me-body /tmp/jar' EXIT
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          base='https://studio.myvitaworld.online/api'
 
-          echo 'runtime_env_names_begin'
-          if [ -n "$pid" ] && [ "$pid" != 0 ] && [ -r "/proc/$pid/environ" ]; then
-            tr '\0' '\n' < "/proc/$pid/environ" | sed -nE 's/^([A-Za-z_][A-Za-z0-9_]*)=.*/\1/p' | grep -Ei 'OWNER|ADMIN|ROLE|BOOTSTRAP|AUTH|SESSION|DATABASE|DB|MYSQL|MARIA' | sort -u || true
-            echo 'runtime_env_readable=true'
-          else
-            echo 'runtime_env_readable=false'
-          fi
-          echo 'runtime_env_names_end'
+          signup_code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -X POST --data-binary @/tmp/owner.json -o /tmp/signup-body -w '%{http_code}' "$base/auth/signup")
+          echo "owner_signup_status=$signup_code"
+          node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/signup-body','utf8'));}catch{};const msg=String(p.error||p.message||'');console.log('owner_signup_outcome='+(msg?msg.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[EMAIL]'):'success'));"
 
-          echo 'protected_env_file_readable_begin'
-          if [ -r /etc/thee-studio/thee-studio.env ]; then
-            echo 'protected_env_file_readable=true'
-            sed -nE 's/^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/p' /etc/thee-studio/thee-studio.env | grep -Ei 'OWNER|ADMIN|ROLE|BOOTSTRAP|AUTH|SESSION|DATABASE|DB|MYSQL|MARIA' | sort -u || true
-          else
-            echo 'protected_env_file_readable=false'
+          login_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/owner.json -o /tmp/login-body -w '%{http_code}' "$base/auth/login")
+          echo "owner_login_status=$login_code"
+          if [ "$login_code" != 200 ]; then
+            node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/login-body','utf8'));}catch{};console.log('owner_login_error='+(p.error||p.message||'unknown'));"
+            exit 3
           fi
-          echo 'protected_env_file_readable_end'
-          REMOTE
+
+          me_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/me-body -w '%{http_code}' "$base/auth/me")
+          echo "owner_me_status=$me_code"
+          test "$me_code" = 200
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/me-body','utf8'));const u=p.user||p;const meta=u.appMetadata||u.app_metadata||{};const role=String(meta.role||u.role||'').toLowerCase();const accountType=String(meta.accountType||meta.account_type||u.accountType||u.account_type||'').toLowerCase();console.log('owner_session_user_present='+Boolean(u.id));console.log('owner_role='+(role||'none'));console.log('owner_account_type='+(accountType||'none'));console.log('owner_response_top_keys='+Object.keys(p).sort().join(','));console.log('owner_user_keys='+Object.keys(u||{}).filter(k=>!['email','id'].includes(k)).sort().join(','));console.log('owner_metadata_keys='+Object.keys(meta).sort().join(','));"
+
+          session_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /dev/null -w '%{http_code}' "$base/auth/session")
+          library_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /dev/null -w '%{http_code}' "$base/library")
+          creators_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /dev/null -w '%{http_code}' "$base/creators")
+          echo "owner_session_status=$session_code"
+          echo "owner_library_status=$library_code"
+          echo "owner_creators_status=$creators_code"
+          test "$session_code" = 200
+          test "$library_code" = 200
+          test "$creators_code" = 200

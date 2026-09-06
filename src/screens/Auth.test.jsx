@@ -2,14 +2,14 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Auth } from './Auth.jsx';
+import { Auth, normalizeEmailInput } from './Auth.jsx';
 
 const state = vi.hoisted(() => ({ auth: {} }));
 vi.mock('../context/AuthContext.jsx', () => ({ useAuth: () => state.auth }));
 
 function baseAuth(overrides = {}) {
   return {
-    loading: false, session: null, mode: 'cloud', googleEnabled: false,
+    loading: false, session: null, mode: 'api', googleEnabled: false,
     signIn: vi.fn().mockResolvedValue({}), signUp: vi.fn(), signOut: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -44,5 +44,23 @@ describe('onboarding authentication screens', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     await waitFor(() => expect(state.auth.signIn).toHaveBeenCalledWith({ email: 'user@example.invalid', password: 'password1' }));
+  });
+
+  it('normalizes pasted whitespace and invisible characters before login', async () => {
+    render(<MemoryRouter><Auth mode="login" /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: '  USER\u200B@Example.Invalid  ' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(state.auth.signIn).toHaveBeenCalledWith({ email: 'user@example.invalid', password: 'password1' }));
+    expect(normalizeEmailInput('  USER\uFEFF@Example.Invalid ')).toBe('user@example.invalid');
+  });
+
+  it('shows a local format error only for truly malformed input', async () => {
+    render(<MemoryRouter><Auth mode="login" /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'not-an-email' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByText('Enter a valid email address.')).toBeInTheDocument();
+    expect(state.auth.signIn).not.toHaveBeenCalled();
   });
 });

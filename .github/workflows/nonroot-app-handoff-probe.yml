@@ -1,6 +1,9 @@
 name: Temporary Non-Root App Handoff Probe
 
 on:
+  push:
+    branches:
+      - ops/nonroot-handoff-probe-20260905
   pull_request:
     branches:
       - main

@@ -91,16 +91,7 @@ jobs:
           echo 'package_summary_begin'
           find . -maxdepth 3 -name package.json -type f -print 2>/dev/null | sort | while read -r pkg; do
             printf 'package_file=%s\n' "$pkg"
-            node - "$pkg" <<'NODE' || true
-          const fs = require('fs');
-          const p = process.argv[2];
-          const j = JSON.parse(fs.readFileSync(p, 'utf8'));
-          console.log('package_name=' + (j.name || ''));
-          console.log('package_version=' + (j.version || ''));
-          console.log('package_scripts=' + Object.keys(j.scripts || {}).sort().join(','));
-          const deps = Object.assign({}, j.dependencies || {}, j.devDependencies || {});
-          console.log('relevant_deps=' + ['fastify','mysql2','mariadb','argon2','bcrypt','vitest','jest','playwright'].filter(k => deps[k]).map(k => `${k}@${deps[k]}`).join(','));
-NODE
+            node -e 'const fs=require("fs"); const p=process.argv[1]; const j=JSON.parse(fs.readFileSync(p,"utf8")); const d=Object.assign({},j.dependencies||{},j.devDependencies||{}); console.log("package_name="+(j.name||"")); console.log("package_version="+(j.version||"")); console.log("package_scripts="+Object.keys(j.scripts||{}).sort().join(",")); console.log("relevant_deps="+["fastify","mysql2","mariadb","argon2","bcrypt","vitest","jest","playwright"].filter(k=>d[k]).map(k=>k+"@"+d[k]).join(","));' "$pkg" || true
           done
           echo 'package_summary_end'
 

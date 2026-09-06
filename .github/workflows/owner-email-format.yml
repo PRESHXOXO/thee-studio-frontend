@@ -14,50 +14,50 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
+      THEE_STUDIO_SSH_HOST: ${{ secrets.THEE_STUDIO_SSH_HOST }}
+      THEE_STUDIO_SSH_PORT: ${{ secrets.THEE_STUDIO_SSH_PORT }}
+      THEE_STUDIO_SSH_USER: ${{ secrets.THEE_STUDIO_SSH_USER }}
+      THEE_STUDIO_SSH_PRIVATE_KEY: ${{ secrets.THEE_STUDIO_SSH_PRIVATE_KEY }}
+      THEE_STUDIO_SSH_KNOWN_HOSTS: ${{ secrets.THEE_STUDIO_SSH_KNOWN_HOSTS }}
+      VPS_SSH_HOST: ${{ secrets.VPS_SSH_HOST }}
+      VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
+      VPS_SSH_USER: ${{ secrets.VPS_SSH_USER }}
+      VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      APP_SSH_HOST: ${{ secrets.APP_SSH_HOST }}
+      APP_SSH_USER: ${{ secrets.APP_SSH_USER }}
+      APP_SSH_PRIVATE_KEY: ${{ secrets.APP_SSH_PRIVATE_KEY }}
+      OPERATOR_SSH_HOST: ${{ secrets.OPERATOR_SSH_HOST }}
+      OPERATOR_SSH_USER: ${{ secrets.OPERATOR_SSH_USER }}
+      OPERATOR_SSH_PRIVATE_KEY: ${{ secrets.OPERATOR_SSH_PRIVATE_KEY }}
+      THEE_STUDIO_DB_HOST: ${{ secrets.THEE_STUDIO_DB_HOST }}
+      THEE_STUDIO_DB_PORT: ${{ secrets.THEE_STUDIO_DB_PORT }}
+      THEE_STUDIO_DB_NAME: ${{ secrets.THEE_STUDIO_DB_NAME }}
+      THEE_STUDIO_DB_USER: ${{ secrets.THEE_STUDIO_DB_USER }}
+      THEE_STUDIO_DB_PASSWORD: ${{ secrets.THEE_STUDIO_DB_PASSWORD }}
+      DB_MIGRATOR_HOST: ${{ secrets.DB_MIGRATOR_HOST }}
+      DB_MIGRATOR_PORT: ${{ secrets.DB_MIGRATOR_PORT }}
+      DB_MIGRATOR_NAME: ${{ secrets.DB_MIGRATOR_NAME }}
+      DB_MIGRATOR_USER: ${{ secrets.DB_MIGRATOR_USER }}
+      DB_MIGRATOR_PASSWORD: ${{ secrets.DB_MIGRATOR_PASSWORD }}
+      MIGRATOR_DB_HOST: ${{ secrets.MIGRATOR_DB_HOST }}
+      MIGRATOR_DB_USER: ${{ secrets.MIGRATOR_DB_USER }}
+      MIGRATOR_DB_PASSWORD: ${{ secrets.MIGRATOR_DB_PASSWORD }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      THEE_STUDIO_DATABASE_URL: ${{ secrets.THEE_STUDIO_DATABASE_URL }}
     steps:
-      - name: Confirm configured owner email domain and send reset
+      - name: Report credential presence only
         shell: bash
         run: |
-          set -euo pipefail
           node <<'NODE'
-          const fs=require('fs');
-          const email=(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g,'').trim().toLowerCase();
-          if (!email) process.exit(2);
-          console.log(`owner_email_domain_yahoo=${/@yahoo\.(com|co\.[a-z]{2}|[a-z]{2})$/i.test(email)}`);
-          fs.writeFileSync('/tmp/reset-request.json', JSON.stringify({email}), {mode:0o600});
+          const names = [
+            'THEE_STUDIO_SSH_HOST','THEE_STUDIO_SSH_PORT','THEE_STUDIO_SSH_USER','THEE_STUDIO_SSH_PRIVATE_KEY','THEE_STUDIO_SSH_KNOWN_HOSTS',
+            'VPS_SSH_HOST','VPS_SSH_PORT','VPS_SSH_USER','VPS_SSH_PRIVATE_KEY',
+            'APP_SSH_HOST','APP_SSH_USER','APP_SSH_PRIVATE_KEY',
+            'OPERATOR_SSH_HOST','OPERATOR_SSH_USER','OPERATOR_SSH_PRIVATE_KEY',
+            'THEE_STUDIO_DB_HOST','THEE_STUDIO_DB_PORT','THEE_STUDIO_DB_NAME','THEE_STUDIO_DB_USER','THEE_STUDIO_DB_PASSWORD',
+            'DB_MIGRATOR_HOST','DB_MIGRATOR_PORT','DB_MIGRATOR_NAME','DB_MIGRATOR_USER','DB_MIGRATOR_PASSWORD',
+            'MIGRATOR_DB_HOST','MIGRATOR_DB_USER','MIGRATOR_DB_PASSWORD',
+            'DATABASE_URL','THEE_STUDIO_DATABASE_URL'
+          ];
+          for (const name of names) console.log(`${name}_present=${Boolean(process.env[name])}`);
           NODE
-          body=$(mktemp)
-          trap 'rm -f "$body" /tmp/reset-request.json' EXIT
-          code=$(curl -sS --compressed -A 'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36' \
-            -H 'Content-Type: application/json' -X POST --data-binary @/tmp/reset-request.json \
-            -o "$body" -w '%{http_code}' \
-            https://studio.myvitaworld.online/api/auth/forgot-password)
-          echo "reset_request_status=$code"
-          test "$code" = 200
-
-      - name: Configure SSH
-        env:
-          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
-        run: |
-          set -euo pipefail
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/cpanel_deploy
-          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/cpanel_deploy ~/.ssh/known_hosts
-
-      - name: Inspect recent auth mail logs only
-        run: |
-          set -euo pipefail
-          ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
-          set -eu
-          echo 'auth_mail_log_begin'
-          journalctl -u thee-studio-api.service --since '10 minutes ago' --no-pager 2>/dev/null | \
-            grep -Ei 'forgot|reset|mail|smtp|email|send|token|password' | \
-            sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g; s/(token|secret|password|authorization)(["=: ]+)[^," } ]+/\1\2[REDACTED]/Ig' | tail -120 || true
-          echo 'auth_mail_log_end'
-          REMOTE

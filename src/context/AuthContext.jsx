@@ -1,5 +1,5 @@
 import React from 'react';
-import { getSupabase, hasSupabaseConfig, isE2eAuthEnabled, normalizeSupabaseSession } from '../lib/supabase.js';
+import { getSupabase, hasSupabaseConfig, isApiModeEnabled, isE2eAuthEnabled, normalizeSupabaseSession } from '../lib/supabase.js';
 import {
   bootstrapCloudStore,
   reportStudioError,
@@ -31,9 +31,17 @@ function installGlobalErrorTelemetry() {
 
 export function safeAuthMessage(error) {
   const message = String(error?.message || '').toLowerCase();
-  if (message.includes('invalid login credentials')) return 'Email or password is incorrect.';
+  // The replacement API deliberately uses the same security-safe message for
+  // unknown accounts, malformed addresses, and wrong passwords. Do not turn
+  // that generic credential response into a misleading email-format error.
+  if (message.includes('invalid email or password') || message.includes('invalid login credentials')) {
+    return 'Email or password is incorrect.';
+  }
   if (message.includes('email not confirmed')) return 'Confirm your email before signing in.';
-  if ((message.includes('email address') && message.includes('invalid')) || message.includes('invalid email')) return 'Enter a valid email address.';
+  if ((message.includes('email address') && message.includes('invalid'))
+    || (message.includes('invalid email') && !message.includes('password'))) {
+    return 'Enter a valid email address.';
+  }
   if (message.includes('rate limit') || message.includes('too many requests')) return 'Too many email requests were sent recently. Wait a few minutes, then try again.';
   if (message.includes('network') || message.includes('fetch')) return 'Unable to reach the sign-in service.';
   if (message.includes('already registered')) return 'An account already exists for this email.';
@@ -45,7 +53,7 @@ export function isRefreshableSessionError(error) {
   return String(error?.message || '').toLowerCase().includes('jwt issued at future');
 }
 
-export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eAuthEnabled()) ? getSupabase() : null }) {
+export function AuthProvider({ children, client = (isApiModeEnabled() || hasSupabaseConfig() || isE2eAuthEnabled()) ? getSupabase() : null }) {
   const [session, setSession] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
@@ -102,7 +110,7 @@ export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eA
 
   React.useEffect(() => {
     if (!client) {
-      setError('Staging connection is not configured.');
+      setError('Production API connection is not configured.');
       setLoading(false);
       return undefined;
     }
@@ -114,8 +122,6 @@ export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eA
     });
     const { data } = client.auth.onAuthStateChange((_event, nextSession) => {
       setError('');
-      // Supabase holds its auth lock while notifying listeners. Defer cloud
-      // queries so an account switch cannot deadlock the sign-in promise.
       window.setTimeout(() => {
         if (active) void applySession(nextSession);
       }, 0);
@@ -127,7 +133,7 @@ export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eA
   }, [applySession, client]);
 
   const signIn = React.useCallback(async ({ email, password }) => {
-    if (!client) throw new Error('Staging connection is not configured.');
+    if (!client) throw new Error('Production API connection is not configured.');
     setError('');
     resetCloudStore();
     setSession(null);
@@ -144,7 +150,7 @@ export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eA
   }, [applySession, client]);
 
   const signUp = React.useCallback(async ({ name, email, password }) => {
-    if (!client) throw new Error('Staging connection is not configured.');
+    if (!client) throw new Error('Production API connection is not configured.');
     setError('');
     resetCloudStore();
     setSession(null);
@@ -168,11 +174,6 @@ export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eA
       return { session: next, confirmationRequired: false };
     }
 
-    // Some auth backends create an active account but intentionally return no
-    // session from signUp. Try the same credentials once before telling the
-    // customer to wait for an email. Supabase projects that genuinely require
-    // confirmation answer this attempt with "Email not confirmed", preserving
-    // the existing confirmation flow.
     const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
       email: normalizedEmail,
       password,
@@ -196,7 +197,7 @@ export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eA
   }, [applySession, client]);
 
   const requestPasswordReset = React.useCallback(async email => {
-    if (!client) throw new Error('Staging connection is not configured.');
+    if (!client?.auth?.resetPasswordForEmail) throw new Error('Password reset is not available yet.');
     const { error: resetError } = await client.auth.resetPasswordForEmail(
       email.trim().toLowerCase(),
       { redirectTo: `${window.location.origin}/reset-password` },
@@ -205,12 +206,12 @@ export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eA
   }, [client]);
 
   const updatePassword = React.useCallback(async password => {
-    if (!client) throw new Error('Staging connection is not configured.');
+    if (!client?.auth?.updateUser) throw new Error('Password reset is not available yet.');
     const { error: updateError } = await client.auth.updateUser({ password });
     if (updateError) throw new Error('Password could not be updated. Request a new reset link.');
   }, [client]);
 
-  const googleEnabled = import.meta.env.VITE_SUPABASE_GOOGLE_AUTH_ENABLED === 'true';
+  const googleEnabled = !isApiModeEnabled() && import.meta.env.VITE_SUPABASE_GOOGLE_AUTH_ENABLED === 'true';
   const signInWithGoogle = React.useCallback(async () => {
     if (!client || !googleEnabled) throw new Error('Google sign-in is not available.');
     const { error: oauthError } = await client.auth.signInWithOAuth({
@@ -231,7 +232,7 @@ export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eA
     loading,
     error,
     syncError,
-    mode: client?.__e2e ? 'local' : client ? 'cloud' : 'misconfigured',
+    mode: client?.__api ? 'api' : client?.__e2e ? 'local' : client ? 'cloud' : 'misconfigured',
     googleEnabled,
     signIn,
     signUp,

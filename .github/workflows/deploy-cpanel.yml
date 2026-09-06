@@ -19,8 +19,10 @@ jobs:
     timeout-minutes: 20
     environment: production
     env:
-      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_API_MODE: "true"
+      VITE_API_BASE: "/api"
+      VITE_SUPABASE_URL: ""
+      VITE_SUPABASE_PUBLISHABLE_KEY: ""
       VITE_APP_ENV: production
       VITE_ALLOW_LOCAL_MODE: "false"
       VITE_SUPABASE_GOOGLE_AUTH_ENABLED: "false"
@@ -43,10 +45,13 @@ jobs:
       - run: npm run audit:mvp
       - run: npm run build
 
-      - name: Verify deployment configuration
+      - name: Verify replacement API production build
         run: |
-          test -n "$VITE_SUPABASE_URL"
-          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY"
+          set -eu
+          test "$VITE_API_MODE" = "true"
+          test "$VITE_API_BASE" = "/api"
+          test -z "$VITE_SUPABASE_URL"
+          test -z "$VITE_SUPABASE_PUBLISHABLE_KEY"
           test -n "$CPANEL_SSH_HOST"
           test -n "$CPANEL_SSH_PORT"
           test -n "$CPANEL_SSH_USER"
@@ -54,6 +59,10 @@ jobs:
           test -n "$CPANEL_BACKUP_ROOT"
           test -s dist/index.html
           test -s dist/.htaccess
+          grep -Rqs '/auth/login' dist/assets
+          grep -Rqs '/auth/signup' dist/assets
+          ! grep -Rqs 'owxxetqniuayhzktewho.supabase.co' dist/assets
+          ! grep -Rqs 'qkrmkoixgznvxbcljmsx.supabase.co' dist/assets
 
       - name: Configure SSH
         env:
@@ -78,14 +87,25 @@ jobs:
             -e "ssh -i ~/.ssh/cpanel_deploy -p $CPANEL_SSH_PORT" \
             dist/ "$CPANEL_SSH_USER@$CPANEL_SSH_HOST:$CPANEL_DEPLOY_PATH/"
 
-      - name: Verify deployed files and origin
+      - name: Verify deployed replacement application
         run: |
+          set -eu
           ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
             "test -s '$CPANEL_DEPLOY_PATH/index.html' && test -s '$CPANEL_DEPLOY_PATH/.htaccess' && test -d '$CPANEL_DEPLOY_PATH/assets'"
-          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
-            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
+          curl --fail --silent --show-error --user-agent 'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36' \
             https://studio.myvitaworld.online/ | grep -q '<div id="root"></div>'
-          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
-            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
-            https://studio.myvitaworld.online/studio/library | grep -q '<div id="root"></div>'
+          curl --fail --silent --show-error --user-agent 'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36' \
+            https://studio.myvitaworld.online/api/readyz | grep -q '"ok":true'
+          live_index=$(mktemp)
+          live_js=$(mktemp)
+          curl --fail --silent --show-error --compressed --user-agent 'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36' \
+            https://studio.myvitaworld.online/ -o "$live_index"
+          asset=$(grep -oE 'src="/assets/[^"]+\.js"' "$live_index" | head -1 | cut -d'"' -f2)
+          test -n "$asset"
+          curl --fail --silent --show-error --compressed --user-agent 'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36' \
+            "https://studio.myvitaworld.online$asset" -o "$live_js"
+          grep -q '/auth/login' "$live_js"
+          grep -q '/auth/signup' "$live_js"
+          ! grep -q 'owxxetqniuayhzktewho.supabase.co' "$live_js"
+          rm -f "$live_index" "$live_js"

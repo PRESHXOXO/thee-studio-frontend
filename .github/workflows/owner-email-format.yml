@@ -23,18 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node <<'NODE'
-          const fs=require('fs');
-          function clean(v){return String(v||'').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g,'').trim().toLowerCase()}
-          const pairs={
-            owner:{email:clean(process.env.CUTOVER_OWNER_EMAIL),password:process.env.CUTOVER_OWNER_PASSWORD||''},
-            user:{email:clean(process.env.CUTOVER_USER_EMAIL),password:process.env.CUTOVER_USER_PASSWORD||''},
-          };
-          for(const [name,p] of Object.entries(pairs)){
-            if(!p.email||!p.password) process.exit(2);
-            fs.writeFileSync(`/tmp/${name}.json`,JSON.stringify(p),{mode:0o600});
-          }
-          NODE
+          node -e "const fs=require('fs');const clean=v=>String(v||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const pairs={owner:{email:clean(process.env.CUTOVER_OWNER_EMAIL),password:process.env.CUTOVER_OWNER_PASSWORD||''},user:{email:clean(process.env.CUTOVER_USER_EMAIL),password:process.env.CUTOVER_USER_PASSWORD||''}};for(const [name,p] of Object.entries(pairs)){if(!p.email||!p.password)process.exit(2);fs.writeFileSync('/tmp/'+name+'.json',JSON.stringify(p),{mode:0o600});}"
           trap 'rm -f /tmp/owner.json /tmp/user.json' EXIT
           base='https://studio.myvitaworld.online/api/auth/login'
           ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
@@ -47,17 +36,10 @@ jobs:
               me=$(mktemp)
               me_code=$(curl -sS --compressed -A "$ua" -c "$jar" -b "$jar" -o "$me" -w '%{http_code}' https://studio.myvitaworld.online/api/auth/me)
               printf '%s_me_status=%s\n' "$who" "$me_code"
-              node - "$me" "$who" <<'NODE'
-              const fs=require('fs'); const p=JSON.parse(fs.readFileSync(process.argv[2],'utf8')); const who=process.argv[3]; const u=p.user||p;
-              const role=String(u?.appMetadata?.role||u?.app_metadata?.role||u?.role||'').toLowerCase();
-              console.log(`${who}_session_user_present=${Boolean(u?.id)}`);
-              console.log(`${who}_session_role=${role||'none'}`);
-              NODE
+              node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));const who=process.argv[2];const u=p.user||p;const role=String(u?.appMetadata?.role||u?.app_metadata?.role||u?.role||'').toLowerCase();console.log(who+'_session_user_present='+Boolean(u?.id));console.log(who+'_session_role='+(role||'none'));" "$me" "$who"
               rm -f "$me"
             else
-              node - "$body" "$who" <<'NODE'
-              const fs=require('fs'); let p={}; try{p=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));}catch{}; console.log(`${process.argv[3]}_login_error=${p.error||p.message||'unknown'}`)
-              NODE
+              node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));}catch{};console.log(process.argv[2]+'_login_error='+(p.error||p.message||'unknown'));" "$body" "$who"
             fi
             rm -f "$body" "$jar"
           done

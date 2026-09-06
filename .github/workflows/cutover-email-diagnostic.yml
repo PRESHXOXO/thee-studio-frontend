@@ -32,6 +32,7 @@ jobs:
       - name: Inspect live signup and mail behavior safely
         run: |
           set -eu
+          # Re-run after PR #19 deployment to verify the live auth bundle.
           host=studio.myvitaworld.online
           ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
 

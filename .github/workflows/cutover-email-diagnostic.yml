@@ -1,0 +1,80 @@
+name: Temporary Cutover Email Diagnostic
+
+on:
+  push:
+    branches:
+      - ops/dns-cutover-20260906
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+    steps:
+      - name: Configure existing SSH path
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          test -n "$CPANEL_SSH_HOST"
+          test -n "$CPANEL_SSH_PORT"
+          test -n "$CPANEL_SSH_USER"
+          test -n "$CPANEL_SSH_PRIVATE_KEY"
+          test -n "$CPANEL_SSH_KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_diag
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_diag ~/.ssh/known_hosts
+
+      - name: Inspect recent auth and mail diagnostics only
+        run: |
+          set -eu
+          ssh -o BatchMode=yes -o ConnectTimeout=10 \
+            -i ~/.ssh/thee_diag -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -eu
+          echo 'service_state_begin'
+          systemctl show thee-studio-api.service --no-pager -p ActiveState -p SubState -p MainPID -p EnvironmentFiles 2>/dev/null || true
+          echo 'service_state_end'
+
+          echo 'recent_auth_mail_logs_begin'
+          journalctl -u thee-studio-api.service --since '-30 min' --no-pager 2>/dev/null | \
+            grep -Eai 'signup|register|verify|verification|confirm|email|mail|smtp|resend|postmark|sendgrid|ses|password.reset|recover|mailer|nodemailer|auth' | \
+            sed -E \
+              -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g' \
+              -e 's/(password|secret|token|authorization|apikey|api_key|key)([=:" ]+)[^ ,}";]+/\1\2[REDACTED]/Ig' | \
+            tail -200 || true
+          echo 'recent_auth_mail_logs_end'
+
+          echo 'recent_api_errors_begin'
+          journalctl -u thee-studio-api.service --since '-30 min' --no-pager 2>/dev/null | \
+            grep -Eai 'error|fail|exception|warn|5[0-9][0-9]|4[0-9][0-9]' | \
+            sed -E \
+              -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g' \
+              -e 's/(password|secret|token|authorization|apikey|api_key|key)([=:" ]+)[^ ,}";]+/\1\2[REDACTED]/Ig' | \
+            tail -120 || true
+          echo 'recent_api_errors_end'
+
+          echo 'public_auth_probe_begin'
+          for path in /api/auth/session /api/auth/signup /api/auth/reset-password; do
+            body=$(mktemp)
+            if [ "$path" = '/api/auth/session' ]; then
+              code=$(curl -sS --max-time 8 -o "$body" -w '%{http_code}' "http://127.0.0.1:4310$path" || true)
+            else
+              code=$(curl -sS --max-time 8 -X POST -H 'content-type: application/json' -d '{}' -o "$body" -w '%{http_code}' "http://127.0.0.1:4310$path" || true)
+            fi
+            printf 'path=%s status=%s body=' "$path" "$code"
+            head -c 800 "$body" | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g; s/(password|secret|token)([=:" ]+)[^ ,}";]+/\1\2[REDACTED]/Ig'
+            echo
+            rm -f "$body"
+          done
+          echo 'public_auth_probe_end'
+          REMOTE

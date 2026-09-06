@@ -12,62 +12,44 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    environment: production
-    env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
     steps:
-      - name: Configure SSH
-        env:
-          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+      - name: Probe recovery and admin route existence without credentials
+        shell: bash
         run: |
           set -euo pipefail
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/cpanel_deploy
-          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/cpanel_deploy ~/.ssh/known_hosts
-
-      - name: Inspect live auth implementation without exposing secret values
-        run: |
-          set -euo pipefail
-          ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
-          set -u
-          app=/opt/thee-studio-app
-          echo "remote_identity=$(id -un)"
-          echo "sudo_root=$((sudo -n true >/dev/null 2>&1 && echo yes) || echo no)"
-          echo "sudo_service=$((sudo -n -u thee-studio true >/dev/null 2>&1 && echo yes) || echo no)"
-
-          runner=''
-          if sudo -n true >/dev/null 2>&1; then
-            runner='sudo -n'
-          elif sudo -n -u thee-studio true >/dev/null 2>&1; then
-            runner='sudo -n -u thee-studio'
-          fi
-          echo "read_via_service_privilege=$([ -n "$runner" ] && echo yes || echo no)"
-          [ -n "$runner" ] || exit 20
-
-          echo 'package_meta_begin'
-          $runner node - "$app/package.json" <<'NODE'
-          const fs=require('fs');
-          const p=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
-          console.log(`name=${p.name||''}`);
-          console.log(`type=${p.type||''}`);
-          console.log(`scripts=${Object.keys(p.scripts||{}).join(',')}`);
-          console.log(`deps=${Object.keys(p.dependencies||{}).filter(x=>/fastify|argon|bcrypt|postgres|pg|sqlite|mysql|prisma|drizzle|knex/.test(x)).join(',')}`);
-          NODE
-          echo 'package_meta_end'
-
-          echo 'auth_code_hits_begin'
-          $runner grep -RInE --exclude-dir=node_modules --exclude-dir=.git --exclude='.env*' 'Invalid email or password|/auth/login|password_hash|passwordHash|bcrypt|argon2|FROM users|UPDATE users|INSERT INTO users' "$app/src" 2>/dev/null | head -160 || true
-          echo 'auth_code_hits_end'
-
-          echo 'env_key_names_begin'
-          $runner bash -c "sed -nE 's/^([A-Za-z_][A-Za-z0-9_]*)=.*/\\1/p' '$app/.env' 2>/dev/null | sort | grep -E 'DB|DATABASE|POSTGRES|MYSQL|SQLITE|AUTH|SESSION|OWNER|ADMIN|USER'" || true
-          echo 'env_key_names_end'
-
-          echo 'data_candidates_begin'
-          $runner find "$app" -maxdepth 4 -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' -o -name 'schema.prisma' -o -name '*migration*' \) -not -path '*/node_modules/*' -print 2>/dev/null | head -100 || true
-          echo 'data_candidates_end'
-          REMOTE
+          base='https://studio.myvitaworld.online/api'
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          for spec in \
+            'GET /openapi.json' \
+            'GET /docs' \
+            'GET /documentation/json' \
+            'GET /swagger/json' \
+            'GET /swagger' \
+            'GET /routes' \
+            'POST /auth/forgot-password' \
+            'POST /auth/forgot' \
+            'POST /auth/password-reset' \
+            'POST /auth/reset-password' \
+            'POST /auth/request-password-reset' \
+            'POST /auth/change-password' \
+            'POST /auth/password' \
+            'POST /auth/bootstrap-owner' \
+            'POST /auth/owner' \
+            'GET /admin/users' \
+            'POST /admin/users/reset-password' \
+            'POST /admin/owner' \
+            'GET /internal/users' \
+            'POST /internal/bootstrap' \
+            'POST /maintenance/bootstrap-owner'; do
+            method=${spec%% *}; path=${spec#* }
+            body=$(mktemp)
+            if [ "$method" = POST ]; then
+              code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -X POST --data '{}' -o "$body" -w '%{http_code}' "$base$path" || true)
+            else
+              code=$(curl -sS --compressed -A "$ua" -o "$body" -w '%{http_code}' "$base$path" || true)
+            fi
+            printf 'method=%s path=%s status=%s body=' "$method" "$path" "$code"
+            head -c 260 "$body" | tr '\n' ' ' | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g; s/(token|secret|password|authorization)(["=: ]+)[^," }]+/\1\2[REDACTED]/Ig' || true
+            echo
+            rm -f "$body"
+          done

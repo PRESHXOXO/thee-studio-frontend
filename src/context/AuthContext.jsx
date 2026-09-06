@@ -148,8 +148,9 @@ export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eA
     setError('');
     resetCloudStore();
     setSession(null);
+    const normalizedEmail = email.trim().toLowerCase();
     const { data, error: signUpError } = await client.auth.signUp({
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
       password,
       options: {
         data: { name: name.trim(), full_name: name.trim() },
@@ -161,8 +162,37 @@ export function AuthProvider({ children, client = (hasSupabaseConfig() || isE2eA
       setError(safe);
       throw new Error(safe);
     }
-    const next = data.session ? await applySession(data.session) : null;
-    return { session: next, confirmationRequired: !next };
+
+    if (data.session) {
+      const next = await applySession(data.session);
+      return { session: next, confirmationRequired: false };
+    }
+
+    // Some auth backends create an active account but intentionally return no
+    // session from signUp. Try the same credentials once before telling the
+    // customer to wait for an email. Supabase projects that genuinely require
+    // confirmation answer this attempt with "Email not confirmed", preserving
+    // the existing confirmation flow.
+    const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+    if (!signInError && signInData?.session) {
+      const next = await applySession(signInData.session);
+      return { session: next, confirmationRequired: false };
+    }
+
+    if (String(signInError?.message || '').toLowerCase().includes('email not confirmed')) {
+      return { session: null, confirmationRequired: true };
+    }
+
+    if (signInError) {
+      const safe = safeAuthMessage(signInError);
+      setError(safe);
+      throw new Error(safe);
+    }
+
+    return { session: null, confirmationRequired: true };
   }, [applySession, client]);
 
   const requestPasswordReset = React.useCallback(async email => {

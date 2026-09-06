@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat > /tmp/owner-login-e2e.mjs <<'NODE'
+          cat > .owner-login-e2e.mjs <<'NODE'
           import { chromium } from 'playwright';
 
           const email = String(process.env.CUTOVER_OWNER_EMAIL || '')
@@ -94,5 +94,5 @@ jobs:
 
           await browser.close();
           NODE
-          node /tmp/owner-login-e2e.mjs
-          rm -f /tmp/owner-login-e2e.mjs
+          trap 'rm -f .owner-login-e2e.mjs' EXIT
+          node .owner-login-e2e.mjs

@@ -35,25 +35,26 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Probe replacement Fastify health and self-described routes
+      - name: Inspect only Thee Studio application processes and listeners
         run: |
           set -eu
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" '
               set -eu
-              base=http://127.0.0.1:18000
-              for path in /readyz /healthz /health /openapi.json /documentation/json /docs/json /routes /; do
-                tmp=$(mktemp)
-                code=$(curl -sS --max-time 8 -o "$tmp" -w "%{http_code}" "$base$path" || true)
-                ctype=$(curl -sSI --max-time 8 "$base$path" 2>/dev/null | awk -F": " "tolower(\$1)==\"content-type\" {gsub(/\r/,\"\",\$2); print \$2; exit}" || true)
-                printf "path=%s status=%s content_type=%s\n" "$path" "$code" "$ctype"
-                if [ "$code" = 200 ]; then
-                  bytes=$(wc -c < "$tmp" | tr -d " ")
-                  printf "body_bytes=%s\n" "$bytes"
-                  head -c 12000 "$tmp" | sed -E "s/(access_token|refresh_token|token|secret|password)([\"'\''=: ]+)[^,\"'\'' }]+/\1\2[REDACTED]/Ig" || true
-                  printf "\n"
-                fi
-                rm -f "$tmp"
-              done
+              echo app_processes_begin
+              ps -u thee-studio -o pid=,ppid=,comm=,args= 2>/dev/null | sed -E "s/(password|secret|token|key)=([^[:space:]]+)/\1=[REDACTED]/Ig" || true
+              echo app_processes_end
+              echo app_listeners_begin
+              if command -v lsof >/dev/null 2>&1; then
+                lsof -nP -a -u thee-studio -iTCP -sTCP:LISTEN 2>/dev/null || true
+              fi
+              if command -v ss >/dev/null 2>&1; then
+                for pid in $(pgrep -u thee-studio 2>/dev/null || true); do
+                  printf "pid=%s cwd=" "$pid"
+                  readlink "/proc/$pid/cwd" 2>/dev/null || echo unavailable
+                done
+                ss -ltn 2>/dev/null | awk "NR==1 || /:18000|:18001|:18002|:3000|:3001|:3002|:4000|:4001|:5000|:8000|:8080|:8787/" || true
+              fi
+              echo app_listeners_end
             '

@@ -3,6 +3,18 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { AuthNotice, AuthShell, authInputStyle, authPrimaryButtonStyle } from '../components/auth/AuthShell.jsx';
 
+export function normalizeEmailInput(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+    .replace(/\s+/g, '')
+    .toLowerCase();
+}
+
+export function isEmailInputValid(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmailInput(value));
+}
+
 export function Auth({ mode = 'login' }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -20,12 +32,18 @@ export function Auth({ mode = 'login' }) {
   const handleSubmit = async event => {
     event.preventDefault();
     if (disabled) return;
+    const normalizedEmail = normalizeEmailInput(email);
+    if (!isEmailInputValid(normalizedEmail)) {
+      setError('Enter a valid email address.');
+      return;
+    }
+    setEmail(normalizedEmail);
     setLoading(true);
     setError('');
     setMessage('');
     try {
       if (signup) {
-        const result = await auth.signUp({ name, email, password });
+        const result = await auth.signUp({ name, email: normalizedEmail, password });
         if (result.confirmationRequired) {
           setMessage('Check your email and confirm your account. Your confirmation link will continue to plan selection.');
           setPassword('');
@@ -33,7 +51,7 @@ export function Auth({ mode = 'login' }) {
         }
         navigate('/plans', { replace: true });
       } else {
-        await auth.signIn({ email, password });
+        await auth.signIn({ email: normalizedEmail, password });
         navigate(location.state?.from || '/studio', { replace: true });
       }
     } catch (failure) {
@@ -64,10 +82,10 @@ export function Auth({ mode = 'login' }) {
         </button>
       )}
       {message && <AuthNotice>{message}</AuthNotice>}
-      {(error || auth.mode === 'misconfigured') && <AuthNotice error>{error || 'Cloud account service is not configured.'}</AuthNotice>}
-      <form onSubmit={handleSubmit}>
+      {(error || auth.mode === 'misconfigured') && <AuthNotice error>{error || 'Production account service is not configured.'}</AuthNotice>}
+      <form onSubmit={handleSubmit} noValidate>
         {signup && <Field id="auth-name" label="Name"><input id="auth-name" value={name} onChange={event => setName(event.target.value)} autoComplete="name" required style={authInputStyle} /></Field>}
-        <Field id="auth-email" label="Email"><input id="auth-email" type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="email" required style={authInputStyle} /></Field>
+        <Field id="auth-email" label="Email"><input id="auth-email" type="text" inputMode="email" value={email} onChange={event => setEmail(event.target.value)} onBlur={() => setEmail(normalizeEmailInput(email))} autoComplete="email" autoCapitalize="none" spellCheck={false} required style={authInputStyle} /></Field>
         <Field id="auth-password" label="Password">
           <div style={{ position: 'relative' }}>
             <input id="auth-password" type={showPassword ? 'text' : 'password'} value={password} onChange={event => setPassword(event.target.value)} autoComplete={signup ? 'new-password' : 'current-password'} minLength={8} required style={{ ...authInputStyle, paddingRight: 70 }} />

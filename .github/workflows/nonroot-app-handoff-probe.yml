@@ -35,107 +35,77 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Discover only target-scoped DB delegation and native routes
+      - name: Map bootstrap reset admin and nested routes without mutation
         run: |
           set -eu
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -eu
-
-          echo db_delegation_metadata_begin
-          command -v mysql >/dev/null 2>&1 && echo mysql_client=present || echo mysql_client=absent
-          command -v mariadb >/dev/null 2>&1 && echo mariadb_client=present || echo mariadb_client=absent
-          [ -r "$HOME/.my.cnf" ] && echo home_my_cnf=readable || echo home_my_cnf=not_readable
-          env | sed -nE 's/^((THEE_STUDIO|MARIADB|MYSQL|DB)_[A-Z0-9_]+)=.*/\1/p' | sort -u | sed 's/$/=PRESENT/'
-
-          if [ -r "$HOME/.my.cnf" ]; then
-            client=$(command -v mariadb || command -v mysql || true)
-            if [ -n "$client" ]; then
-              if out=$("$client" --defaults-extra-file="$HOME/.my.cnf" --database=thee_studio_prod --batch --skip-column-names -e 'SELECT DATABASE(), CURRENT_USER()' 2>/dev/null); then
-                printf 'target_db_login=success\n'
-                printf '%s\n' "$out" | awk -F'\t' '{print "selected_database=" $1; print "db_principal=" $2}'
-                grants=$("$client" --defaults-extra-file="$HOME/.my.cnf" --database=thee_studio_prod --batch --skip-column-names -e 'SHOW GRANTS FOR CURRENT_USER' 2>/dev/null || true)
-                if printf '%s\n' "$grants" | grep -Eq 'GRANT (ALL PRIVILEGES|SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|INDEX|REFERENCES|CREATE TEMPORARY TABLES|LOCK TABLES|EXECUTE|CREATE VIEW|SHOW VIEW|CREATE ROUTINE|ALTER ROUTINE|EVENT|TRIGGER)([, A-Z]*) ON `?(?!thee_studio_prod)' 2>/dev/null; then
-                  echo target_scope_check=needs_manual_review
-                else
-                  echo target_scope_check=no_non_target_grant_detected
-                fi
-              else
-                echo target_db_login=failed
-              fi
-            fi
-          fi
-          echo db_delegation_metadata_end
-
           base=http://127.0.0.1:4310
-          cat > /tmp/thee-route-candidates.$$ <<'PATHS'
-          /api/auth/signup
-          /api/auth/register
-          /api/auth/login
-          /api/auth/logout
-          /api/auth/session
-          /api/auth/me
-          /api/auth/user
+          uuid=00000000-0000-4000-8000-000000000000
+
+          cat > /tmp/thee-route-candidates.$$ <<PATHS
+          /api/auth/forgot-password
+          /api/auth/request-reset
           /api/auth/request-password-reset
-          /api/auth/password-reset
-          /api/auth/reset-password
-          /api/v1/auth/signup
-          /api/v1/auth/register
-          /api/v1/auth/login
-          /api/v1/auth/session
-          /api/v1/auth/me
-          /auth/signup
-          /auth/register
-          /auth/login
-          /auth/session
-          /auth/me
-          /api/creators
-          /api/projects
-          /api/campaigns
-          /api/shots
-          /api/references
-          /api/creator-references
-          /api/library
-          /api/library/items
-          /api/reviews
-          /api/selections
-          /api/provider-runs
-          /api/generations
-          /api/v1/creators
-          /api/v1/projects
-          /api/v1/campaigns
-          /api/v1/shots
-          /api/v1/library
-          /api/v1/reviews
-          /api/v1/selections
-          /creators
-          /projects
-          /campaigns
-          /shots
-          /library
-          /reviews
-          /selections
+          /api/auth/password-reset/request
+          /api/auth/reset-password/request
+          /api/auth/recover
+          /api/auth/bootstrap
+          /api/auth/bootstrap-owner
+          /api/bootstrap
+          /api/bootstrap-owner
+          /api/bootstrap/owner
+          /api/owner/bootstrap
+          /api/admin/bootstrap
+          /api/admin/bootstrap-owner
+          /api/admin/users
+          /api/admin/me
+          /api/admin/health
+          /api/admin/database
+          /api/admin/db
+          /api/admin/migrations
+          /api/admin/schema
+          /api/diagnostics
+          /api/migrations
+          /api/schema
+          /api/projects/$uuid
+          /api/projects/$uuid/shots
+          /api/projects/$uuid/reviews
+          /api/projects/$uuid/selections
+          /api/creators/$uuid
+          /api/creators/$uuid/references
+          /api/creators/$uuid/reference-assets
+          /api/library/$uuid
+          /api/library/items/$uuid
+          /api/library/items/$uuid/reviews
+          /api/library/items/$uuid/selections
+          /api/library/items/$uuid/selection
+          /api/generations/$uuid
+          /api/generation-jobs/$uuid
+          /api/provider-runs/$uuid
+          /api/runs/$uuid
+          /api/shots/$uuid
+          /api/reviews/$uuid
+          /api/selections/$uuid
           PATHS
 
-          echo native_route_probe_begin
           while IFS= read -r path; do
             [ -n "$path" ] || continue
-            for method in GET POST; do
+            for method in GET POST PATCH DELETE; do
               body=$(mktemp)
-              if [ "$method" = POST ]; then
-                code=$(curl -sS --max-time 5 -X POST -H 'Content-Type: application/json' -d '{}' -o "$body" -w '%{http_code}' "$base$path" || true)
-              else
-                code=$(curl -sS --max-time 5 -X GET -o "$body" -w '%{http_code}' "$base$path" || true)
-              fi
+              case "$method" in
+                POST|PATCH) code=$(curl -sS --max-time 5 -X "$method" -H 'Content-Type: application/json' -d '{}' -o "$body" -w '%{http_code}' "$base$path" || true) ;;
+                *) code=$(curl -sS --max-time 5 -X "$method" -o "$body" -w '%{http_code}' "$base$path" || true) ;;
+              esac
               if [ "$code" != 404 ]; then
                 printf 'method=%s path=%s status=%s bytes=%s\n' "$method" "$path" "$code" "$(wc -c < "$body" | tr -d ' ')"
-                head -c 800 "$body" | sed -E 's/(access_token|refresh_token|token|secret|password)(["=: ]+)[^," }]+/\1\2[REDACTED]/Ig' || true
+                head -c 700 "$body" | sed -E 's/(access_token|refresh_token|token|secret|password)(["=: ]+)[^," }]+/\1\2[REDACTED]/Ig' || true
                 echo
               fi
               rm -f "$body"
             done
           done < /tmp/thee-route-candidates.$$
           rm -f /tmp/thee-route-candidates.$$
-          echo native_route_probe_end
           REMOTE

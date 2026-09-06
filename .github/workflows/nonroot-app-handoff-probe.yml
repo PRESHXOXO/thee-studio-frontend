@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - ops/nonroot-handoff-probe-20260905
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -16,7 +13,6 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: production
     env:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
@@ -36,6 +32,8 @@ jobs:
           CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
         run: |
           set -eu
+          test -n "$CPANEL_SSH_PRIVATE_KEY"
+          test -n "$CPANEL_SSH_KNOWN_HOSTS"
           install -d -m 700 ~/.ssh
           printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts

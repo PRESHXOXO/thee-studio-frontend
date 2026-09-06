@@ -14,16 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Probe account self-delete routes without credentials
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Inventory frontend table calls
         run: |
           set -eu
-          base='https://studio.myvitaworld.online/api'
-          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          for path in /auth/me /auth/account /account /me /users/me; do
-            body=$(mktemp)
-            code=$(curl -sS --compressed -A "$ua" -X DELETE -o "$body" -w '%{http_code}' "$base$path" || true)
-            printf 'method=DELETE path=%s status=%s body=' "$path" "$code"
-            head -c 250 "$body" | tr '\n' ' '
-            echo
-            rm -f "$body"
-          done
+          echo 'tables_begin'
+          grep -RhoE "\.from\(['\"][A-Za-z0-9_/-]+['\"]\)" src | sed -E "s/.*\.from\(['\"]//;s/['\"]\).*//" | sort | uniq -c | sort -k2
+          echo 'tables_end'
+          echo 'storage_buckets_begin'
+          grep -RhoE "storage\.from\(['\"][A-Za-z0-9_-]+['\"]\)" src | sed -E "s/.*storage\.from\(['\"]//;s/['\"]\).*//" | sort | uniq -c | sort -k2
+          echo 'storage_buckets_end'

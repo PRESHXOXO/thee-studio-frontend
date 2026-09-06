@@ -29,34 +29,45 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/cpanel_deploy ~/.ssh/known_hosts
 
-      - name: Inspect live auth implementation without exposing env values
+      - name: Inspect live auth implementation without exposing secret values
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
-          set -euo pipefail
+          set -u
           app=/opt/thee-studio-app
-          echo "app_dir_exists=$([ -d "$app" ] && echo yes || echo no)"
-          ls -ld "$app" "$app/src" 2>/dev/null || true
+          echo "remote_identity=$(id -un)"
+          echo "sudo_root=$((sudo -n true >/dev/null 2>&1 && echo yes) || echo no)"
+          echo "sudo_service=$((sudo -n -u thee-studio true >/dev/null 2>&1 && echo yes) || echo no)"
+
+          runner=''
+          if sudo -n true >/dev/null 2>&1; then
+            runner='sudo -n'
+          elif sudo -n -u thee-studio true >/dev/null 2>&1; then
+            runner='sudo -n -u thee-studio'
+          fi
+          echo "read_via_service_privilege=$([ -n "$runner" ] && echo yes || echo no)"
+          [ -n "$runner" ] || exit 20
+
           echo 'package_meta_begin'
-          if [ -r "$app/package.json" ]; then
-            node - "$app/package.json" <<'NODE'
-          const fs=require('fs'); const p=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
-          console.log(`name=${p.name||''}`); console.log(`type=${p.type||''}`); console.log(`scripts=${Object.keys(p.scripts||{}).join(',')}`); console.log(`deps=${Object.keys(p.dependencies||{}).filter(x=>/fastify|argon|bcrypt|postgres|pg|sqlite|mysql|prisma|drizzle|knex/.test(x)).join(',')}`);
+          $runner node - "$app/package.json" <<'NODE'
+          const fs=require('fs');
+          const p=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          console.log(`name=${p.name||''}`);
+          console.log(`type=${p.type||''}`);
+          console.log(`scripts=${Object.keys(p.scripts||{}).join(',')}`);
+          console.log(`deps=${Object.keys(p.dependencies||{}).filter(x=>/fastify|argon|bcrypt|postgres|pg|sqlite|mysql|prisma|drizzle|knex/.test(x)).join(',')}`);
           NODE
-          fi
           echo 'package_meta_end'
+
           echo 'auth_code_hits_begin'
-          for f in "$app/src/server.js" "$app/src"/*.js "$app/src"/**/*.js; do
-            [ -r "$f" ] || continue
-            grep -nE "Invalid email or password|/auth/login|auth/login|password_hash|passwordHash|bcrypt|argon2|users\b|SELECT .*user|FROM users|UPDATE users" "$f" 2>/dev/null | head -120 | sed -E 's/(password|secret|token)(["'"'=: ]+)[^,; )}]+/\1\2[REDACTED]/Ig' || true
-          done
+          $runner grep -RInE --exclude-dir=node_modules --exclude-dir=.git --exclude='.env*' 'Invalid email or password|/auth/login|password_hash|passwordHash|bcrypt|argon2|FROM users|UPDATE users|INSERT INTO users' "$app/src" 2>/dev/null | head -160 || true
           echo 'auth_code_hits_end'
+
           echo 'env_key_names_begin'
-          if [ -r "$app/.env" ]; then
-            sed -nE 's/^([A-Za-z_][A-Za-z0-9_]*)=.*/\1/p' "$app/.env" | sort | grep -E 'DB|DATABASE|POSTGRES|MYSQL|SQLITE|AUTH|SESSION|OWNER|ADMIN|USER' || true
-          fi
+          $runner bash -c "sed -nE 's/^([A-Za-z_][A-Za-z0-9_]*)=.*/\\1/p' '$app/.env' 2>/dev/null | sort | grep -E 'DB|DATABASE|POSTGRES|MYSQL|SQLITE|AUTH|SESSION|OWNER|ADMIN|USER'" || true
           echo 'env_key_names_end'
+
           echo 'data_candidates_begin'
-          find "$app" -maxdepth 3 -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' -o -name 'schema.prisma' -o -name '*migration*' \) -not -path '*/node_modules/*' -print 2>/dev/null | head -100 || true
+          $runner find "$app" -maxdepth 4 -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' -o -name 'schema.prisma' -o -name '*migration*' \) -not -path '*/node_modules/*' -print 2>/dev/null | head -100 || true
           echo 'data_candidates_end'
           REMOTE

@@ -134,11 +134,25 @@ describe('AuthProvider', () => {
   it('signs up with confirmation redirected to plan selection', async () => {
     const client = fakeClient();
     client.auth.signUp.mockResolvedValue({ data: { session: null }, error: null });
+    client.auth.signInWithPassword.mockResolvedValue({ data: { session: null }, error: new Error('Email not confirmed') });
     render(<AuthProvider client={client}><Probe /></AuthProvider>);
     await screen.findByText('signed-out');
     fireEvent.click(screen.getByText('signup'));
     await waitFor(() => expect(client.auth.signUp).toHaveBeenCalled());
     expect(client.auth.signUp.mock.calls[0][0].options.emailRedirectTo).toBe(`${window.location.origin}/plans?confirmed=true`);
+    await waitFor(() => expect(client.auth.signInWithPassword).toHaveBeenCalledWith({ email: 'new@example.invalid', password: 'password1' }));
+    expect(screen.getByText('signed-out')).toBeInTheDocument();
+  });
+
+  it('continues immediately when signup creates an active account without returning a session', async () => {
+    const client = fakeClient();
+    client.auth.signUp.mockResolvedValue({ data: { session: null }, error: null });
+    client.auth.signInWithPassword.mockResolvedValue({ data: { session: session('new-active') }, error: null });
+    render(<AuthProvider client={client}><Probe /></AuthProvider>);
+    await screen.findByText('signed-out');
+    fireEvent.click(screen.getByText('signup'));
+    expect(await screen.findByText('new-active')).toBeInTheDocument();
+    expect(client.auth.signInWithPassword).toHaveBeenCalledWith({ email: 'new@example.invalid', password: 'password1' });
   });
 
   it('requests recovery and updates a recovered password', async () => {

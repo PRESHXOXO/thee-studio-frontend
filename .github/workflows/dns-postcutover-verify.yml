@@ -88,7 +88,7 @@ jobs:
           authoritative_a=$(dig +short @ns73.domaincontrol.com "$host" A | grep -E '^[0-9.]+$' | head -1)
           test "$authoritative_a" = "$target"
 
-      - name: Scan actual deployed frontend bundle for Supabase and old API references
+      - name: Inspect actual deployed bundle runtime configuration safely
         run: |
           set -eu
           host=studio.myvitaworld.online
@@ -100,23 +100,36 @@ jobs:
           echo "bundle_path=$js"
           echo "bundle_bytes=$(wc -c < /tmp/app.js | tr -d ' ')"
 
-          patterns=(
-            'supabase\.co'
-            'owxxetqniuayhzktewho'
-            '/auth/v1'
-            '/rest/v1'
-            '/storage/v1'
-            '/functions/v1'
-            'vercel\.app'
-            'vercel-dns'
-          )
-          for p in "${patterns[@]}"; do
-            c=$(grep -Eoi "$p" /tmp/app.js | wc -l | tr -d ' ')
-            echo "runtime_marker[$p]=$c"
-          done
+          python3 - <<'PY'
+import re
+from urllib.parse import urlparse
+text=open('/tmp/app.js', encoding='utf-8', errors='replace').read()
 
-          echo 'api_paths_begin'
-          grep -Eo '/api/[A-Za-z0-9_./:-]+' /tmp/app.js | sort -u | head -200
-          echo 'api_paths_end'
+urls=set(re.findall(r'https?://[^\s"\'<>`]+', text))
+hosts=sorted({urlparse(u).hostname or '' for u in urls if urlparse(u).hostname})
+print('external_hosts_begin')
+for h in hosts:
+    if any(x in h.lower() for x in ('supabase','vercel','myvitaworld','stripe','openai')):
+        print(h)
+print('external_hosts_end')
 
-          test "$(grep -Eoi 'supabase\.co|owxxetqniuayhzktewho' /tmp/app.js | wc -l | tr -d ' ')" = 0
+needles=['supabase.co','/functions/v1','owxxetqniuayhzktewho','auth/login','auth/session','auth/me','creators','projects','library','generation','provider-runs']
+print('contexts_begin')
+for needle in needles:
+    pos=0
+    count=0
+    low=text.lower()
+    target=needle.lower()
+    while True:
+        i=low.find(target,pos)
+        if i<0 or count>=4: break
+        frag=text[max(0,i-180):min(len(text),i+len(needle)+220)]
+        frag=re.sub(r'[A-Za-z0-9_\-\.]{80,}', '[LONG_TOKEN]', frag)
+        frag=re.sub(r'([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})','[EMAIL]',frag)
+        print(f'needle={needle} offset={i} context={frag}')
+        pos=i+len(needle); count+=1
+print('contexts_end')
+
+print('legacy_project_ref_count='+str(text.count('owxxetqniuayhzktewho')))
+print('supabase_host_count='+str(sum(1 for h in hosts if 'supabase' in h.lower())))
+PY

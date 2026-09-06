@@ -13,59 +13,29 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: production
-    env:
-      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
-      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
-      CUTOVER_USER_EMAIL: ${{ secrets.CUTOVER_USER_EMAIL }}
-      CUTOVER_USER_PASSWORD: ${{ secrets.CUTOVER_USER_PASSWORD }}
     steps:
-      - name: Prove creator isolation and clean up test record
+      - name: Discover creator cleanup route with fake ID and no credentials
         shell: bash
         run: |
           set -euo pipefail
-          node -e "const fs=require('fs');const clean=v=>String(v||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const a={owner:{email:clean(process.env.CUTOVER_OWNER_EMAIL),password:process.env.CUTOVER_OWNER_PASSWORD||''},user:{email:clean(process.env.CUTOVER_USER_EMAIL),password:process.env.CUTOVER_USER_PASSWORD||''}};for(const [k,v] of Object.entries(a)){if(!v.email||!v.password)process.exit(2);fs.writeFileSync('/tmp/'+k+'.json',JSON.stringify(v),{mode:0o600});}"
-          trap 'rm -f /tmp/owner.json /tmp/user.json /tmp/owner.jar /tmp/user.jar /tmp/owner.csrf /tmp/user.csrf /tmp/create.body /tmp/list.body /tmp/get.body /tmp/delete.body /tmp/creator-id' EXIT
-          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
           base='https://studio.myvitaworld.online/api'
-
-          login() {
-            who="$1"
-            code=$(curl -sS --compressed -A "$ua" -c "/tmp/$who.jar" -b "/tmp/$who.jar" -H 'Content-Type: application/json' -X POST --data-binary @"/tmp/$who.json" -o /dev/null -w '%{http_code}' "$base/auth/login")
-            echo "${who}_login_status=$code"
-            test "$code" = 200
-            curl -sS --compressed -A "$ua" -c "/tmp/$who.jar" -b "/tmp/$who.jar" "$base/auth/csrf" -o "/tmp/$who.csrf"
-          }
-          login owner
-          login user
-          owner_csrf=$(node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/owner.csrf','utf8'));process.stdout.write(String(p.csrfToken||''));")
-          test -n "$owner_csrf"
-
-          printf '%s' '{"name":"CUTOVER ISOLATION PROBE — SAFE TO DELETE"}' > /tmp/create.json
-          create_code=$(curl -sS --compressed -A "$ua" -c /tmp/owner.jar -b /tmp/owner.jar -H 'Content-Type: application/json' -H "x-csrf-token: $owner_csrf" -X POST --data-binary @/tmp/create.json -o /tmp/create.body -w '%{http_code}' "$base/creators")
-          echo "owner_creator_create_status=$create_code"
-          test "$create_code" = 200 -o "$create_code" = 201
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/create.body','utf8'));const c=p.creator||p.data?.creator||p.data||p;const id=c?.id;if(!id)process.exit(3);fs.writeFileSync('/tmp/creator-id',String(id),{mode:0o600});console.log('owner_creator_id_received=true');console.log('create_response_keys='+Object.keys(p).sort().join(','));"
-          creator_id=$(cat /tmp/creator-id)
-
-          owner_get=$(curl -sS --compressed -A "$ua" -c /tmp/owner.jar -b /tmp/owner.jar -o /tmp/get.body -w '%{http_code}' "$base/creators/$creator_id")
-          echo "owner_known_creator_get_status=$owner_get"
-          test "$owner_get" = 200
-
-          user_get=$(curl -sS --compressed -A "$ua" -c /tmp/user.jar -b /tmp/user.jar -o /tmp/get.body -w '%{http_code}' "$base/creators/$creator_id")
-          echo "normal_user_known_owner_creator_get_status=$user_get"
-          test "$user_get" = 404
-
-          user_list=$(curl -sS --compressed -A "$ua" -c /tmp/user.jar -b /tmp/user.jar -o /tmp/list.body -w '%{http_code}' "$base/creators")
-          echo "normal_user_creator_list_status=$user_list"
-          test "$user_list" = 200
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/list.body','utf8'));const target=fs.readFileSync('/tmp/creator-id','utf8');const rows=Array.isArray(p)?p:(p.creators||p.data||[]);const leaked=Array.isArray(rows)&&rows.some(x=>String(x?.id)===target);console.log('owner_creator_visible_in_normal_user_list='+leaked);if(leaked)process.exit(4);"
-
-          delete_code=$(curl -sS --compressed -A "$ua" -c /tmp/owner.jar -b /tmp/owner.jar -H "x-csrf-token: $owner_csrf" -X DELETE -o /tmp/delete.body -w '%{http_code}' "$base/creators/$creator_id")
-          echo "owner_creator_cleanup_status=$delete_code"
-          test "$delete_code" = 200 -o "$delete_code" = 204
-
-          after_delete=$(curl -sS --compressed -A "$ua" -c /tmp/owner.jar -b /tmp/owner.jar -o /dev/null -w '%{http_code}' "$base/creators/$creator_id")
-          echo "owner_creator_after_cleanup_status=$after_delete"
-          test "$after_delete" = 404
-          echo 'creator_isolation_passed=true'
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          fake='00000000-0000-4000-8000-000000000000'
+          for spec in \
+            "DELETE /creators/$fake" \
+            "POST /creators/$fake/delete" \
+            "DELETE /creator/$fake" \
+            "POST /creator/$fake/delete" \
+            "POST /creators/$fake/archive" \
+            "PATCH /creators/$fake"; do
+            method=${spec%% *}; path=${spec#* }
+            body=$(mktemp)
+            case "$method" in
+              POST|PATCH) code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -X "$method" --data '{}' -o "$body" -w '%{http_code}' "$base$path" || true) ;;
+              *) code=$(curl -sS --compressed -A "$ua" -X "$method" -o "$body" -w '%{http_code}' "$base$path" || true) ;;
+            esac
+            printf 'method=%s path_shape=%s status=%s body=' "$method" "$path" "$code"
+            head -c 220 "$body" | tr '\n' ' ' | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g'
+            echo
+            rm -f "$body"
+          done

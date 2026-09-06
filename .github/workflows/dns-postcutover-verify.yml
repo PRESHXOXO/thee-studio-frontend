@@ -13,121 +13,73 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-
     steps:
-      - name: Configure existing read-only SSH path
-        env:
-          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
-        run: |
-          set -eu
-          test -n "$CPANEL_SSH_HOST"
-          test -n "$CPANEL_SSH_PORT"
-          test -n "$CPANEL_SSH_USER"
-          test -n "$CPANEL_SSH_PRIVATE_KEY"
-          test -n "$CPANEL_SSH_KNOWN_HOSTS"
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_verify
-          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/thee_verify ~/.ssh/known_hosts
-
-      - name: Compare backend health with browser-like public requests
+      - name: Verify DNS health and capture browser network
         run: |
           set -eu
           host=studio.myvitaworld.online
           target=199.250.200.250
-          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152.0.0.0 Safari/537.36'
-
-          echo 'dns_begin'
           echo "resolver_cname=$(dig +short "$host" CNAME | paste -sd, -)"
           echo "resolver_a=$(dig +short "$host" A | grep -E '^[0-9.]+$' | paste -sd, -)"
           for ns in ns73.domaincontrol.com ns74.domaincontrol.com; do
             echo "ns=$ns cname=$(dig +short @$ns "$host" CNAME | paste -sd, -)"
             echo "ns=$ns a=$(dig +short @$ns "$host" A | grep -E '^[0-9.]+$' | paste -sd, -)"
           done
-          echo 'dns_end'
 
-          echo 'internal_backend_begin'
-          ssh -o BatchMode=yes -o ConnectTimeout=10 \
-            -i ~/.ssh/thee_verify -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            'for p in /readyz /api/readyz; do b=$(mktemp); c=$(curl -sS --max-time 8 -o "$b" -w "%{http_code}" "http://127.0.0.1:4310$p" || true); printf "internal_path=%s status=%s body=" "$p" "$c"; head -c 500 "$b" | tr "\n" " "; echo; rm -f "$b"; done'
-          echo 'internal_backend_end'
-
-          browser_headers=(-A "$ua" -H 'Accept-Language: en-US,en;q=0.9' -H 'Accept-Encoding: gzip, deflate, br')
-
-          echo 'public_root_begin'
-          curl -sS --compressed --http1.1 --max-time 15 \
-            "${browser_headers[@]}" \
+          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152.0.0.0 Safari/537.36'
+          curl -sS --compressed --http1.1 --max-time 15 -A "$ua" \
             -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8' \
-            -H 'Sec-Fetch-Dest: document' -H 'Sec-Fetch-Mode: navigate' -H 'Sec-Fetch-Site: none' \
-            -o /tmp/root -D /tmp/root-h \
-            -w 'root_status=%{http_code} root_ip=%{remote_ip} root_type=%{content_type}\n' \
+            -o /tmp/root -w 'root_status=%{http_code} root_ip=%{remote_ip} root_type=%{content_type}\n' \
             "https://$host/"
-          grep -Ei '^(HTTP/|server:|content-type:|location:|vary:|x-[a-z0-9-]+:)' /tmp/root-h | tr '\r' ' ' || true
-          echo -n 'root_prefix='; head -c 350 /tmp/root | tr '\n' ' '; echo
-          echo 'public_root_end'
-
-          echo 'public_ready_begin'
-          curl -sS --compressed --http1.1 --max-time 15 \
-            "${browser_headers[@]}" \
+          curl -sS --compressed --http1.1 --max-time 15 -A "$ua" \
             -H 'Accept: application/json, text/plain, */*' \
             -H "Origin: https://$host" -H "Referer: https://$host/" \
-            -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: cors' -H 'Sec-Fetch-Site: same-origin' \
-            -o /tmp/ready -D /tmp/ready-h \
-            -w 'ready_status=%{http_code} ready_ip=%{remote_ip} ready_type=%{content_type}\n' \
+            -o /tmp/ready -w 'ready_status=%{http_code} ready_ip=%{remote_ip} ready_type=%{content_type}\n' \
             "https://$host/api/readyz"
-          grep -Ei '^(HTTP/|server:|content-type:|location:|vary:|x-[a-z0-9-]+:)' /tmp/ready-h | tr '\r' ' ' || true
-          echo -n 'ready_body='; head -c 700 /tmp/ready | tr '\n' ' '; echo
-          echo 'public_ready_end'
+          echo -n 'ready_body='; cat /tmp/ready; echo
+
+          chrome=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
+          test -n "$chrome"
+          echo "browser_binary=$(basename "$chrome")"
+          rm -f /tmp/thee-netlog.json /tmp/dom.html
+          set +e
+          timeout 25s "$chrome" --headless=new --no-sandbox --disable-gpu \
+            --disable-background-networking --disable-component-update --disable-default-apps \
+            --disable-sync --metrics-recording-only --no-first-run \
+            --log-net-log=/tmp/thee-netlog.json --net-log-capture-mode=Everything \
+            --virtual-time-budget=12000 --dump-dom "https://$host/" > /tmp/dom.html 2>/tmp/chrome.err
+          chrome_rc=$?
+          set -e
+          echo "browser_rc=$chrome_rc dom_bytes=$(wc -c < /tmp/dom.html | tr -d ' ') netlog_bytes=$(wc -c < /tmp/thee-netlog.json | tr -d ' ')"
+
+          python3 - <<'PY'
+import json
+from urllib.parse import urlparse
+p='/tmp/thee-netlog.json'
+with open(p,encoding='utf-8',errors='replace') as f:
+    data=json.load(f)
+urls=set()
+for ev in data.get('events',[]):
+    params=ev.get('params') or {}
+    for key in ('url','original_url','destination'):
+        v=params.get(key)
+        if isinstance(v,str) and (v.startswith('http://') or v.startswith('https://')):
+            urls.add(v)
+hosts=sorted({urlparse(u).hostname for u in urls if urlparse(u).hostname})
+print('browser_hosts_begin')
+for h in hosts:
+    print(h)
+print('browser_hosts_end')
+print('supabase_request_count='+str(sum(1 for u in urls if 'supabase' in u.lower())))
+print('old_supabase_ref_request_count='+str(sum(1 for u in urls if 'owxxetqniuayhzktewho' in u.lower() or 'qkrmkoixgznvxbcljmsx' in u.lower())))
+print('vercel_request_count='+str(sum(1 for u in urls if 'vercel' in u.lower())))
+print('thee_api_requests_begin')
+for u in sorted(urls):
+    if 'studio.myvitaworld.online/api/' in u:
+        print(urlparse(u).path)
+print('thee_api_requests_end')
+PY
 
           authoritative_a=$(dig +short @ns73.domaincontrol.com "$host" A | grep -E '^[0-9.]+$' | head -1)
           test "$authoritative_a" = "$target"
-
-      - name: Inspect actual deployed bundle runtime configuration safely
-        run: |
-          set -eu
-          host=studio.myvitaworld.online
-          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152.0.0.0 Safari/537.36'
-          curl -sS --compressed --max-time 15 -A "$ua" "https://$host/" -o /tmp/index.html
-          js=$(grep -oE 'src="/assets/[^"]+\.js"' /tmp/index.html | head -1 | cut -d'"' -f2)
-          test -n "$js"
-          curl -sS --compressed --max-time 20 -A "$ua" "https://$host$js" -o /tmp/app.js
-          echo "bundle_path=$js"
-          echo "bundle_bytes=$(wc -c < /tmp/app.js | tr -d ' ')"
-
-          echo 'supabase_hosts_begin'
-          grep -Eo '[A-Za-z0-9.-]+\.supabase\.co' /tmp/app.js | sort -u || true
-          echo 'supabase_hosts_end'
-
-          echo 'selected_external_hosts_begin'
-          grep -Eo 'https://[A-Za-z0-9._:-]+' /tmp/app.js | \
-            grep -Ei 'supabase|vercel|myvitaworld|stripe|openai' | sort -u | head -100 || true
-          echo 'selected_external_hosts_end'
-
-          echo 'supabase_context_begin'
-          grep -Eo '.{0,180}supabase\.co.{0,220}' /tmp/app.js | head -4 | \
-            sed -E 's/[A-Za-z0-9_.-]{80,}/[LONG_TOKEN]/g' || true
-          echo 'supabase_context_end'
-
-          echo 'functions_v1_context_begin'
-          grep -Eo '.{0,180}/functions/v1.{0,220}' /tmp/app.js | head -4 | \
-            sed -E 's/[A-Za-z0-9_.-]{80,}/[LONG_TOKEN]/g' || true
-          echo 'functions_v1_context_end'
-
-          for needle in owxxetqniuayhzktewho '/auth/v1' '/rest/v1' '/storage/v1' '/functions/v1' 'supabase.co' 'vercel.app' 'vercel-dns'; do
-            count=$(grep -Fio "$needle" /tmp/app.js | wc -l | tr -d ' ')
-            echo "marker[$needle]=$count"
-          done
-
-          echo 'auth_api_context_begin'
-          for needle in 'auth/login' 'auth/session' 'auth/me'; do
-            echo "needle=$needle"
-            grep -Eo ".{0,160}${needle}.{0,220}" /tmp/app.js | head -3 | \
-              sed -E 's/[A-Za-z0-9_.-]{80,}/[LONG_TOKEN]/g' || true
-          done
-          echo 'auth_api_context_end'
+          grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/ready

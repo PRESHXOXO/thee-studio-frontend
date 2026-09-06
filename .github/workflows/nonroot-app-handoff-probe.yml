@@ -35,21 +35,20 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect only non-secret handoff metadata in current SSH home
+      - name: Detect only bounded app-operator delegation
         run: |
           set -eu
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" '
-              set -eu;
+              set -u;
               printf "operator_uid=%s\n" "$(id -u)";
-              echo app_path_metadata_begin;
-              namei -l /opt/thee-studio-app 2>/dev/null || true;
-              echo app_path_metadata_end;
-              echo candidate_handoff_files_begin;
-              find "$HOME" -maxdepth 4 -type f \( -iname "*thee*" -o -iname "*operator*" -o -iname "*migrator*" -o -iname "*handoff*" -o -iname "*vps*" \) -printf "%p\n" 2>/dev/null | sed "s#^$HOME#~#" | sort | head -100;
-              echo candidate_handoff_files_end;
-              echo ssh_config_metadata_begin;
-              if [ -r "$HOME/.ssh/config" ]; then grep -E "^[[:space:]]*(Host|User|Hostname|Port)[[:space:]]" "$HOME/.ssh/config" || true; else echo ssh_config=absent; fi;
-              echo ssh_config_metadata_end;
+              printf "operator_groups=%s\n" "$(id -Gn)";
+              echo named_operator_commands_begin;
+              for cmd in thee-studio-operator thee-studio-app-operator thee-studio-migrator; do p=$(command -v "$cmd" 2>/dev/null || true); [ -n "$p" ] && printf "%s=%s\n" "$cmd" "$p"; done;
+              find /usr/local/bin /opt -maxdepth 2 -type f \( -iname "*thee*operator*" -o -iname "*thee*migrator*" \) -printf "%p\n" 2>/dev/null | sort | head -100;
+              echo named_operator_commands_end;
+              echo sudo_noninteractive_permissions_begin;
+              if command -v sudo >/dev/null 2>&1; then sudo -n -l 2>&1 || true; else echo sudo=unavailable; fi;
+              echo sudo_noninteractive_permissions_end;
             '

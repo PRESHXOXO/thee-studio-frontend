@@ -17,7 +17,6 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
     steps:
       - name: Configure SSH
         env:
@@ -30,30 +29,34 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/cpanel_deploy ~/.ssh/known_hosts
 
-      - name: Locate replacement API process and source without reading secrets
+      - name: Inspect live auth implementation without exposing env values
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          echo "remote_user=$(id -un)"
-          echo "remote_home=$HOME"
-          echo "frontend_path_present=$([ -d "${CPANEL_DEPLOY_PATH:-/nonexistent}" ] && echo yes || echo unknown)"
-          echo 'node_processes_begin'
-          ps -eo pid=,comm=,args= | grep -E '[n]ode|[p]m2|[f]astify' | sed -E 's/(--password|--token|--secret|DATABASE_URL|SESSION_SECRET)=[^ ]+/\1=[REDACTED]/Ig' | head -50 || true
-          echo 'node_processes_end'
-          echo 'listening_ports_begin'
-          (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null || true) | grep -E ':(3000|3001|4000|5000|8000|8080|8787|9000|9100|9200)\b' | head -50 || true
-          echo 'listening_ports_end'
-          echo 'auth_source_hits_begin'
-          for root in "$HOME" /var/www /opt /srv; do
-            [ -d "$root" ] || continue
-            grep -RIl --exclude-dir=node_modules --exclude-dir=.git --exclude='.env*' --exclude='*.log' 'Invalid email or password' "$root" 2>/dev/null | head -30 || true
+          app=/opt/thee-studio-app
+          echo "app_dir_exists=$([ -d "$app" ] && echo yes || echo no)"
+          ls -ld "$app" "$app/src" 2>/dev/null || true
+          echo 'package_meta_begin'
+          if [ -r "$app/package.json" ]; then
+            node - "$app/package.json" <<'NODE'
+          const fs=require('fs'); const p=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          console.log(`name=${p.name||''}`); console.log(`type=${p.type||''}`); console.log(`scripts=${Object.keys(p.scripts||{}).join(',')}`); console.log(`deps=${Object.keys(p.dependencies||{}).filter(x=>/fastify|argon|bcrypt|postgres|pg|sqlite|mysql|prisma|drizzle|knex/.test(x)).join(',')}`);
+          NODE
+          fi
+          echo 'package_meta_end'
+          echo 'auth_code_hits_begin'
+          for f in "$app/src/server.js" "$app/src"/*.js "$app/src"/**/*.js; do
+            [ -r "$f" ] || continue
+            grep -nE "Invalid email or password|/auth/login|auth/login|password_hash|passwordHash|bcrypt|argon2|users\b|SELECT .*user|FROM users|UPDATE users" "$f" 2>/dev/null | head -120 | sed -E 's/(password|secret|token)(["'"'=: ]+)[^,; )}]+/\1\2[REDACTED]/Ig' || true
           done
-          echo 'auth_source_hits_end'
-          echo 'package_candidates_begin'
-          for root in "$HOME" /var/www /opt /srv; do
-            [ -d "$root" ] || continue
-            find "$root" -maxdepth 4 -type f \( -name package.json -o -name ecosystem.config.js -o -name ecosystem.config.cjs -o -name server.js -o -name app.js \) -not -path '*/node_modules/*' 2>/dev/null | head -80 || true
-          done
-          echo 'package_candidates_end'
+          echo 'auth_code_hits_end'
+          echo 'env_key_names_begin'
+          if [ -r "$app/.env" ]; then
+            sed -nE 's/^([A-Za-z_][A-Za-z0-9_]*)=.*/\1/p' "$app/.env" | sort | grep -E 'DB|DATABASE|POSTGRES|MYSQL|SQLITE|AUTH|SESSION|OWNER|ADMIN|USER' || true
+          fi
+          echo 'env_key_names_end'
+          echo 'data_candidates_begin'
+          find "$app" -maxdepth 3 -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' -o -name 'schema.prisma' -o -name '*migration*' \) -not -path '*/node_modules/*' -print 2>/dev/null | head -100 || true
+          echo 'data_candidates_end'
           REMOTE

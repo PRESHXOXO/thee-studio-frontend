@@ -14,32 +14,45 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
-      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
-      CUTOVER_USER_EMAIL: ${{ secrets.CUTOVER_USER_EMAIL }}
-      CUTOVER_USER_PASSWORD: ${{ secrets.CUTOVER_USER_PASSWORD }}
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
     steps:
-      - name: Compare owner and normal-user login against production
-        shell: bash
+      - name: Configure SSH
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-          node -e "const fs=require('fs');const clean=v=>String(v||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const pairs={owner:{email:clean(process.env.CUTOVER_OWNER_EMAIL),password:process.env.CUTOVER_OWNER_PASSWORD||''},user:{email:clean(process.env.CUTOVER_USER_EMAIL),password:process.env.CUTOVER_USER_PASSWORD||''}};for(const [name,p] of Object.entries(pairs)){if(!p.email||!p.password)process.exit(2);fs.writeFileSync('/tmp/'+name+'.json',JSON.stringify(p),{mode:0o600});}"
-          trap 'rm -f /tmp/owner.json /tmp/user.json' EXIT
-          base='https://studio.myvitaworld.online/api/auth/login'
-          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          for who in owner user; do
-            body=$(mktemp)
-            jar=$(mktemp)
-            code=$(curl -sS --compressed -A "$ua" -c "$jar" -b "$jar" -H 'Content-Type: application/json' -X POST --data-binary @/tmp/$who.json -o "$body" -w '%{http_code}' "$base")
-            printf '%s_login_status=%s\n' "$who" "$code"
-            if [ "$code" = 200 ]; then
-              me=$(mktemp)
-              me_code=$(curl -sS --compressed -A "$ua" -c "$jar" -b "$jar" -o "$me" -w '%{http_code}' https://studio.myvitaworld.online/api/auth/me)
-              printf '%s_me_status=%s\n' "$who" "$me_code"
-              node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));const who=process.argv[2];const u=p.user||p;const role=String(u?.appMetadata?.role||u?.app_metadata?.role||u?.role||'').toLowerCase();console.log(who+'_session_user_present='+Boolean(u?.id));console.log(who+'_session_role='+(role||'none'));" "$me" "$who"
-              rm -f "$me"
-            else
-              node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));}catch{};console.log(process.argv[2]+'_login_error='+(p.error||p.message||'unknown'));" "$body" "$who"
-            fi
-            rm -f "$body" "$jar"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/cpanel_deploy
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/cpanel_deploy ~/.ssh/known_hosts
+
+      - name: List only readable operator handoff paths and commands
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -eu
+          echo 'identity_begin'
+          id
+          echo 'identity_end'
+          echo 'group_thee_studio_begin'
+          getent group thee-studio 2>/dev/null || true
+          echo 'group_thee_studio_end'
+          echo 'operator_commands_begin'
+          for cmd in thee-studio-operator thee-studio-app-operator thee-studio-migrator thee-studio-db mysql mariadb; do
+            p=$(command -v "$cmd" 2>/dev/null || true)
+            [ -n "$p" ] && printf '%s=%s\n' "$cmd" "$p"
           done
+          echo 'operator_commands_end'
+          echo 'candidate_paths_begin'
+          for root in /etc/thee-studio /etc /usr/local/bin /usr/local/sbin /opt /var/lib/thee-studio "$HOME"; do
+            [ -d "$root" ] || continue
+            find "$root" -maxdepth 4 -type f \( -iname '*thee*operator*' -o -iname '*thee*migrator*' -o -iname '*operator*.cnf' -o -iname '*migrator*.cnf' -o -iname '*thee*db*' -o -iname '*thee*.cnf' -o -iname '*thee*.env' \) -readable -printf '%p mode=%m owner=%u group=%g\n' 2>/dev/null | head -150 || true
+          done
+          echo 'candidate_paths_end'
+          echo 'socket_paths_begin'
+          find /run /var/run /var/lib/thee-studio -maxdepth 4 \( -type s -o -type p \) -readable -printf '%p mode=%m owner=%u group=%g\n' 2>/dev/null | grep -Ei 'thee|studio|maria|mysql|operator' | head -100 || true
+          echo 'socket_paths_end'
+          REMOTE

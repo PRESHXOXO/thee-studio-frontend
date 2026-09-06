@@ -52,33 +52,16 @@ jobs:
           set -e
           echo "browser_rc=$chrome_rc dom_bytes=$(wc -c < /tmp/dom.html | tr -d ' ') netlog_bytes=$(wc -c < /tmp/thee-netlog.json | tr -d ' ')"
 
-          python3 - <<'PY'
-import json
-from urllib.parse import urlparse
-p='/tmp/thee-netlog.json'
-with open(p,encoding='utf-8',errors='replace') as f:
-    data=json.load(f)
-urls=set()
-for ev in data.get('events',[]):
-    params=ev.get('params') or {}
-    for key in ('url','original_url','destination'):
-        v=params.get(key)
-        if isinstance(v,str) and (v.startswith('http://') or v.startswith('https://')):
-            urls.add(v)
-hosts=sorted({urlparse(u).hostname for u in urls if urlparse(u).hostname})
-print('browser_hosts_begin')
-for h in hosts:
-    print(h)
-print('browser_hosts_end')
-print('supabase_request_count='+str(sum(1 for u in urls if 'supabase' in u.lower())))
-print('old_supabase_ref_request_count='+str(sum(1 for u in urls if 'owxxetqniuayhzktewho' in u.lower() or 'qkrmkoixgznvxbcljmsx' in u.lower())))
-print('vercel_request_count='+str(sum(1 for u in urls if 'vercel' in u.lower())))
-print('thee_api_requests_begin')
-for u in sorted(urls):
-    if 'studio.myvitaworld.online/api/' in u:
-        print(urlparse(u).path)
-print('thee_api_requests_end')
-PY
+          echo 'browser_url_hosts_begin'
+          grep -Eo 'https?://[^" ]+' /tmp/thee-netlog.json | \
+            sed -E 's#https?://([^/:]+).*#\1#' | sort -u | head -200 || true
+          echo 'browser_url_hosts_end'
+          echo "supabase_request_markers=$(grep -Eio 'https?://[^\" ]*supabase[^\" ]*' /tmp/thee-netlog.json | wc -l | tr -d ' ')"
+          echo "old_project_request_markers=$(grep -Eio 'https?://[^\" ]*(owxxetqniuayhzktewho|qkrmkoixgznvxbcljmsx)[^\" ]*' /tmp/thee-netlog.json | wc -l | tr -d ' ')"
+          echo "vercel_request_markers=$(grep -Eio 'https?://[^\" ]*vercel[^\" ]*' /tmp/thee-netlog.json | wc -l | tr -d ' ')"
+          echo 'thee_api_request_markers_begin'
+          grep -Eo 'https://studio\.myvitaworld\.online/api/[^" ]*' /tmp/thee-netlog.json | sort -u | head -100 || true
+          echo 'thee_api_request_markers_end'
 
           authoritative_a=$(dig +short @ns73.domaincontrol.com "$host" A | grep -E '^[0-9.]+$' | head -1)
           test "$authoritative_a" = "$target"

@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import { createApiSupabaseClient } from './apiSupabase.js';
 import { createE2eAuthClient } from './e2eAuthClient.js';
 
+const apiModeEnabled = import.meta.env.VITE_API_MODE === 'true';
 const e2eAuthEnabled = import.meta.env.DEV && import.meta.env.VITE_E2E_AUTH === 'true';
 
 export function readSupabaseConfig(env = import.meta.env) {
@@ -13,30 +15,34 @@ export function readSupabaseConfig(env = import.meta.env) {
 
 export const supabaseConfig = readSupabaseConfig();
 
-export const supabase = e2eAuthEnabled
-  ? createE2eAuthClient()
-  : supabaseConfig.configured
-  ? createClient(supabaseConfig.url, supabaseConfig.publishableKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        storageKey: 'thee-studio-auth',
-      },
-    })
+const apiClient = apiModeEnabled
+  ? createApiSupabaseClient(import.meta.env.VITE_API_BASE || '/api')
   : null;
+
+export const supabase = apiClient
+  || (e2eAuthEnabled
+    ? createE2eAuthClient()
+    : supabaseConfig.configured
+      ? createClient(supabaseConfig.url, supabaseConfig.publishableKey, {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true,
+            storageKey: 'thee-studio-auth',
+          },
+        })
+      : null);
 
 export function hasSupabaseConfig() {
   return supabaseConfig.configured;
 }
 
+export function isApiModeEnabled() { return apiModeEnabled; }
 export function isE2eAuthEnabled() { return e2eAuthEnabled; }
 
-// Staging project ref, extracted from the standard Supabase URL shape
-// (https://<ref>.supabase.co). Used to gate staging-only diagnostic UI —
-// stronger than a hostname check since it verifies which Supabase *backend*
-// this build is actually wired to, not just where the page happens to be
-// served from.
+// Staging project ref, extracted from the standard Supabase URL shape.
+// This remains available only for staging-only diagnostics; production API
+// mode does not configure or contact a Supabase project.
 const STAGING_PROJECT_REF = 'qkrmkoixgznvxbcljmsx';
 
 export function isStagingSupabaseProject(env = import.meta.env) {
@@ -45,7 +51,7 @@ export function isStagingSupabaseProject(env = import.meta.env) {
 }
 
 export function getSupabase() {
-  if (!supabase) throw new Error('Missing browser-safe Supabase configuration.');
+  if (!supabase) throw new Error('Missing browser API configuration.');
   return supabase;
 }
 
@@ -58,7 +64,7 @@ export function normalizeSupabaseSession(session) {
       || session.user.email?.split('@')[0]
       || 'Thee Studio',
     email: session.user.email || '',
-    provider: 'supabase',
+    provider: session.access_token === 'api-session' ? 'api' : 'supabase',
     raw: session,
   };
 }

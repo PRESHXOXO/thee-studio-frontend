@@ -1,0 +1,30 @@
+name: Temporary Owner Email Format Check
+
+on:
+  push:
+    branches:
+      - ops/owner-login-diagnose-20260906
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
+      CUTOVER_USER_EMAIL: ${{ secrets.CUTOVER_USER_EMAIL }}
+    steps:
+      - name: Report format booleans only
+        run: |
+          node <<'NODE'
+          for (const [label, raw] of [['owner', process.env.CUTOVER_OWNER_EMAIL || ''], ['user', process.env.CUTOVER_USER_EMAIL || '']]) {
+            const cleaned = raw.normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').trim();
+            console.log(`${label}_present=${Boolean(raw)}`);
+            console.log(`${label}_trim_or_invisible_changed=${cleaned !== raw}`);
+            console.log(`${label}_has_any_whitespace=${/\s/.test(cleaned)}`);
+            console.log(`${label}_simple_email_shape=${/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned)}`);
+          }
+          NODE

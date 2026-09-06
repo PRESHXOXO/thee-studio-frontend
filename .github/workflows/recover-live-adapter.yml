@@ -14,18 +14,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Inspect generic replacement login errors using dummy credentials
+      - name: Probe replacement asset and generation routes without credentials
         run: |
           set -eu
-          base='https://studio.myvitaworld.online/api/auth/login'
+          base='https://studio.myvitaworld.online/api'
           ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          for payload in \
-            '{"email":"nobody-cutover-test@example.com","password":"definitely-not-a-real-password"}' \
-            '{"email":"not-an-email","password":"definitely-not-a-real-password"}'; do
+          for spec in \
+            'GET /library' \
+            'POST /library' \
+            'GET /assets' \
+            'POST /assets' \
+            'POST /assets/upload' \
+            'DELETE /assets/test' \
+            'GET /assets/download/test/test' \
+            'POST /storage/upload' \
+            'DELETE /storage/test/test' \
+            'POST /creator-references' \
+            'POST /references' \
+            'POST /generation' \
+            'GET /generation/test' \
+            'GET /compat/creators' \
+            'POST /compat/creators' \
+            'PATCH /compat/creators' \
+            'DELETE /compat/creators'; do
+            method=${spec%% *}; path=${spec#* }
             body=$(mktemp)
-            code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -o "$body" -w '%{http_code}' -X POST --data "$payload" "$base" || true)
-            printf 'status=%s body=' "$code"
-            cat "$body" | tr '\n' ' '
+            if [ "$method" = POST ] || [ "$method" = PATCH ]; then
+              code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -X "$method" --data '{}' -o "$body" -w '%{http_code}' "$base$path" || true)
+            else
+              code=$(curl -sS --compressed -A "$ua" -X "$method" -o "$body" -w '%{http_code}' "$base$path" || true)
+            fi
+            printf 'method=%s path=%s status=%s body=' "$method" "$path" "$code"
+            head -c 300 "$body" | tr '\n' ' '
             echo
             rm -f "$body"
           done

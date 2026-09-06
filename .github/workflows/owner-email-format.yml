@@ -53,12 +53,12 @@ jobs:
           page.on('requestfailed', req => failures.push(`${req.method()} ${new URL(req.url()).pathname}`));
 
           await page.goto('https://studio.myvitaworld.online/login', { waitUntil: 'networkidle' });
-          await page.getByLabel('Email').fill(email);
-          await page.getByLabel('Password').fill(password);
+          await page.locator('#auth-email').fill(email);
+          await page.locator('#auth-password').fill(password);
 
           await Promise.all([
             page.waitForURL(url => url.pathname.startsWith('/studio'), { timeout: 15000 }),
-            page.getByRole('button', { name: 'Sign in' }).click(),
+            page.getByRole('button', { name: 'Sign in', exact: true }).click(),
           ]);
 
           console.log('browser_login_reached_studio=true');

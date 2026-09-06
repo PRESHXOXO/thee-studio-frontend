@@ -29,30 +29,32 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/cpanel_deploy ~/.ssh/known_hosts
 
-      - name: List only readable operator handoff paths and commands
+      - name: Probe only Thee Studio scoped DB access metadata
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -eu
-          echo 'identity_begin'
-          id
-          echo 'identity_end'
-          echo 'group_thee_studio_begin'
-          getent group thee-studio 2>/dev/null || true
-          echo 'group_thee_studio_end'
-          echo 'operator_commands_begin'
-          for cmd in thee-studio-operator thee-studio-app-operator thee-studio-migrator thee-studio-db mysql mariadb; do
-            p=$(command -v "$cmd" 2>/dev/null || true)
-            [ -n "$p" ] && printf '%s=%s\n' "$cmd" "$p"
-          done
-          echo 'operator_commands_end'
-          echo 'candidate_paths_begin'
-          for root in /etc/thee-studio /etc /usr/local/bin /usr/local/sbin /opt /var/lib/thee-studio "$HOME"; do
-            [ -d "$root" ] || continue
-            find "$root" -maxdepth 4 -type f \( -iname '*thee*operator*' -o -iname '*thee*migrator*' -o -iname '*operator*.cnf' -o -iname '*migrator*.cnf' -o -iname '*thee*db*' -o -iname '*thee*.cnf' -o -iname '*thee*.env' \) -readable -printf '%p mode=%m owner=%u group=%g\n' 2>/dev/null | head -150 || true
-          done
-          echo 'candidate_paths_end'
-          echo 'socket_paths_begin'
-          find /run /var/run /var/lib/thee-studio -maxdepth 4 \( -type s -o -type p \) -readable -printf '%p mode=%m owner=%u group=%g\n' 2>/dev/null | grep -Ei 'thee|studio|maria|mysql|operator' | head -100 || true
-          echo 'socket_paths_end'
+          echo 'service_env_names_begin'
+          raw=$(systemctl show thee-studio-api.service -p Environment --value 2>/dev/null || true)
+          if [ -n "$raw" ]; then
+            printf '%s\n' "$raw" | tr ' ' '\n' | sed -nE 's/^([A-Za-z_][A-Za-z0-9_]*)=.*/\1=PRESENT/p' | grep -Ei 'DB|DATABASE|MYSQL|MARIA|AUTH|SESSION|OWNER|ADMIN' | sort -u || true
+            echo 'service_environment_property=readable'
+          else
+            echo 'service_environment_property=empty_or_hidden'
+          fi
+          echo 'service_env_names_end'
+
+          echo 'service_env_files_begin'
+          systemctl show thee-studio-api.service -p EnvironmentFiles --value 2>/dev/null | sed -E 's/;.*//g' || true
+          echo 'service_env_files_end'
+
+          echo 'target_db_socket_auth_begin'
+          if mariadb --batch --skip-column-names --database=thee_studio_prod -e 'SELECT DATABASE(), CURRENT_USER()' >/tmp/thee-db-check.$$ 2>/dev/null; then
+            echo 'target_db_socket_auth=success'
+            awk -F'\t' '{print "selected_database=" $1; print "db_principal=" $2}' /tmp/thee-db-check.$$
+          else
+            echo 'target_db_socket_auth=denied'
+          fi
+          rm -f /tmp/thee-db-check.$$
+          echo 'target_db_socket_auth_end'
           REMOTE

@@ -1,0 +1,61 @@
+name: Temporary Restore Pre-PR19 Cutover Frontend
+
+on:
+  push:
+    branches:
+      - ops/dns-cutover-20260906
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+      CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
+    steps:
+      - name: Configure SSH
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/cpanel_restore
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/cpanel_restore ~/.ssh/known_hosts
+
+      - name: Restore release backed up before PR 19 deploy
+        run: |
+          set -eu
+          ssh -i ~/.ssh/cpanel_restore -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "DEPLOY='$CPANEL_DEPLOY_PATH' BACKUPS='$CPANEL_BACKUP_ROOT' bash -s" <<'REMOTE'
+          set -eu
+          prefix='eb8462492a26fb416e0b835df3de243608e99fb8-'
+          release=$(find "$BACKUPS" -maxdepth 1 -mindepth 1 -type d -name "${prefix}*" -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
+          test -n "$release"
+          test -s "$release/index.html"
+          test -d "$release/assets"
+          rsync -a --delete-delay --exclude='.well-known/' "$release/" "$DEPLOY/"
+          test -s "$DEPLOY/index.html"
+          test -d "$DEPLOY/assets"
+          echo 'restore=ok'
+          REMOTE
+
+      - name: Verify restored public frontend
+        run: |
+          set -eu
+          body=$(mktemp)
+          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
+            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
+            https://studio.myvitaworld.online/ -o "$body"
+          grep -q '<div id="root"></div>' "$body"
+          echo 'origin=ok'

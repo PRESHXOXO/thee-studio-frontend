@@ -14,18 +14,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: main
-      - name: Inventory compatibility-client surface used by main
+      - name: Probe native replacement access endpoints without credentials
         run: |
           set -eu
-          echo 'function_invocations_begin'
-          grep -RhoE "functions\.invoke\(['\"][^'\"]+" src | sed -E "s/.*invoke\(['\"]//" | sort -u || true
-          echo 'function_invocations_end'
-          echo 'query_methods_begin'
-          grep -RhoE '\.(select|eq|neq|gt|gte|lt|lte|in|is|not|like|ilike|contains|containedBy|overlaps|order|limit|range|maybeSingle|single|insert|update|upsert|delete|remove|upload|download|createSignedUrl)\(' src | sed -E 's/^[.]//;s/[(]$//' | sort | uniq -c | sort -k2
-          echo 'query_methods_end'
-          echo 'api_related_files_begin'
-          grep -RIlE "functions\.invoke|\.from\(|storage\.from|VITE_API_MODE|VITE_API_BASE" src | sort
-          echo 'api_related_files_end'
+          base='https://studio.myvitaworld.online/api'
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          for path in \
+            /auth/me \
+            /auth/session \
+            /access \
+            /account/access \
+            /account/entitlements \
+            /entitlements \
+            /me/access \
+            /me/entitlements \
+            /admin/me \
+            /billing/access \
+            /plans \
+            /csrf \
+            /auth/csrf; do
+            body=$(mktemp)
+            code=$(curl -sS --compressed -A "$ua" -o "$body" -w '%{http_code}' "$base$path" || true)
+            printf 'path=%s status=%s bytes=%s body=' "$path" "$code" "$(wc -c < "$body" | tr -d ' ')"
+            head -c 500 "$body" | tr '\n' ' ' | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g; s/(token|secret|password|authorization)(["=: ]+)[^," }]+/\1\2[REDACTED]/Ig' || true
+            echo
+            rm -f "$body"
+          done

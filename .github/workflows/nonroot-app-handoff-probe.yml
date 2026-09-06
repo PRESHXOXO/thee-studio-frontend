@@ -35,24 +35,31 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Probe replacement Fastify health and self-description
+      - name: Trace only Thee Studio process service metadata
         run: |
           set -eu
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" '
               set -eu
-              base=http://127.0.0.1:3002
-              for path in /readyz /healthz /health /openapi.json /documentation/json /docs/json /routes /; do
-                tmp=$(mktemp)
-                code=$(curl -sS --max-time 8 -o "$tmp" -w "%{http_code}" "$base$path" || true)
-                printf "path=%s status=%s\n" "$path" "$code"
-                if [ "$code" = 200 ]; then
-                  bytes=$(wc -c < "$tmp" | tr -d " ")
-                  printf "body_bytes=%s\n" "$bytes"
-                  head -c 16000 "$tmp" | sed -E "s/(access_token|refresh_token|token|secret|password)([\"'\''=: ]+)[^,\"'\'' }]+/\1\2[REDACTED]/Ig" || true
-                  printf "\n"
-                fi
-                rm -f "$tmp"
+              for pid in $(pgrep -u thee-studio 2>/dev/null || true); do
+                printf "pid=%s\n" "$pid"
+                printf "cmd="; tr "\0" " " < "/proc/$pid/cmdline" 2>/dev/null | sed -E "s/(password|secret|token|key)=([^[:space:]]+)/\1=[REDACTED]/Ig" || true; printf "\n"
+                printf "cgroup="; cat "/proc/$pid/cgroup" 2>/dev/null | tr "\n" ";" || true; printf "\n"
               done
+
+              echo systemd_unit_metadata_begin
+              for unit in $(for pid in $(pgrep -u thee-studio 2>/dev/null || true); do cat "/proc/$pid/cgroup" 2>/dev/null; done | sed -nE "s#.*(/|^)([^/]+\\.service)$#\2#p" | sort -u); do
+                printf "unit=%s\n" "$unit"
+                systemctl show "$unit" --no-pager \
+                  -p Id -p MainPID -p User -p Group -p ActiveState -p SubState -p FragmentPath -p EnvironmentFiles \
+                  2>/dev/null || true
+                printf "exec_start="
+                systemctl show "$unit" --no-pager -p ExecStart --value 2>/dev/null | sed -E "s/(password|secret|token|key)(=|[[:space:]]+)[^ ;}]+/\1\2[REDACTED]/Ig" || true
+              done
+              echo systemd_unit_metadata_end
+
+              echo candidate_local_ports_begin
+              ss -ltn 2>/dev/null | awk "NR==1 || /127\.0\.0\.1|\[::1\]/" | head -100 || true
+              echo candidate_local_ports_end
             '

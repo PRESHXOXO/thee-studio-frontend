@@ -12,87 +12,28 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     environment: production
     env:
       CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
       CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-          cache: npm
-
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-
-      - name: Exercise live owner login in Chromium
+      - name: Inspect native creator create validation without creating data
         shell: bash
         run: |
           set -euo pipefail
-          cat > .owner-login-e2e.mjs <<'NODE'
-          import { chromium } from 'playwright';
-
-          const email = String(process.env.CUTOVER_OWNER_EMAIL || '')
-            .normalize('NFKC')
-            .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
-            .trim()
-            .toLowerCase();
-          const password = process.env.CUTOVER_OWNER_PASSWORD || '';
-          if (!email || password.length < 10) process.exit(2);
-
-          const browser = await chromium.launch({ headless: true });
-          const context = await browser.newContext();
-          const page = await context.newPage();
-          const requests = [];
-          const failures = [];
-
-          page.on('request', req => requests.push(req.url()));
-          page.on('requestfailed', req => failures.push(`${req.method()} ${new URL(req.url()).pathname}`));
-
-          await page.goto('https://studio.myvitaworld.online/login', { waitUntil: 'networkidle' });
-          await page.locator('#auth-email').fill(email);
-          await page.locator('#auth-password').fill(password);
-
-          await Promise.all([
-            page.waitForURL(url => url.pathname.startsWith('/studio'), { timeout: 15000 }),
-            page.getByRole('button', { name: 'Sign in', exact: true }).click(),
-          ]);
-
-          console.log('browser_login_reached_studio=true');
-          console.log(`browser_post_login_path=${new URL(page.url()).pathname}`);
-
-          const me = await page.evaluate(async () => {
-            const response = await fetch('/api/auth/me', { credentials: 'include' });
-            let payload = {};
-            try { payload = await response.json(); } catch {}
-            return { status: response.status, userPresent: Boolean((payload.user || payload)?.id) };
-          });
-          console.log(`browser_me_status=${me.status}`);
-          console.log(`browser_me_user_present=${me.userPresent}`);
-          if (me.status !== 200 || !me.userPresent) throw new Error('Authenticated browser session was not established.');
-
-          await page.reload({ waitUntil: 'networkidle' });
-          const refreshPath = new URL(page.url()).pathname;
-          console.log(`browser_refresh_path=${refreshPath}`);
-          console.log(`browser_session_survives_refresh=${refreshPath.startsWith('/studio')}`);
-          if (!refreshPath.startsWith('/studio')) throw new Error('Owner session did not survive refresh.');
-
-          const bad = requests.filter(url => {
-            const lower = url.toLowerCase();
-            return lower.includes('supabase.co')
-              || lower.includes('vercel')
-              || lower.includes('owxxetqniuayhzktewho')
-              || lower.includes('qkrmkoixgznvxbcljmsx');
-          });
-          console.log(`browser_total_requests=${requests.length}`);
-          console.log(`browser_old_runtime_requests=${bad.length}`);
-          console.log(`browser_request_failures=${failures.length}`);
-          if (bad.length) throw new Error('Old Supabase/Vercel runtime request detected.');
-
-          await browser.close();
-          NODE
-          trap 'rm -f .owner-login-e2e.mjs' EXIT
-          node .owner-login-e2e.mjs
+          node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||!password)process.exit(2);fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});"
+          trap 'rm -f /tmp/login.json /tmp/jar /tmp/csrf /tmp/body' EXIT
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          base='https://studio.myvitaworld.online/api'
+          login_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")
+          echo "owner_login_status=$login_code"
+          test "$login_code" = 200
+          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/auth/csrf" -o /tmp/csrf
+          csrf=$(node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/csrf','utf8'));process.stdout.write(String(p.csrfToken||''));")
+          test -n "$csrf"
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -X POST --data '{}' -o /tmp/body -w '%{http_code}' "$base/creators")
+          echo "empty_creator_create_status=$code"
+          node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/body','utf8'));}catch{};const out={error:p.error||p.message||null,keys:Object.keys(p||{}).sort()};console.log('creator_validation='+JSON.stringify(out).replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[EMAIL]'));"
+          test "$code" != 200
+          test "$code" != 201

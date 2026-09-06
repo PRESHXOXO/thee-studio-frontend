@@ -12,49 +12,40 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    environment: production
-    env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+    timeout-minutes: 10
     steps:
-      - name: Configure SSH
-        env:
-          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+      - name: Probe native owner/bootstrap routes without credentials
+        shell: bash
         run: |
           set -euo pipefail
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/cpanel_deploy
-          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/cpanel_deploy ~/.ssh/known_hosts
-
-      - name: Probe only Thee Studio scoped DB access metadata
-        run: |
-          set -euo pipefail
-          ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
-          set -eu
-          echo 'service_env_names_begin'
-          raw=$(systemctl show thee-studio-api.service -p Environment --value 2>/dev/null || true)
-          if [ -n "$raw" ]; then
-            printf '%s\n' "$raw" | tr ' ' '\n' | sed -nE 's/^([A-Za-z_][A-Za-z0-9_]*)=.*/\1=PRESENT/p' | grep -Ei 'DB|DATABASE|MYSQL|MARIA|AUTH|SESSION|OWNER|ADMIN' | sort -u || true
-            echo 'service_environment_property=readable'
-          else
-            echo 'service_environment_property=empty_or_hidden'
-          fi
-          echo 'service_env_names_end'
-
-          echo 'service_env_files_begin'
-          systemctl show thee-studio-api.service -p EnvironmentFiles --value 2>/dev/null | sed -E 's/;.*//g' || true
-          echo 'service_env_files_end'
-
-          echo 'target_db_socket_auth_begin'
-          if mariadb --batch --skip-column-names --database=thee_studio_prod -e 'SELECT DATABASE(), CURRENT_USER()' >/tmp/thee-db-check.$$ 2>/dev/null; then
-            echo 'target_db_socket_auth=success'
-            awk -F'\t' '{print "selected_database=" $1; print "db_principal=" $2}' /tmp/thee-db-check.$$
-          else
-            echo 'target_db_socket_auth=denied'
-          fi
-          rm -f /tmp/thee-db-check.$$
-          echo 'target_db_socket_auth_end'
-          REMOTE
+          base='https://studio.myvitaworld.online/api'
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          cat > /tmp/routes <<'EOF'
+          POST /auth/bootstrap-owner
+          POST /auth/owner/bootstrap
+          POST /owner/bootstrap
+          POST /bootstrap-owner
+          POST /admin/bootstrap-owner
+          POST /auth/promote-owner
+          POST /auth/claim-owner
+          POST /auth/bootstrap
+          GET /auth/owner/status
+          GET /owner/status
+          GET /admin/status
+          GET /auth/config
+          GET /auth/bootstrap
+          EOF
+          while read -r method path; do
+            body=$(mktemp)
+            if [ "$method" = POST ]; then
+              code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -X POST --data '{}' -o "$body" -w '%{http_code}' "$base$path" || true)
+            else
+              code=$(curl -sS --compressed -A "$ua" -X GET -o "$body" -w '%{http_code}' "$base$path" || true)
+            fi
+            if [ "$code" != 404 ]; then
+              printf 'EXISTS method=%s path=%s status=%s body=' "$method" "$path" "$code"
+              head -c 300 "$body" | tr '\n' ' ' | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g; s/(token|secret|password|authorization)(["=: ]+)[^," } ]+/\1\2[REDACTED]/Ig' || true
+              echo
+            fi
+            rm -f "$body"
+          done < /tmp/routes

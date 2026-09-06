@@ -14,50 +14,50 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      THEE_STUDIO_SSH_HOST: ${{ secrets.THEE_STUDIO_SSH_HOST }}
-      THEE_STUDIO_SSH_PORT: ${{ secrets.THEE_STUDIO_SSH_PORT }}
-      THEE_STUDIO_SSH_USER: ${{ secrets.THEE_STUDIO_SSH_USER }}
-      THEE_STUDIO_SSH_PRIVATE_KEY: ${{ secrets.THEE_STUDIO_SSH_PRIVATE_KEY }}
-      THEE_STUDIO_SSH_KNOWN_HOSTS: ${{ secrets.THEE_STUDIO_SSH_KNOWN_HOSTS }}
-      VPS_SSH_HOST: ${{ secrets.VPS_SSH_HOST }}
-      VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
-      VPS_SSH_USER: ${{ secrets.VPS_SSH_USER }}
-      VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-      APP_SSH_HOST: ${{ secrets.APP_SSH_HOST }}
-      APP_SSH_USER: ${{ secrets.APP_SSH_USER }}
-      APP_SSH_PRIVATE_KEY: ${{ secrets.APP_SSH_PRIVATE_KEY }}
-      OPERATOR_SSH_HOST: ${{ secrets.OPERATOR_SSH_HOST }}
-      OPERATOR_SSH_USER: ${{ secrets.OPERATOR_SSH_USER }}
-      OPERATOR_SSH_PRIVATE_KEY: ${{ secrets.OPERATOR_SSH_PRIVATE_KEY }}
-      THEE_STUDIO_DB_HOST: ${{ secrets.THEE_STUDIO_DB_HOST }}
-      THEE_STUDIO_DB_PORT: ${{ secrets.THEE_STUDIO_DB_PORT }}
-      THEE_STUDIO_DB_NAME: ${{ secrets.THEE_STUDIO_DB_NAME }}
-      THEE_STUDIO_DB_USER: ${{ secrets.THEE_STUDIO_DB_USER }}
-      THEE_STUDIO_DB_PASSWORD: ${{ secrets.THEE_STUDIO_DB_PASSWORD }}
-      DB_MIGRATOR_HOST: ${{ secrets.DB_MIGRATOR_HOST }}
-      DB_MIGRATOR_PORT: ${{ secrets.DB_MIGRATOR_PORT }}
-      DB_MIGRATOR_NAME: ${{ secrets.DB_MIGRATOR_NAME }}
-      DB_MIGRATOR_USER: ${{ secrets.DB_MIGRATOR_USER }}
-      DB_MIGRATOR_PASSWORD: ${{ secrets.DB_MIGRATOR_PASSWORD }}
-      MIGRATOR_DB_HOST: ${{ secrets.MIGRATOR_DB_HOST }}
-      MIGRATOR_DB_USER: ${{ secrets.MIGRATOR_DB_USER }}
-      MIGRATOR_DB_PASSWORD: ${{ secrets.MIGRATOR_DB_PASSWORD }}
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      THEE_STUDIO_DATABASE_URL: ${{ secrets.THEE_STUDIO_DATABASE_URL }}
+      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
+      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
+      CUTOVER_USER_EMAIL: ${{ secrets.CUTOVER_USER_EMAIL }}
+      CUTOVER_USER_PASSWORD: ${{ secrets.CUTOVER_USER_PASSWORD }}
     steps:
-      - name: Report credential presence only
+      - name: Compare owner and normal-user login against production
         shell: bash
         run: |
+          set -euo pipefail
           node <<'NODE'
-          const names = [
-            'THEE_STUDIO_SSH_HOST','THEE_STUDIO_SSH_PORT','THEE_STUDIO_SSH_USER','THEE_STUDIO_SSH_PRIVATE_KEY','THEE_STUDIO_SSH_KNOWN_HOSTS',
-            'VPS_SSH_HOST','VPS_SSH_PORT','VPS_SSH_USER','VPS_SSH_PRIVATE_KEY',
-            'APP_SSH_HOST','APP_SSH_USER','APP_SSH_PRIVATE_KEY',
-            'OPERATOR_SSH_HOST','OPERATOR_SSH_USER','OPERATOR_SSH_PRIVATE_KEY',
-            'THEE_STUDIO_DB_HOST','THEE_STUDIO_DB_PORT','THEE_STUDIO_DB_NAME','THEE_STUDIO_DB_USER','THEE_STUDIO_DB_PASSWORD',
-            'DB_MIGRATOR_HOST','DB_MIGRATOR_PORT','DB_MIGRATOR_NAME','DB_MIGRATOR_USER','DB_MIGRATOR_PASSWORD',
-            'MIGRATOR_DB_HOST','MIGRATOR_DB_USER','MIGRATOR_DB_PASSWORD',
-            'DATABASE_URL','THEE_STUDIO_DATABASE_URL'
-          ];
-          for (const name of names) console.log(`${name}_present=${Boolean(process.env[name])}`);
+          const fs=require('fs');
+          function clean(v){return String(v||'').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g,'').trim().toLowerCase()}
+          const pairs={
+            owner:{email:clean(process.env.CUTOVER_OWNER_EMAIL),password:process.env.CUTOVER_OWNER_PASSWORD||''},
+            user:{email:clean(process.env.CUTOVER_USER_EMAIL),password:process.env.CUTOVER_USER_PASSWORD||''},
+          };
+          for(const [name,p] of Object.entries(pairs)){
+            if(!p.email||!p.password) process.exit(2);
+            fs.writeFileSync(`/tmp/${name}.json`,JSON.stringify(p),{mode:0o600});
+          }
           NODE
+          trap 'rm -f /tmp/owner.json /tmp/user.json' EXIT
+          base='https://studio.myvitaworld.online/api/auth/login'
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          for who in owner user; do
+            body=$(mktemp)
+            jar=$(mktemp)
+            code=$(curl -sS --compressed -A "$ua" -c "$jar" -b "$jar" -H 'Content-Type: application/json' -X POST --data-binary @/tmp/$who.json -o "$body" -w '%{http_code}' "$base")
+            printf '%s_login_status=%s\n' "$who" "$code"
+            if [ "$code" = 200 ]; then
+              me=$(mktemp)
+              me_code=$(curl -sS --compressed -A "$ua" -c "$jar" -b "$jar" -o "$me" -w '%{http_code}' https://studio.myvitaworld.online/api/auth/me)
+              printf '%s_me_status=%s\n' "$who" "$me_code"
+              node - "$me" "$who" <<'NODE'
+              const fs=require('fs'); const p=JSON.parse(fs.readFileSync(process.argv[2],'utf8')); const who=process.argv[3]; const u=p.user||p;
+              const role=String(u?.appMetadata?.role||u?.app_metadata?.role||u?.role||'').toLowerCase();
+              console.log(`${who}_session_user_present=${Boolean(u?.id)}`);
+              console.log(`${who}_session_role=${role||'none'}`);
+              NODE
+              rm -f "$me"
+            else
+              node - "$body" "$who" <<'NODE'
+              const fs=require('fs'); let p={}; try{p=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));}catch{}; console.log(`${process.argv[3]}_login_error=${p.error||p.message||'unknown'}`)
+              NODE
+            fi
+            rm -f "$body" "$jar"
+          done

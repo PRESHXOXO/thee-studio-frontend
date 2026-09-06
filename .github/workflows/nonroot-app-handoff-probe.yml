@@ -35,10 +35,21 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Single-command replacement application probe
+      - name: Inspect only non-secret handoff metadata in current SSH home
         run: |
           set -eu
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            'printf "operator_user=%s\noperator_uid=%s\n" "$(id -un)" "$(id -u)"; test -d /opt/thee-studio-app && echo app_dir=present || { echo app_dir=missing; exit 21; }; test -r /opt/thee-studio-app && test -x /opt/thee-studio-app && echo app_dir_access=readable || { echo app_dir_access=denied; exit 22; }'
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" '
+              set -eu;
+              printf "operator_uid=%s\n" "$(id -u)";
+              echo app_path_metadata_begin;
+              namei -l /opt/thee-studio-app 2>/dev/null || true;
+              echo app_path_metadata_end;
+              echo candidate_handoff_files_begin;
+              find "$HOME" -maxdepth 4 -type f \( -iname "*thee*" -o -iname "*operator*" -o -iname "*migrator*" -o -iname "*handoff*" -o -iname "*vps*" \) -printf "%p\n" 2>/dev/null | sed "s#^$HOME#~#" | sort | head -100;
+              echo candidate_handoff_files_end;
+              echo ssh_config_metadata_begin;
+              if [ -r "$HOME/.ssh/config" ]; then grep -E "^[[:space:]]*(Host|User|Hostname|Port)[[:space:]]" "$HOME/.ssh/config" || true; else echo ssh_config=absent; fi;
+              echo ssh_config_metadata_end;
+            '

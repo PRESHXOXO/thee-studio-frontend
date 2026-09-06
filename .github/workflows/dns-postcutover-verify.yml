@@ -87,3 +87,36 @@ jobs:
 
           authoritative_a=$(dig +short @ns73.domaincontrol.com "$host" A | grep -E '^[0-9.]+$' | head -1)
           test "$authoritative_a" = "$target"
+
+      - name: Scan actual deployed frontend bundle for Supabase and old API references
+        run: |
+          set -eu
+          host=studio.myvitaworld.online
+          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152.0.0.0 Safari/537.36'
+          curl -sS --compressed --max-time 15 -A "$ua" "https://$host/" -o /tmp/index.html
+          js=$(grep -oE 'src="/assets/[^"]+\.js"' /tmp/index.html | head -1 | cut -d'"' -f2)
+          test -n "$js"
+          curl -sS --compressed --max-time 20 -A "$ua" "https://$host$js" -o /tmp/app.js
+          echo "bundle_path=$js"
+          echo "bundle_bytes=$(wc -c < /tmp/app.js | tr -d ' ')"
+
+          patterns=(
+            'supabase\.co'
+            'owxxetqniuayhzktewho'
+            '/auth/v1'
+            '/rest/v1'
+            '/storage/v1'
+            '/functions/v1'
+            'vercel\.app'
+            'vercel-dns'
+          )
+          for p in "${patterns[@]}"; do
+            c=$(grep -Eoi "$p" /tmp/app.js | wc -l | tr -d ' ')
+            echo "runtime_marker[$p]=$c"
+          done
+
+          echo 'api_paths_begin'
+          grep -Eo '/api/[A-Za-z0-9_./:-]+' /tmp/app.js | sort -u | head -200
+          echo 'api_paths_end'
+
+          test "$(grep -Eoi 'supabase\.co|owxxetqniuayhzktewho' /tmp/app.js | wc -l | tr -d ' ')" = 0

@@ -24,57 +24,46 @@ jobs:
           CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
         run: |
           set -eu
-          test -n "$CPANEL_SSH_HOST"
-          test -n "$CPANEL_SSH_PORT"
-          test -n "$CPANEL_SSH_USER"
-          test -n "$CPANEL_SSH_PRIVATE_KEY"
-          test -n "$CPANEL_SSH_KNOWN_HOSTS"
           install -d -m 700 ~/.ssh
           printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_diag
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_diag ~/.ssh/known_hosts
 
-      - name: Inspect recent auth and mail diagnostics only
+      - name: Inspect live signup and mail behavior safely
         run: |
           set -eu
+          host=studio.myvitaworld.online
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+
+          curl -sS --compressed -A "$ua" "https://$host/" -o /tmp/index.html
+          js=$(grep -oE 'src="/assets/[^"]+\.js"' /tmp/index.html | head -1 | cut -d'"' -f2)
+          curl -sS --compressed -A "$ua" "https://$host$js" -o /tmp/app.js
+
+          echo 'signup_ui_context_begin'
+          for needle in '/auth/signup' 'verification' 'verify your email' 'check your email' 'email sent' 'confirm your email' 'reset-password'; do
+            echo "needle=$needle count=$(grep -Fio "$needle" /tmp/app.js | wc -l | tr -d ' ')"
+            grep -Fio -m 2 -B 0 -A 0 "$needle" /tmp/app.js >/dev/null || true
+          done
+          grep -Eo '.{0,260}/auth/signup.{0,520}' /tmp/app.js | head -3 | sed -E 's/[A-Za-z0-9_.-]{80,}/[LONG_TOKEN]/g' || true
+          echo 'signup_ui_context_end'
+
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_diag -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -eu
-          echo 'service_state_begin'
-          systemctl show thee-studio-api.service --no-pager -p ActiveState -p SubState -p MainPID -p EnvironmentFiles 2>/dev/null || true
-          echo 'service_state_end'
+          pid=$(systemctl show thee-studio-api.service -p MainPID --value 2>/dev/null || true)
+          echo 'mail_env_names_begin'
+          if [ -n "$pid" ] && [ -r "/proc/$pid/environ" ]; then
+            tr '\0' '\n' < "/proc/$pid/environ" | sed -nE 's/^([A-Za-z_][A-Za-z0-9_]*)=.*/\1/p' | grep -Ei 'MAIL|SMTP|RESEND|POSTMARK|SENDGRID|SES|EMAIL|AUTH|SITE|BASE_URL' | sort -u || true
+          else
+            echo 'process_environment=not_readable_from_delegated_account'
+          fi
+          echo 'mail_env_names_end'
 
           echo 'recent_auth_mail_logs_begin'
-          journalctl -u thee-studio-api.service --since '-30 min' --no-pager 2>/dev/null | \
+          journalctl -u thee-studio-api.service --since '-45 min' --no-pager 2>/dev/null | \
             grep -Eai 'signup|register|verify|verification|confirm|email|mail|smtp|resend|postmark|sendgrid|ses|password.reset|recover|mailer|nodemailer|auth' | \
-            sed -E \
-              -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g' \
-              -e 's/(password|secret|token|authorization|apikey|api_key|key)([=:" ]+)[^ ,}";]+/\1\2[REDACTED]/Ig' | \
+            sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g; s/(password|secret|token|authorization|apikey|api_key|key)([=:" ]+)[^ ,}";]+/\1\2[REDACTED]/Ig' | \
             tail -200 || true
           echo 'recent_auth_mail_logs_end'
-
-          echo 'recent_api_errors_begin'
-          journalctl -u thee-studio-api.service --since '-30 min' --no-pager 2>/dev/null | \
-            grep -Eai 'error|fail|exception|warn|5[0-9][0-9]|4[0-9][0-9]' | \
-            sed -E \
-              -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g' \
-              -e 's/(password|secret|token|authorization|apikey|api_key|key)([=:" ]+)[^ ,}";]+/\1\2[REDACTED]/Ig' | \
-            tail -120 || true
-          echo 'recent_api_errors_end'
-
-          echo 'public_auth_probe_begin'
-          for path in /api/auth/session /api/auth/signup /api/auth/reset-password; do
-            body=$(mktemp)
-            if [ "$path" = '/api/auth/session' ]; then
-              code=$(curl -sS --max-time 8 -o "$body" -w '%{http_code}' "http://127.0.0.1:4310$path" || true)
-            else
-              code=$(curl -sS --max-time 8 -X POST -H 'content-type: application/json' -d '{}' -o "$body" -w '%{http_code}' "http://127.0.0.1:4310$path" || true)
-            fi
-            printf 'path=%s status=%s body=' "$path" "$code"
-            head -c 800 "$body" | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g; s/(password|secret|token)([=:" ]+)[^ ,}";]+/\1\2[REDACTED]/Ig'
-            echo
-            rm -f "$body"
-          done
-          echo 'public_auth_probe_end'
           REMOTE

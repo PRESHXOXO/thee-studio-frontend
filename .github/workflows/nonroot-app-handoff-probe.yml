@@ -35,17 +35,25 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Read only non-secret API routing and health metadata
+      - name: Probe replacement Fastify health and self-described routes
         run: |
           set -eu
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" '
-              set -eu;
-              for f in "$HOME/thee-studio-api-http.conf" "$HOME/thee-studio-api-https.conf" "$HOME/thee-studio-runtime-monitor.cron"; do
-                if [ -r "$f" ]; then
-                  printf "file=%s\n" "${f#$HOME/}";
-                  grep -Ei "ProxyPass|ProxyPassReverse|127\.0\.0\.1|localhost|readyz|health|curl|https?://" "$f" 2>/dev/null | sed -E "s/(Authorization:?[[:space:]]*[^[:space:]]+)/Authorization:[REDACTED]/Ig; s/(token|secret|password)=([^[:space:]&]+)/\1=[REDACTED]/Ig" || true;
-                fi;
-              done;
+              set -eu
+              base=http://127.0.0.1:18000
+              for path in /readyz /healthz /health /openapi.json /documentation/json /docs/json /routes /; do
+                tmp=$(mktemp)
+                code=$(curl -sS --max-time 8 -o "$tmp" -w "%{http_code}" "$base$path" || true)
+                ctype=$(curl -sSI --max-time 8 "$base$path" 2>/dev/null | awk -F": " "tolower(\$1)==\"content-type\" {gsub(/\r/,\"\",\$2); print \$2; exit}" || true)
+                printf "path=%s status=%s content_type=%s\n" "$path" "$code" "$ctype"
+                if [ "$code" = 200 ]; then
+                  bytes=$(wc -c < "$tmp" | tr -d " ")
+                  printf "body_bytes=%s\n" "$bytes"
+                  head -c 12000 "$tmp" | sed -E "s/(access_token|refresh_token|token|secret|password)([\"'\''=: ]+)[^,\"'\'' }]+/\1\2[REDACTED]/Ig" || true
+                  printf "\n"
+                fi
+                rm -f "$tmp"
+              done
             '

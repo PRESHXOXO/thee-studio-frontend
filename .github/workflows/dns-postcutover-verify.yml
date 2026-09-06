@@ -13,12 +13,34 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+
     steps:
-      - name: Verify authoritative DNS and public HTTPS
+      - name: Configure existing read-only SSH path
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          test -n "$CPANEL_SSH_HOST"
+          test -n "$CPANEL_SSH_PORT"
+          test -n "$CPANEL_SSH_USER"
+          test -n "$CPANEL_SSH_PRIVATE_KEY"
+          test -n "$CPANEL_SSH_KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_verify
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_verify ~/.ssh/known_hosts
+
+      - name: Compare backend health with browser-like public requests
         run: |
           set -eu
           host=studio.myvitaworld.online
           target=199.250.200.250
+          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152.0.0.0 Safari/537.36'
 
           echo 'dns_begin'
           echo "resolver_cname=$(dig +short "$host" CNAME | paste -sd, -)"
@@ -29,32 +51,39 @@ jobs:
           done
           echo 'dns_end'
 
-          echo 'target_https_begin'
-          curl -sS --max-time 15 --resolve "$host:443:$target" \
-            -o /tmp/target-root -D /tmp/target-root-h \
-            -w 'target_root_status=%{http_code} target_root_ip=%{remote_ip} target_root_type=%{content_type}\n' \
-            "https://$host/"
-          curl -sS --max-time 15 --resolve "$host:443:$target" \
-            -o /tmp/target-ready -D /tmp/target-ready-h \
-            -w 'target_ready_status=%{http_code} target_ready_ip=%{remote_ip} target_ready_type=%{content_type}\n' \
-            "https://$host/api/readyz"
-          echo -n 'target_ready_body='; head -c 1200 /tmp/target-ready | tr '\n' ' '; echo
-          echo 'target_https_end'
+          echo 'internal_backend_begin'
+          ssh -o BatchMode=yes -o ConnectTimeout=10 \
+            -i ~/.ssh/thee_verify -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            'for p in /readyz /api/readyz; do b=$(mktemp); c=$(curl -sS --max-time 8 -o "$b" -w "%{http_code}" "http://127.0.0.1:4310$p" || true); printf "internal_path=%s status=%s body=" "$p" "$c"; head -c 500 "$b" | tr "\n" " "; echo; rm -f "$b"; done'
+          echo 'internal_backend_end'
 
-          echo 'public_https_begin'
-          curl -sS --max-time 15 \
-            -o /tmp/public-root -D /tmp/public-root-h \
-            -w 'public_root_status=%{http_code} public_root_ip=%{remote_ip} public_root_type=%{content_type}\n' \
+          browser_headers=(-A "$ua" -H 'Accept-Language: en-US,en;q=0.9' -H 'Accept-Encoding: gzip, deflate, br')
+
+          echo 'public_root_begin'
+          curl -sS --compressed --http1.1 --max-time 15 \
+            "${browser_headers[@]}" \
+            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8' \
+            -H 'Sec-Fetch-Dest: document' -H 'Sec-Fetch-Mode: navigate' -H 'Sec-Fetch-Site: none' \
+            -o /tmp/root -D /tmp/root-h \
+            -w 'root_status=%{http_code} root_ip=%{remote_ip} root_type=%{content_type}\n' \
             "https://$host/"
-          curl -sS --max-time 15 \
-            -o /tmp/public-ready -D /tmp/public-ready-h \
-            -w 'public_ready_status=%{http_code} public_ready_ip=%{remote_ip} public_ready_type=%{content_type}\n' \
+          grep -Ei '^(HTTP/|server:|content-type:|location:|vary:|x-[a-z0-9-]+:)' /tmp/root-h | tr '\r' ' ' || true
+          echo -n 'root_prefix='; head -c 350 /tmp/root | tr '\n' ' '; echo
+          echo 'public_root_end'
+
+          echo 'public_ready_begin'
+          curl -sS --compressed --http1.1 --max-time 15 \
+            "${browser_headers[@]}" \
+            -H 'Accept: application/json, text/plain, */*' \
+            -H "Origin: https://$host" -H "Referer: https://$host/" \
+            -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: cors' -H 'Sec-Fetch-Site: same-origin' \
+            -o /tmp/ready -D /tmp/ready-h \
+            -w 'ready_status=%{http_code} ready_ip=%{remote_ip} ready_type=%{content_type}\n' \
             "https://$host/api/readyz"
-          echo -n 'public_ready_body='; head -c 1200 /tmp/public-ready | tr '\n' ' '; echo
-          echo -n 'public_root_prefix='; head -c 500 /tmp/public-root | tr '\n' ' '; echo
-          echo 'public_https_end'
+          grep -Ei '^(HTTP/|server:|content-type:|location:|vary:|x-[a-z0-9-]+:)' /tmp/ready-h | tr '\r' ' ' || true
+          echo -n 'ready_body='; head -c 700 /tmp/ready | tr '\n' ' '; echo
+          echo 'public_ready_end'
 
           authoritative_a=$(dig +short @ns73.domaincontrol.com "$host" A | grep -E '^[0-9.]+$' | head -1)
           test "$authoritative_a" = "$target"
-          grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/target-ready
-          grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/public-ready

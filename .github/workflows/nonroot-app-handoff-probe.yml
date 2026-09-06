@@ -35,40 +35,49 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Validate replacement application units and listener
+      - name: Map expected replacement API route families read-only
         run: |
           set -eu
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" '
-              set -eu
-              for unit in thee-studio-api.service thee-studio-worker.service; do
-                printf "unit=%s\n" "$unit"
-                systemctl show "$unit" --no-pager \
-                  -p Id -p MainPID -p User -p Group -p ActiveState -p SubState \
-                  -p FragmentPath -p EnvironmentFiles -p WorkingDirectory -p PrivateNetwork \
-                  2>/dev/null || true
-                printf "exec_start="
-                systemctl show "$unit" --no-pager -p ExecStart --value 2>/dev/null | \
-                  sed -E "s/(password|secret|token|key)(=|[[:space:]]+)[^ ;}]+/\1\2[REDACTED]/Ig" || true
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -eu
+          base=http://127.0.0.1:4310
+          paths='\
+          /auth/v1/health \
+          /auth/v1/settings \
+          /auth/v1/user \
+          /auth/v1/signup \
+          /auth/v1/token \
+          /auth/v1/recover \
+          /auth/v1/logout \
+          /auth/v1/verify \
+          /rest/v1/creators \
+          /rest/v1/projects \
+          /rest/v1/generation_projects \
+          /rest/v1/shots \
+          /rest/v1/generation_shots \
+          /rest/v1/provider_runs \
+          /rest/v1/generations \
+          /rest/v1/library_items \
+          /rest/v1/still_reviews \
+          /rest/v1/still_selections \
+          /storage/v1/bucket \
+          /functions/v1/thee-access \
+          /functions/v1/library-items'
+
+          for path in $paths; do
+            for method in GET OPTIONS; do
+              hdr=$(mktemp); body=$(mktemp)
+              code=$(curl -sS --max-time 8 -X "$method" -D "$hdr" -o "$body" -w '%{http_code}' "$base$path" || true)
+              allow=$(awk -F': ' 'tolower($1)=="allow" {gsub(/\r/,"",$2); print $2; exit}' "$hdr")
+              ctype=$(awk -F': ' 'tolower($1)=="content-type" {gsub(/\r/,"",$2); print $2; exit}' "$hdr")
+              printf 'method=%s path=%s status=%s allow=%s content_type=%s bytes=%s\n' "$method" "$path" "$code" "${allow:-}" "${ctype:-}" "$(wc -c < "$body" | tr -d ' ')"
+              if [ "$method" = GET ] && [ "$code" != 404 ] && [ -s "$body" ]; then
+                head -c 1200 "$body" | sed -E 's/(access_token|refresh_token|token|secret|password)(["=: ]+)[^," }]+/\1\2[REDACTED]/Ig' || true
                 echo
-              done
-
-              base=http://127.0.0.1:4310
-              for path in /readyz /healthz /health /; do
-                tmp=$(mktemp)
-                code=$(curl -sS --max-time 8 -o "$tmp" -w "%{http_code}" "$base$path" || true)
-                printf "listener=4310 path=%s status=%s bytes=%s\n" "$path" "$code" "$(wc -c < "$tmp" | tr -d " ")"
-                if [ "$code" = 200 ]; then
-                  head -c 8000 "$tmp" | sed -E "s/(access_token|refresh_token|token|secret|password)([\"'\''=: ]+)[^,\"'\'' }]+/\1\2[REDACTED]/Ig" || true
-                  echo
-                fi
-                rm -f "$tmp"
-              done
-
-              echo startup_metadata_begin
-              journalctl -u thee-studio-api.service -n 120 --no-pager 2>/dev/null | \
-                grep -Ei "listen|ready|server|port|startup|started" | tail -40 | \
-                sed -E "s/(password|secret|token|key)(=|[\"'\'' :]+)[^,\"'\'' } ]+/\1\2[REDACTED]/Ig" || true
-              echo startup_metadata_end
-            '
+              fi
+              rm -f "$hdr" "$body"
+            done
+          done
+          REMOTE

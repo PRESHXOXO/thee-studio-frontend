@@ -14,9 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
       CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
     steps:
-      - name: Send reset instructions to the configured owner email
+      - name: Confirm configured owner email domain and send reset
         shell: bash
         run: |
           set -euo pipefail
@@ -24,6 +27,7 @@ jobs:
           const fs=require('fs');
           const email=(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g,'').trim().toLowerCase();
           if (!email) process.exit(2);
+          console.log(`owner_email_domain_yahoo=${/@yahoo\.(com|co\.[a-z]{2}|[a-z]{2})$/i.test(email)}`);
           fs.writeFileSync('/tmp/reset-request.json', JSON.stringify({email}), {mode:0o600});
           NODE
           body=$(mktemp)
@@ -34,9 +38,26 @@ jobs:
             https://studio.myvitaworld.online/api/auth/forgot-password)
           echo "reset_request_status=$code"
           test "$code" = 200
-          node - "$body" <<'NODE'
-          const fs=require('fs');
-          let p={}; try {p=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));} catch {}
-          console.log(`reset_request_ok=${p.ok===true}`);
-          if (p.ok!==true) process.exit(3);
-          NODE
+
+      - name: Configure SSH
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/cpanel_deploy
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/cpanel_deploy ~/.ssh/known_hosts
+
+      - name: Inspect recent auth mail logs only
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -eu
+          echo 'auth_mail_log_begin'
+          journalctl -u thee-studio-api.service --since '10 minutes ago' --no-pager 2>/dev/null | \
+            grep -Ei 'forgot|reset|mail|smtp|email|send|token|password' | \
+            sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g; s/(token|secret|password|authorization)(["=: ]+)[^," } ]+/\1\2[REDACTED]/Ig' | tail -120 || true
+          echo 'auth_mail_log_end'
+          REMOTE

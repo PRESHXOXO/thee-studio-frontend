@@ -13,39 +13,43 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: production
+    env:
+      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
+      CUTOVER_USER_EMAIL: ${{ secrets.CUTOVER_USER_EMAIL }}
     steps:
-      - name: Probe native owner/bootstrap routes without credentials
+      - name: Safely determine whether owner account exists
         shell: bash
         run: |
           set -euo pipefail
-          base='https://studio.myvitaworld.online/api'
+          node -e "const fs=require('fs');const clean=v=>String(v||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const u=clean(process.env.CUTOVER_USER_EMAIL);const o=clean(process.env.CUTOVER_OWNER_EMAIL);if(!u||!o)process.exit(2);fs.writeFileSync('/tmp/user-probe.json',JSON.stringify({email:u,password:'',name:'Probe'}),{mode:0o600});fs.writeFileSync('/tmp/owner-probe.json',JSON.stringify({email:o,password:'',name:'Probe'}),{mode:0o600});"
+          trap 'rm -f /tmp/user-probe.json /tmp/owner-probe.json' EXIT
           ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          cat > /tmp/routes <<'EOF'
-          POST /auth/bootstrap-owner
-          POST /auth/owner/bootstrap
-          POST /owner/bootstrap
-          POST /bootstrap-owner
-          POST /admin/bootstrap-owner
-          POST /auth/promote-owner
-          POST /auth/claim-owner
-          POST /auth/bootstrap
-          GET /auth/owner/status
-          GET /owner/status
-          GET /admin/status
-          GET /auth/config
-          GET /auth/bootstrap
-          EOF
-          while read -r method path; do
-            body=$(mktemp)
-            if [ "$method" = POST ]; then
-              code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -X POST --data '{}' -o "$body" -w '%{http_code}' "$base$path" || true)
+          endpoint='https://studio.myvitaworld.online/api/auth/signup'
+
+          user_body=$(mktemp)
+          user_code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -X POST --data-binary @/tmp/user-probe.json -o "$user_body" -w '%{http_code}' "$endpoint")
+          user_msg=$(node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));}catch{};process.stdout.write(String(p.error||p.message||''));" "$user_body")
+          echo "existing_user_probe_status=$user_code"
+          printf 'existing_user_probe_message=%s\n' "$user_msg" | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g'
+          rm -f "$user_body"
+
+          # Only touch the Yahoo owner email if the known-existing normal user proves
+          # duplicate-account detection occurs before empty-password validation.
+          if printf '%s' "$user_msg" | grep -Eqi 'already|exists|registered|account.*email'; then
+            echo 'duplicate_check_precedes_password_validation=true'
+            owner_body=$(mktemp)
+            owner_code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -X POST --data-binary @/tmp/owner-probe.json -o "$owner_body" -w '%{http_code}' "$endpoint")
+            owner_msg=$(node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));}catch{};process.stdout.write(String(p.error||p.message||''));" "$owner_body")
+            echo "owner_probe_status=$owner_code"
+            printf 'owner_probe_message=%s\n' "$owner_msg" | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g'
+            if printf '%s' "$owner_msg" | grep -Eqi 'already|exists|registered|account.*email'; then
+              echo 'owner_account_exists=true'
             else
-              code=$(curl -sS --compressed -A "$ua" -X GET -o "$body" -w '%{http_code}' "$base$path" || true)
+              echo 'owner_account_exists=false_or_not_provable'
             fi
-            if [ "$code" != 404 ]; then
-              printf 'EXISTS method=%s path=%s status=%s body=' "$method" "$path" "$code"
-              head -c 300 "$body" | tr '\n' ' ' | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g; s/(token|secret|password|authorization)(["=: ]+)[^," } ]+/\1\2[REDACTED]/Ig' || true
-              echo
-            fi
-            rm -f "$body"
-          done < /tmp/routes
+            rm -f "$owner_body"
+          else
+            echo 'duplicate_check_precedes_password_validation=false'
+            echo 'owner_probe_skipped=true'
+          fi

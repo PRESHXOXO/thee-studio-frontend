@@ -14,29 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Probe native replacement access endpoints without credentials
+      - name: Inspect generic replacement login errors using dummy credentials
         run: |
           set -eu
-          base='https://studio.myvitaworld.online/api'
+          base='https://studio.myvitaworld.online/api/auth/login'
           ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          for path in \
-            /auth/me \
-            /auth/session \
-            /access \
-            /account/access \
-            /account/entitlements \
-            /entitlements \
-            /me/access \
-            /me/entitlements \
-            /admin/me \
-            /billing/access \
-            /plans \
-            /csrf \
-            /auth/csrf; do
+          for payload in \
+            '{"email":"nobody-cutover-test@example.com","password":"definitely-not-a-real-password"}' \
+            '{"email":"not-an-email","password":"definitely-not-a-real-password"}'; do
             body=$(mktemp)
-            code=$(curl -sS --compressed -A "$ua" -o "$body" -w '%{http_code}' "$base$path" || true)
-            printf 'path=%s status=%s bytes=%s body=' "$path" "$code" "$(wc -c < "$body" | tr -d ' ')"
-            head -c 500 "$body" | tr '\n' ' ' | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g; s/(token|secret|password|authorization)(["=: ]+)[^," }]+/\1\2[REDACTED]/Ig' || true
+            code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -o "$body" -w '%{http_code}' -X POST --data "$payload" "$base" || true)
+            printf 'status=%s body=' "$code"
+            cat "$body" | tr '\n' ' '
             echo
             rm -f "$body"
           done

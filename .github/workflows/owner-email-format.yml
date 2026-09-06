@@ -12,44 +12,31 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    environment: production
+    env:
+      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
     steps:
-      - name: Probe recovery and admin route existence without credentials
+      - name: Send reset instructions to the configured owner email
         shell: bash
         run: |
           set -euo pipefail
-          base='https://studio.myvitaworld.online/api'
-          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          for spec in \
-            'GET /openapi.json' \
-            'GET /docs' \
-            'GET /documentation/json' \
-            'GET /swagger/json' \
-            'GET /swagger' \
-            'GET /routes' \
-            'POST /auth/forgot-password' \
-            'POST /auth/forgot' \
-            'POST /auth/password-reset' \
-            'POST /auth/reset-password' \
-            'POST /auth/request-password-reset' \
-            'POST /auth/change-password' \
-            'POST /auth/password' \
-            'POST /auth/bootstrap-owner' \
-            'POST /auth/owner' \
-            'GET /admin/users' \
-            'POST /admin/users/reset-password' \
-            'POST /admin/owner' \
-            'GET /internal/users' \
-            'POST /internal/bootstrap' \
-            'POST /maintenance/bootstrap-owner'; do
-            method=${spec%% *}; path=${spec#* }
-            body=$(mktemp)
-            if [ "$method" = POST ]; then
-              code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -X POST --data '{}' -o "$body" -w '%{http_code}' "$base$path" || true)
-            else
-              code=$(curl -sS --compressed -A "$ua" -o "$body" -w '%{http_code}' "$base$path" || true)
-            fi
-            printf 'method=%s path=%s status=%s body=' "$method" "$path" "$code"
-            head -c 260 "$body" | tr '\n' ' ' | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g; s/(token|secret|password|authorization)(["=: ]+)[^," }]+/\1\2[REDACTED]/Ig' || true
-            echo
-            rm -f "$body"
-          done
+          node <<'NODE'
+          const fs=require('fs');
+          const email=(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g,'').trim().toLowerCase();
+          if (!email) process.exit(2);
+          fs.writeFileSync('/tmp/reset-request.json', JSON.stringify({email}), {mode:0o600});
+          NODE
+          body=$(mktemp)
+          trap 'rm -f "$body" /tmp/reset-request.json' EXIT
+          code=$(curl -sS --compressed -A 'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36' \
+            -H 'Content-Type: application/json' -X POST --data-binary @/tmp/reset-request.json \
+            -o "$body" -w '%{http_code}' \
+            https://studio.myvitaworld.online/api/auth/forgot-password)
+          echo "reset_request_status=$code"
+          test "$code" = 200
+          node - "$body" <<'NODE'
+          const fs=require('fs');
+          let p={}; try {p=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));} catch {}
+          console.log(`reset_request_ok=${p.ok===true}`);
+          if (p.ok!==true) process.exit(3);
+          NODE

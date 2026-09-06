@@ -1,0 +1,118 @@
+name: Temporary Non-Root App Handoff Probe
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+
+    steps:
+      - name: Verify SSH inputs are present
+        run: |
+          set -eu
+          test -n "$CPANEL_SSH_HOST"
+          test -n "$CPANEL_SSH_PORT"
+          test -n "$CPANEL_SSH_USER"
+
+      - name: Configure SSH
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+
+      - name: Probe replacement application as existing non-root SSH user
+        run: |
+          set -eu
+          ssh -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -eu
+          APP=/opt/thee-studio-app
+          STORAGE=/var/lib/thee-studio/storage
+
+          printf 'operator_user=%s\n' "$(id -un)"
+          printf 'operator_uid=%s\n' "$(id -u)"
+
+          if [ -d "$APP" ]; then
+            echo 'app_dir=present'
+          else
+            echo 'app_dir=missing'
+            exit 21
+          fi
+
+          if [ -r "$APP" ] && [ -x "$APP" ]; then
+            echo 'app_dir_access=readable'
+          else
+            echo 'app_dir_access=denied'
+            exit 22
+          fi
+
+          if [ -d "$STORAGE" ]; then
+            echo 'storage_dir=present'
+            if [ -r "$STORAGE" ] && [ -x "$STORAGE" ]; then
+              echo 'storage_dir_access=readable'
+            else
+              echo 'storage_dir_access=denied'
+            fi
+          else
+            echo 'storage_dir=missing'
+          fi
+
+          cd "$APP"
+          if [ -d .git ]; then
+            printf 'app_git_head=%s\n' "$(git rev-parse HEAD 2>/dev/null || echo unreadable)"
+            printf 'app_git_branch=%s\n' "$(git branch --show-current 2>/dev/null || echo unreadable)"
+          else
+            echo 'app_git_head=not_git_checkout'
+          fi
+
+          echo 'top_level_entries_begin'
+          find . -maxdepth 1 -mindepth 1 -printf '%f\n' 2>/dev/null | sort
+          echo 'top_level_entries_end'
+
+          echo 'package_summary_begin'
+          find . -maxdepth 3 -name package.json -type f -print 2>/dev/null | sort | while read -r pkg; do
+            printf 'package_file=%s\n' "$pkg"
+            node - "$pkg" <<'NODE' || true
+          const fs = require('fs');
+          const p = process.argv[2];
+          const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+          console.log('package_name=' + (j.name || ''));
+          console.log('package_version=' + (j.version || ''));
+          console.log('package_scripts=' + Object.keys(j.scripts || {}).sort().join(','));
+          const deps = Object.assign({}, j.dependencies || {}, j.devDependencies || {});
+          console.log('relevant_deps=' + ['fastify','mysql2','mariadb','argon2','bcrypt','vitest','jest','playwright'].filter(k => deps[k]).map(k => `${k}@${deps[k]}`).join(','));
+NODE
+          done
+          echo 'package_summary_end'
+
+          echo 'env_key_names_begin'
+          for f in .env .env.production .env.local config/.env config/.env.production; do
+            if [ -r "$f" ]; then
+              printf 'env_file=%s\n' "$f"
+              sed -nE 's/^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/p' "$f" | sort -u
+            fi
+          done
+          echo 'env_key_names_end'
+
+          echo 'migration_files_begin'
+          find . -maxdepth 4 -type f \( -path '*/migrations/*' -o -path '*/migration/*' -o -name '*migration*.sql' \) -printf '%p\n' 2>/dev/null | sort | head -200
+          echo 'migration_files_end'
+          REMOTE

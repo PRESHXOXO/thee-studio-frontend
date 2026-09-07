@@ -18,12 +18,12 @@ jobs:
       CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
       CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
     steps:
-      - name: Inspect the isolation probe creator patch contract without changing it
+      - name: Inspect generation validation without starting provider work
         shell: bash
         run: |
           set -euo pipefail
           node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||!password)process.exit(2);fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});"
-          trap 'rm -f /tmp/login.json /tmp/jar /tmp/csrf /tmp/list.body /tmp/get.body /tmp/patch.body /tmp/probe-id' EXIT
+          trap 'rm -f /tmp/login.json /tmp/jar /tmp/csrf /tmp/body' EXIT
           ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
           base='https://studio.myvitaworld.online/api'
 
@@ -34,19 +34,9 @@ jobs:
           csrf=$(node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/csrf','utf8'));process.stdout.write(String(p.csrfToken||''));")
           test -n "$csrf"
 
-          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/creators" -o /tmp/list.body
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/list.body','utf8'));const rows=Array.isArray(p)?p:(p.creators||p.data||[]);const matches=rows.filter(x=>x?.name==='CUTOVER ISOLATION PROBE — SAFE TO DELETE');console.log('isolation_probe_match_count='+matches.length);if(matches.length!==1)process.exit(3);fs.writeFileSync('/tmp/probe-id',String(matches[0].id),{mode:0o600});"
-          probe_id=$(cat /tmp/probe-id)
-
-          get_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/get.body -w '%{http_code}' "$base/creators/$probe_id")
-          echo "probe_get_status=$get_code"
-          test "$get_code" = 200
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/get.body','utf8'));const c=p.creator||p.data?.creator||p.data||p;console.log('probe_creator_keys='+Object.keys(c||{}).filter(k=>!['id','userId','user_id'].includes(k)).sort().join(','));for(const k of ['status','deletedAt','deleted_at','archivedAt','archived_at','active'])if(Object.prototype.hasOwnProperty.call(c,k))console.log('probe_has_'+k+'=true');"
-
-          patch_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -X PATCH --data '{}' -o /tmp/patch.body -w '%{http_code}' "$base/creators/$probe_id")
-          echo "empty_patch_status=$patch_code"
-          node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/patch.body','utf8'));}catch{};const msg=String(p.error||p.message||'');if(msg)console.log('empty_patch_message='+msg.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[EMAIL]'));console.log('empty_patch_response_keys='+Object.keys(p||{}).sort().join(','));"
-
-          verify_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/get.body -w '%{http_code}' "$base/creators/$probe_id")
-          echo "probe_still_present_after_empty_patch=$([ "$verify_code" = 200 ] && echo true || echo false)"
-          test "$verify_code" = 200
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -X POST --data '{}' -o /tmp/body -w '%{http_code}' "$base/generation")
+          echo "empty_generation_status=$code"
+          node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/body','utf8'));}catch{};const msg=String(p.error||p.message||'');console.log('generation_validation_message='+msg.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[EMAIL]'));console.log('generation_validation_keys='+Object.keys(p||{}).sort().join(','));"
+          test "$code" != 200
+          test "$code" != 201
+          test "$code" != 202

@@ -18,14 +18,16 @@ jobs:
       CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
       CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
     steps:
-      - name: Resolve generation creator field while prompt is intentionally absent
+      - name: Resolve generation creator key without provider work
         shell: bash
         run: |
           set -euo pipefail
           node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||!password)process.exit(2);fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});"
-          trap 'rm -f /tmp/login.json /tmp/jar /tmp/csrf /tmp/list.body /tmp/body /tmp/probe-id /tmp/payload.json' EXIT
+          trap 'rm -f /tmp/login.json /tmp/jar /tmp/csrf /tmp/body /tmp/payload.json' EXIT
           ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
           base='https://studio.myvitaworld.online/api'
+          fake='00000000-0000-4000-8000-000000000000'
+          prompt='A simple studio photograph of a red ceramic mug on a plain white table.'
 
           login_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")
           echo "owner_login_status=$login_code"
@@ -34,20 +36,25 @@ jobs:
           csrf=$(node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/csrf','utf8'));process.stdout.write(String(p.csrfToken||''));")
           test -n "$csrf"
 
-          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/creators" -o /tmp/list.body
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/list.body','utf8'));const rows=Array.isArray(p)?p:(p.creators||p.data||[]);const matches=rows.filter(x=>x?.name==='CUTOVER ISOLATION PROBE — SAFE TO DELETE');if(matches.length!==1)process.exit(3);fs.writeFileSync('/tmp/probe-id',String(matches[0].id),{mode:0o600});"
-          creator_id=$(cat /tmp/probe-id)
-
-          probe_field() {
+          probe_string() {
             field="$1"
-            FIELD="$field" CREATOR_ID="$creator_id" node -e "const fs=require('fs');fs.writeFileSync('/tmp/payload.json',JSON.stringify({[process.env.FIELD]:process.env.CREATOR_ID}),{mode:0o600});"
+            FIELD="$field" FAKE="$fake" PROMPT="$prompt" node -e "const fs=require('fs');fs.writeFileSync('/tmp/payload.json',JSON.stringify({prompt:process.env.PROMPT,[process.env.FIELD]:process.env.FAKE}),{mode:0o600});"
             code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -X POST --data-binary @/tmp/payload.json -o /tmp/body -w '%{http_code}' "$base/generation")
             msg=$(node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/body','utf8'));}catch{};process.stdout.write(String(p.error||p.message||''));")
-            printf 'field=%s status=%s message=%s\n' "$field" "$code" "$msg"
+            printf 'shape=%s:string status=%s message=%s\n' "$field" "$code" "$msg"
             test "$code" != 200
             test "$code" != 201
             test "$code" != 202
           }
 
-          probe_field creatorId
-          probe_field creator_id
+          probe_string creatorId
+          probe_string creator_id
+          probe_string creator
+
+          PROMPT="$prompt" FAKE="$fake" node -e "const fs=require('fs');fs.writeFileSync('/tmp/payload.json',JSON.stringify({prompt:process.env.PROMPT,creator:{id:process.env.FAKE}}),{mode:0o600});"
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -X POST --data-binary @/tmp/payload.json -o /tmp/body -w '%{http_code}' "$base/generation")
+          msg=$(node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/body','utf8'));}catch{};process.stdout.write(String(p.error||p.message||''));")
+          printf 'shape=creator:object status=%s message=%s\n' "$code" "$msg"
+          test "$code" != 200
+          test "$code" != 201
+          test "$code" != 202

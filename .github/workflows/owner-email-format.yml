@@ -13,71 +13,49 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: production
-    env:
-      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
-      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
     steps:
-      - name: Inspect live frontend and API contract read-only
+      - name: Inspect live compatibility adapter read-only
         shell: bash
         run: |
           set -euo pipefail
-          trap 'rm -f /tmp/body' EXIT
-          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          origin='https://studio.myvitaworld.online'
-          base="$origin/api"
-
-          echo 'docs_probe_begin'
-          for path in /openapi.json /swagger.json /docs/json /documentation/json /docs /documentation /routes; do
-            code=$(curl -sS --compressed -A "$ua" -o /tmp/body -w '%{http_code}' "$base$path" || true)
-            if [ "$code" != 404 ]; then
-              echo "docs_candidate=$path status=$code"
-              BODY=/tmp/body node <<'NODE'
-          const fs=require('fs');
-          let raw=''; try{raw=fs.readFileSync(process.env.BODY,'utf8')}catch{}
-          let p=null; try{p=JSON.parse(raw)}catch{}
-          if(p&&typeof p==='object') console.log('docs_top_keys='+Object.keys(p).sort().join(','));
-          else if(raw) console.log('docs_body_preview='+raw.slice(0,180).replace(/\s+/g,' ').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL]'));
-          NODE
-            fi
-          done
-          echo 'docs_probe_end'
-
           node <<'NODE'
           const origin='https://studio.myvitaworld.online';
-          const pages=['/','/login','/studio'];
-          const scriptUrls=new Set();
-          for(const path of pages){
-            const r=await fetch(origin+path,{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}});
-            console.log(`frontend_page=${path} status=${r.status}`);
-            const html=await r.text();
-            for(const m of html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)){
-              try{scriptUrls.add(new URL(m[1],origin).href)}catch{}
-            }
-          }
-          console.log('frontend_script_count='+scriptUrls.size);
-          const apiPaths=new Set();
-          const interestingSnippets=new Set();
-          for(const url of scriptUrls){
-            const r=await fetch(url,{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}});
-            if(!r.ok) continue;
-            const text=await r.text();
-            for(const m of text.matchAll(/\/api\/[A-Za-z0-9_./?=&:{}-]{2,120}/g)) apiPaths.add(m[0].replace(/["'`),;\]}]+$/,''));
-            const lower=text.toLowerCase();
-            for(const term of ['credit','billing','subscription','entitlement','insufficient generation credits','generation']){
-              let idx=lower.indexOf(term);
-              let count=0;
-              while(idx>=0 && count<5){
-                const s=text.slice(Math.max(0,idx-120),Math.min(text.length,idx+220)).replace(/\s+/g,' ');
-                interestingSnippets.add(s.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL]').slice(0,340));
-                idx=lower.indexOf(term,idx+term.length); count++;
+          const r=await fetch(origin+'/',{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}});
+          const html=await r.text();
+          const scripts=[...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m=>new URL(m[1],origin).href);
+          console.log('script_count='+scripts.length);
+          for(const url of scripts){
+            const sr=await fetch(url,{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}});
+            if(!sr.ok) continue;
+            const text=await sr.text();
+            console.log('bundle_bytes='+text.length);
+            const mapMatch=text.match(/sourceMappingURL=([^\s*]+)/);
+            if(mapMatch){
+              const mapUrl=new URL(mapMatch[1],url).href;
+              const mr=await fetch(mapUrl,{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}});
+              console.log('source_map_status='+mr.status);
+            } else console.log('source_map_declared=false');
+
+            const paPaths=new Set();
+            for(const m of text.matchAll(/\bpa\(\s*(["'`])([^"'`]{1,140})\1/g)) paPaths.add(m[2]);
+            console.log('native_pa_literal_count='+paPaths.size);
+            for(const p of [...paPaths].sort()) console.log('native_pa_literal='+p);
+
+            const rpcNames=new Set();
+            for(const m of text.matchAll(/\brpc\(\s*(["'`])([^"'`]{1,100})\1/g)) rpcNames.add(m[2]);
+            console.log('rpc_literal_count='+rpcNames.size);
+            for(const p of [...rpcNames].sort()) console.log('rpc_literal='+p);
+
+            const terms=['crisp-generate-stills','get-my-access','get_my_access','credit_deduction_enabled','billing_exempt','account_type','usage_tracking_enabled','admin_access_enabled'];
+            for(const term of terms){
+              const idx=text.indexOf(term);
+              console.log(`term_${term.replace(/[^a-z0-9]+/gi,'_')}_found=${idx>=0}`);
+              if(idx>=0){
+                const chunk=text.slice(Math.max(0,idx-900),Math.min(text.length,idx+1500))
+                  .replace(/\s+/g,' ')
+                  .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL]');
+                console.log(`context_${term.replace(/[^a-z0-9]+/gi,'_')}=${chunk}`);
               }
             }
           }
-          const paths=[...apiPaths].sort();
-          console.log('live_bundle_api_path_count='+paths.length);
-          for(const p of paths.slice(0,150)) console.log('bundle_api_path='+p);
-          const filtered=[...interestingSnippets].filter(s=>/(credit|billing|subscription|entitle|generation)/i.test(s));
-          console.log('live_bundle_interesting_snippet_count='+filtered.length);
-          for(const s of filtered.slice(0,30)) console.log('bundle_snippet='+s);
           NODE

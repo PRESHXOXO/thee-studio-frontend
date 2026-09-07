@@ -18,16 +18,16 @@ jobs:
       CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
       CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
     steps:
-      - name: Resolve generation creator key without provider work
+      - name: Submit exactly one safe production generation
         shell: bash
         run: |
           set -euo pipefail
           node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||!password)process.exit(2);fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});"
-          trap 'rm -f /tmp/login.json /tmp/jar /tmp/csrf /tmp/body /tmp/payload.json' EXIT
+          trap 'rm -f /tmp/login.json /tmp/jar /tmp/csrf /tmp/creators.body /tmp/library.before /tmp/library.after /tmp/payload.json /tmp/body /tmp/probe-id' EXIT
           ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
           base='https://studio.myvitaworld.online/api'
-          fake='00000000-0000-4000-8000-000000000000'
-          prompt='A simple studio photograph of a red ceramic mug on a plain white table.'
+          prompt='A simple realistic studio photograph of one red ceramic mug centered on a plain white table against a clean neutral background. No people, no text, no logos.'
+          idem='cutover-owner-mug-smoke-20260907-v1'
 
           login_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")
           echo "owner_login_status=$login_code"
@@ -36,25 +36,37 @@ jobs:
           csrf=$(node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/csrf','utf8'));process.stdout.write(String(p.csrfToken||''));")
           test -n "$csrf"
 
-          probe_string() {
-            field="$1"
-            FIELD="$field" FAKE="$fake" PROMPT="$prompt" node -e "const fs=require('fs');fs.writeFileSync('/tmp/payload.json',JSON.stringify({prompt:process.env.PROMPT,[process.env.FIELD]:process.env.FAKE}),{mode:0o600});"
-            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -X POST --data-binary @/tmp/payload.json -o /tmp/body -w '%{http_code}' "$base/generation")
-            msg=$(node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/body','utf8'));}catch{};process.stdout.write(String(p.error||p.message||''));")
-            printf 'shape=%s:string status=%s message=%s\n' "$field" "$code" "$msg"
-            test "$code" != 200
-            test "$code" != 201
-            test "$code" != 202
-          }
+          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/creators" -o /tmp/creators.body
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/creators.body','utf8'));const rows=Array.isArray(p)?p:(p.creators||p.data||[]);const matches=rows.filter(x=>x?.name==='CUTOVER ISOLATION PROBE — SAFE TO DELETE');console.log('smoke_creator_match_count='+matches.length);if(matches.length!==1)process.exit(3);fs.writeFileSync('/tmp/probe-id',String(matches[0].id),{mode:0o600});"
+          creator_id=$(cat /tmp/probe-id)
 
-          probe_string creatorId
-          probe_string creator_id
-          probe_string creator
+          before_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/library.before -w '%{http_code}' "$base/library")
+          echo "library_before_status=$before_code"
+          test "$before_code" = 200
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/library.before','utf8'));const rows=Array.isArray(p)?p:(p.items||p.library||p.data||[]);console.log('library_before_count='+(Array.isArray(rows)?rows.length:0));"
 
-          PROMPT="$prompt" FAKE="$fake" node -e "const fs=require('fs');fs.writeFileSync('/tmp/payload.json',JSON.stringify({prompt:process.env.PROMPT,creator:{id:process.env.FAKE}}),{mode:0o600});"
-          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -X POST --data-binary @/tmp/payload.json -o /tmp/body -w '%{http_code}' "$base/generation")
-          msg=$(node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/body','utf8'));}catch{};process.stdout.write(String(p.error||p.message||''));")
-          printf 'shape=creator:object status=%s message=%s\n' "$code" "$msg"
-          test "$code" != 200
-          test "$code" != 201
-          test "$code" != 202
+          CREATOR_ID="$creator_id" PROMPT="$prompt" IDEM="$idem" node -e "const fs=require('fs');fs.writeFileSync('/tmp/payload.json',JSON.stringify({creatorId:process.env.CREATOR_ID,prompt:process.env.PROMPT,idempotencyKey:process.env.IDEM}),{mode:0o600});"
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -H "Idempotency-Key: $idem" -X POST --data-binary @/tmp/payload.json -o /tmp/body -w '%{http_code}' "$base/generation")
+          echo "generation_submit_status=$code"
+          node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/body','utf8'));}catch{};console.log('generation_response_keys='+Object.keys(p||{}).sort().join(','));console.log('generation_response_status='+(p.status||p.generation?.status||p.data?.status||'none'));const msg=String(p.error||p.message||'');if(msg)console.log('generation_response_message='+msg.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[EMAIL]'));"
+
+          if [ "$code" = 402 ]; then
+            echo 'provider_submission_started=false'
+            echo 'owner_generation_entitlement_blocked=true'
+            exit 0
+          fi
+          test "$code" = 200 -o "$code" = 201 -o "$code" = 202
+          echo 'provider_submission_started=true'
+
+          found=false
+          for i in $(seq 1 45); do
+            sleep 2
+            after_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/library.after -w '%{http_code}' "$base/library")
+            test "$after_code" = 200
+            if BEFORE=/tmp/library.before AFTER=/tmp/library.after node -e "const fs=require('fs');const read=f=>{const p=JSON.parse(fs.readFileSync(f,'utf8'));return Array.isArray(p)?p:(p.items||p.library||p.data||[])};const before=new Set(read(process.env.BEFORE).map(x=>String(x?.id)));const added=read(process.env.AFTER).filter(x=>x?.id&&!before.has(String(x.id)));if(added.length){console.log('library_new_item_count='+added.length);console.log('library_new_item_keys='+Object.keys(added[0]||{}).filter(k=>!['id','userId','user_id'].includes(k)).sort().join(','));process.exit(0)}process.exit(1);"; then
+              found=true
+              break
+            fi
+          done
+          echo "new_library_item_found=$found"
+          test "$found" = true

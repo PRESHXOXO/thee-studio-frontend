@@ -14,48 +14,40 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Inspect live compatibility adapter read-only
+      - name: Trace live compat tables and usage adapter read-only
         shell: bash
         run: |
           set -euo pipefail
           node <<'NODE'
           const origin='https://studio.myvitaworld.online';
-          const r=await fetch(origin+'/',{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}});
-          const html=await r.text();
-          const scripts=[...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m=>new URL(m[1],origin).href);
-          console.log('script_count='+scripts.length);
+          const h=await (await fetch(origin+'/',{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}})).text();
+          const scripts=[...h.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m=>new URL(m[1],origin).href);
+          const clean=s=>String(s||'').replace(/\s+/g,' ').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL]');
           for(const url of scripts){
-            const sr=await fetch(url,{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}});
-            if(!sr.ok) continue;
-            const text=await sr.text();
-            console.log('bundle_bytes='+text.length);
-            const mapMatch=text.match(/sourceMappingURL=([^\s*]+)/);
-            if(mapMatch){
-              const mapUrl=new URL(mapMatch[1],url).href;
-              const mr=await fetch(mapUrl,{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}});
-              console.log('source_map_status='+mr.status);
-            } else console.log('source_map_declared=false');
+            const r=await fetch(url,{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}}); if(!r.ok) continue;
+            const text=await r.text();
 
-            const paPaths=new Set();
-            for(const m of text.matchAll(/\bpa\(\s*(["'`])([^"'`]{1,140})\1/g)) paPaths.add(m[2]);
-            console.log('native_pa_literal_count='+paPaths.size);
-            for(const p of [...paPaths].sort()) console.log('native_pa_literal='+p);
+            const froms=new Set();
+            for(const m of text.matchAll(/\.from\(\s*(["'`])([^"'`]{1,100})\1\s*\)/g)) froms.add(m[2]);
+            console.log('from_literal_count='+froms.size);
+            for(const x of [...froms].sort()) console.log('from_literal='+x);
 
-            const rpcNames=new Set();
-            for(const m of text.matchAll(/\brpc\(\s*(["'`])([^"'`]{1,100})\1/g)) rpcNames.add(m[2]);
-            console.log('rpc_literal_count='+rpcNames.size);
-            for(const p of [...rpcNames].sort()) console.log('rpc_literal='+p);
-
-            const terms=['crisp-generate-stills','get-my-access','get_my_access','credit_deduction_enabled','billing_exempt','account_type','usage_tracking_enabled','admin_access_enabled'];
-            for(const term of terms){
-              const idx=text.indexOf(term);
-              console.log(`term_${term.replace(/[^a-z0-9]+/gi,'_')}_found=${idx>=0}`);
-              if(idx>=0){
-                const chunk=text.slice(Math.max(0,idx-900),Math.min(text.length,idx+1500))
-                  .replace(/\s+/g,' ')
-                  .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL]');
-                console.log(`context_${term.replace(/[^a-z0-9]+/gi,'_')}=${chunk}`);
+            for(const term of ['function e_','e_=','=>e_(','function Hl','Hl=','const Hl','/compat/${t}','usage:{','included','remaining','billing_plans','subscriptions','usage_ledger','generation_usage','credit_ledger','credit_balance']){
+              let idx=text.indexOf(term), n=0;
+              while(idx>=0 && n<4){
+                const chunk=clean(text.slice(Math.max(0,idx-1600),Math.min(text.length,idx+2600)));
+                console.log(`context_${term.replace(/[^a-z0-9]+/gi,'_')}_${n}=${chunk}`);
+                idx=text.indexOf(term,idx+term.length); n++;
               }
+              console.log(`term_${term.replace(/[^a-z0-9]+/gi,'_')}_matches=${n}`);
             }
+
+            // Capture adapter branches that compare table/resource names.
+            const adapterNames=new Set();
+            for(const m of text.matchAll(/(?:===|==)\s*(["'])([A-Za-z0-9_-]{2,80})\1/g)){
+              const v=m[2];
+              if(/(access|usage|credit|billing|subscription|plan|generation|creator|library|profile|user|feature)/i.test(v)) adapterNames.add(v);
+            }
+            console.log('interesting_comparison_literals='+[...adapterNames].sort().join(','));
           }
           NODE

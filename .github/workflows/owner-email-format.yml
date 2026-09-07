@@ -18,81 +18,66 @@ jobs:
       CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
       CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
     steps:
-      - name: Map authenticated entitlement surface read-only
+      - name: Inspect live frontend and API contract read-only
         shell: bash
         run: |
           set -euo pipefail
-          node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||!password)process.exit(2);fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});"
-          trap 'rm -f /tmp/login.json /tmp/jar /tmp/body' EXIT
+          trap 'rm -f /tmp/body' EXIT
           ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          base='https://studio.myvitaworld.online/api'
+          origin='https://studio.myvitaworld.online'
+          base="$origin/api"
 
-          login_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")
-          echo "owner_login_status=$login_code"
-          test "$login_code" = 200
-
-          cat > /tmp/routes <<'EOF'
-          /auth/me
-          /account
-          /account/access
-          /account/credits
-          /account/plan
-          /account/subscription
-          /account/entitlements
-          /credits
-          /credits/balance
-          /usage
-          /billing
-          /billing/status
-          /subscription
-          /plan
-          /plans
-          /access
-          /entitlements
-          /entitlement
-          /profile
-          /me
-          /user
-          /users/me
-          EOF
-
-          while read -r path; do
-            : > /tmp/body
-            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base$path" || true)
+          echo 'docs_probe_begin'
+          for path in /openapi.json /swagger.json /docs/json /documentation/json /docs /documentation /routes; do
+            code=$(curl -sS --compressed -A "$ua" -o /tmp/body -w '%{http_code}' "$base$path" || true)
             if [ "$code" != 404 ]; then
-              PATH_VALUE="$path" STATUS_VALUE="$code" node <<'NODE'
-          const fs = require('fs');
-          const path = process.env.PATH_VALUE;
-          const status = process.env.STATUS_VALUE;
-          let raw = '';
-          try { raw = fs.readFileSync('/tmp/body','utf8'); } catch {}
-          let p = null;
-          try { p = JSON.parse(raw); } catch {}
-          const redact = s => String(s || '')
-            .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL]')
-            .replace(/(["']?(?:token|secret|password|authorization|cookie)["']?\s*[:=]\s*["']?)[^,"' }\s]+/ig,'$1[REDACTED]');
-          console.log(`route=${path} status=${status}`);
-          if (p && typeof p === 'object') {
-            console.log(`top_keys=${Object.keys(p).sort().join(',')}`);
-            const interesting = {};
-            const walk = (obj, prefix='', depth=0) => {
-              if (!obj || typeof obj !== 'object' || depth > 2) return;
-              for (const [k,v] of Object.entries(obj)) {
-                const key = String(k).toLowerCase();
-                const full = prefix ? `${prefix}.${k}` : k;
-                if (/(credit|balance|plan|tier|entitle|access|billing|subscription|role|owner|admin|limit|usage|remaining|unlimited|exempt)/i.test(key)) {
-                  if (['string','number','boolean'].includes(typeof v) || v === null) interesting[full] = v;
-                  else if (Array.isArray(v)) interesting[full] = `[array:${v.length}]`;
-                  else interesting[full] = `[object:${Object.keys(v).sort().join('|')}]`;
-                }
-                if (v && typeof v === 'object' && !Array.isArray(v)) walk(v, full, depth+1);
-              }
-            };
-            walk(p);
-            console.log(`interesting=${redact(JSON.stringify(interesting)).slice(0,800)}`);
-          } else if (raw) {
-            console.log(`body_preview=${redact(raw).slice(0,300).replace(/\s+/g,' ')}`);
-          }
+              echo "docs_candidate=$path status=$code"
+              BODY=/tmp/body node <<'NODE'
+          const fs=require('fs');
+          let raw=''; try{raw=fs.readFileSync(process.env.BODY,'utf8')}catch{}
+          let p=null; try{p=JSON.parse(raw)}catch{}
+          if(p&&typeof p==='object') console.log('docs_top_keys='+Object.keys(p).sort().join(','));
+          else if(raw) console.log('docs_body_preview='+raw.slice(0,180).replace(/\s+/g,' ').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL]'));
           NODE
             fi
-          done < /tmp/routes
+          done
+          echo 'docs_probe_end'
+
+          node <<'NODE'
+          const origin='https://studio.myvitaworld.online';
+          const pages=['/','/login','/studio'];
+          const scriptUrls=new Set();
+          for(const path of pages){
+            const r=await fetch(origin+path,{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}});
+            console.log(`frontend_page=${path} status=${r.status}`);
+            const html=await r.text();
+            for(const m of html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)){
+              try{scriptUrls.add(new URL(m[1],origin).href)}catch{}
+            }
+          }
+          console.log('frontend_script_count='+scriptUrls.size);
+          const apiPaths=new Set();
+          const interestingSnippets=new Set();
+          for(const url of scriptUrls){
+            const r=await fetch(url,{headers:{'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'}});
+            if(!r.ok) continue;
+            const text=await r.text();
+            for(const m of text.matchAll(/\/api\/[A-Za-z0-9_./?=&:{}-]{2,120}/g)) apiPaths.add(m[0].replace(/["'`),;\]}]+$/,''));
+            const lower=text.toLowerCase();
+            for(const term of ['credit','billing','subscription','entitlement','insufficient generation credits','generation']){
+              let idx=lower.indexOf(term);
+              let count=0;
+              while(idx>=0 && count<5){
+                const s=text.slice(Math.max(0,idx-120),Math.min(text.length,idx+220)).replace(/\s+/g,' ');
+                interestingSnippets.add(s.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL]').slice(0,340));
+                idx=lower.indexOf(term,idx+term.length); count++;
+              }
+            }
+          }
+          const paths=[...apiPaths].sort();
+          console.log('live_bundle_api_path_count='+paths.length);
+          for(const p of paths.slice(0,150)) console.log('bundle_api_path='+p);
+          const filtered=[...interestingSnippets].filter(s=>/(credit|billing|subscription|entitle|generation)/i.test(s));
+          console.log('live_bundle_interesting_snippet_count='+filtered.length);
+          for(const s of filtered.slice(0,30)) console.log('bundle_snippet='+s);
+          NODE

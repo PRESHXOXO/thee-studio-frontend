@@ -15,72 +15,59 @@ jobs:
     timeout-minutes: 10
     environment: production
     env:
-      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
-      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
     steps:
-      - name: Inspect compat credit resources read-only
+      - name: Configure SSH
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
         shell: bash
         run: |
           set -euo pipefail
-          node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||!password)process.exit(2);fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});"
-          trap 'rm -f /tmp/login.json /tmp/jar /tmp/body' EXIT
-          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          base='https://studio.myvitaworld.online/api'
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/cpanel_deploy
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/cpanel_deploy ~/.ssh/known_hosts
 
-          login_code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")
-          echo "owner_login_status=$login_code"
-          test "$login_code" = 200
+      - name: Inspect API service metadata and sanitized credit logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/cpanel_deploy -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          echo 'service_metadata_begin'
+          systemctl show thee-studio-api.service \
+            -p User -p Group -p WorkingDirectory -p ExecStart -p EnvironmentFiles -p FragmentPath \
+            --no-pager 2>/dev/null || true
+          echo 'service_metadata_end'
 
-          cat > /tmp/resources <<'EOF'
-          user_usage_monthly
-          billing_plans
-          billing_plan_versions
-          creators
-          creator_identity_profiles
-          creator_memory_profiles
-          creator_reference_assets
-          generation_projects
-          generation_shots
-          still_generations
-          still_generation_assets
-          provider_runs
-          generation_run_events
-          studio_documents
-          studio_error_events
-          EOF
+          echo 'source_path_permissions_begin'
+          namei -l /opt/thee-studio-app/src/server.js 2>/dev/null || true
+          echo 'source_path_permissions_end'
 
-          while read -r resource; do
-            : > /tmp/body
-            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base/compat/$resource" || true)
-            RESOURCE="$resource" STATUS="$code" node <<'NODE'
-          const fs=require('fs');
-          const resource=process.env.RESOURCE,status=process.env.STATUS;
-          let raw='';try{raw=fs.readFileSync('/tmp/body','utf8')}catch{}
-          let p=null;try{p=JSON.parse(raw)}catch{}
-          console.log(`compat_resource=${resource} status=${status}`);
-          if(p&&typeof p==='object'){
-            const rows=Array.isArray(p)?p:(Array.isArray(p.rows)?p.rows:(Array.isArray(p.data)?p.data:[]));
-            console.log(`compat_rows=${rows.length}`);
-            if(rows.length){
-              console.log(`compat_row_keys=${Object.keys(rows[0]||{}).filter(k=>!/(email|token|secret|password|cookie|authorization)/i.test(k)).sort().join(',')}`);
-              if(resource==='user_usage_monthly'){
-                const safe=rows.map(x=>({period_start:x.period_start??null,included_credits:x.included_credits??null,used_credits:x.used_credits??null,remaining_credits:x.remaining_credits??null}));
-                console.log('usage_rows='+JSON.stringify(safe).slice(0,1000));
-              }
-              if(resource==='billing_plans'){
-                const safe=rows.map(x=>({plan_key:x.plan_key??null,display_name:x.display_name??null,active:x.active??null,customer_visible:x.customer_visible??null,internal_only:x.internal_only??null,checkout_enabled:x.checkout_enabled??null}));
-                console.log('plan_rows='+JSON.stringify(safe).slice(0,1200));
-              }
-              if(resource==='billing_plan_versions'){
-                const safe=rows.map(x=>({version:x.version??null,included_credits:x.included_credits??null,price_minor:x.price_minor??null,currency:x.currency??null,billing_interval:x.billing_interval??null}));
-                console.log('plan_version_rows='+JSON.stringify(safe).slice(0,1200));
-              }
-            } else {
-              const keys=Object.keys(p).filter(k=>!/(email|token|secret|password|cookie|authorization)/i.test(k)).sort();
-              if(keys.length) console.log('compat_top_keys='+keys.join(','));
-            }
-          } else if(raw) {
-            console.log('compat_body_preview='+raw.slice(0,180).replace(/\s+/g,' '));
+          sanitize() {
+            sed -E \
+              -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g' \
+              -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/[UUID]/g' \
+              -e 's/("?(authorization|cookie|token|secret|password)"?[=: ]+)[^, }]+/\1[REDACTED]/Ig' \
+              -e 's/("prompt"[[:space:]]*:[[:space:]]*")[^"]*(")/\1[REDACTED]\2/Ig'
           }
-          NODE
-          done < /tmp/resources
+
+          echo 'journal_access_begin'
+          if journalctl -u thee-studio-api.service --since '2026-09-06 00:00:00' --no-pager -o cat >/tmp/thee-journal.$$ 2>/tmp/thee-journal-err.$$; then
+            echo 'journal_readable=true'
+            grep -Ei 'credit|usage|billing|generation|402|insufficient|entitl|owner|plan' /tmp/thee-journal.$$ | tail -n 250 | sanitize || true
+          else
+            echo 'journal_readable=false'
+            head -n 5 /tmp/thee-journal-err.$$ | sanitize || true
+          fi
+          rm -f /tmp/thee-journal.$$ /tmp/thee-journal-err.$$
+          echo 'journal_access_end'
+
+          echo 'status_excerpt_begin'
+          systemctl status thee-studio-api.service --no-pager -n 80 2>&1 | \
+            grep -Ei 'Active:|Loaded:|Main PID:|credit|usage|billing|generation|402|insufficient|entitl|owner|plan' | sanitize || true
+          echo 'status_excerpt_end'
+          REMOTE

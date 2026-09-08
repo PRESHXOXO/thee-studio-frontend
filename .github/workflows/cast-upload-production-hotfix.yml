@@ -1,0 +1,135 @@
+name: Temporary Production Cast Upload Hotfix
+
+on:
+  push:
+    branches:
+      - ops/cast-upload-debug-20260908
+    paths:
+      - .github/workflows/cast-upload-production-hotfix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+      CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
+      EXPECTED_JS_SHA256: 68475a3ac502fc1be4e39d0c83b6d60bc33a90ca1868e5c8cb3a7092b5039b2b
+      EXPECTED_HTML_SHA256: 1a3dd45a97513bfe3642bafb5f1277f2808cfaea65a3af67d5da8cb5483652e9
+      OLD_ASSET: assets/index-DhbQbUSO.js
+      NEW_ASSET: assets/index-DhbQbUSO-castfix-20260908.js
+
+    steps:
+      - name: Configure scoped SSH
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$CPANEL_SSH_HOST"
+          test -n "$CPANEL_SSH_PORT"
+          test -n "$CPANEL_SSH_USER"
+          test -n "$CPANEL_DEPLOY_PATH"
+          test -n "$CPANEL_BACKUP_ROOT"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+
+      - name: Apply guarded cache-busted Cast hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o ConnectTimeout=10 \
+            -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "WEB='$CPANEL_DEPLOY_PATH' BACKUP_ROOT='$CPANEL_BACKUP_ROOT' EXPECTED_JS_SHA256='$EXPECTED_JS_SHA256' EXPECTED_HTML_SHA256='$EXPECTED_HTML_SHA256' OLD_ASSET='$OLD_ASSET' NEW_ASSET='$NEW_ASSET' bash -s" <<'REMOTE'
+          set -euo pipefail
+          old="$WEB/$OLD_ASSET"
+          new="$WEB/$NEW_ASSET"
+          index="$WEB/index.html"
+
+          test -r "$old" && test -w "$WEB/assets" && test -r "$index" && test -w "$index"
+
+          actual_js=$(sha256sum "$old" | awk '{print $1}')
+          actual_html=$(sha256sum "$index" | awk '{print $1}')
+          test "$actual_js" = "$EXPECTED_JS_SHA256" || { echo "Refusing hotfix: live JS changed ($actual_js)"; exit 31; }
+          test "$actual_html" = "$EXPECTED_HTML_SHA256" || { echo "Refusing hotfix: live index changed ($actual_html)"; exit 32; }
+
+          stamp=$(date -u +%Y%m%dT%H%M%SZ)
+          backup="$BACKUP_ROOT/cast-upload-hotfix-$stamp"
+          mkdir -p "$backup/assets"
+          cp -p "$index" "$backup/index.html"
+          cp -p "$old" "$backup/$OLD_ASSET"
+          printf '%s\n' "$EXPECTED_JS_SHA256  $OLD_ASSET" > "$backup/SHA256SUMS"
+          printf '%s\n' "$EXPECTED_HTML_SHA256  index.html" >> "$backup/SHA256SUMS"
+
+          cp "$old" "$new.tmp"
+          python3 - "$new.tmp" <<'PY'
+          import sys
+          path = sys.argv[1]
+          text = open(path, 'r', encoding='utf-8').read()
+          old = 'Je=!Rz()&&!_t()'
+          new = 'Je=!Rz()&&!_t()&&!xL'
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected exactly one Cast API-mode gate, found {text.count(old)}')
+          if 'async uploadReferenceAsset(r,n,s,d)' not in text or '`/assets/upload?${h.toString()}`' not in text:
+              raise SystemExit('Fastify uploadReferenceAsset implementation is missing from inspected bundle')
+          text = text.replace(old, new, 1)
+          open(path, 'w', encoding='utf-8', newline='').write(text)
+          PY
+          node --check "$new.tmp"
+          chmod 644 "$new.tmp"
+          mv -f "$new.tmp" "$new"
+
+          cp "$index" "$index.tmp"
+          python3 - "$index.tmp" "$OLD_ASSET" "$NEW_ASSET" <<'PY'
+          import sys
+          path, old, new = sys.argv[1:]
+          text = open(path, 'r', encoding='utf-8').read()
+          old_ref = '/' + old
+          new_ref = '/' + new
+          if text.count(old_ref) != 1:
+              raise SystemExit(f'Expected one active bundle reference, found {text.count(old_ref)}')
+          text = text.replace(old_ref, new_ref, 1)
+          open(path, 'w', encoding='utf-8', newline='').write(text)
+          PY
+          chmod 644 "$index.tmp"
+          mv -f "$index.tmp" "$index"
+
+          grep -Fq "/$NEW_ASSET" "$index"
+          grep -Fq 'Je=!Rz()&&!_t()&&!xL' "$new"
+          grep -Fq 'async uploadReferenceAsset(r,n,s,d)' "$new"
+          printf 'backup=%s\nnew_asset=%s\nnew_sha256=%s\n' "$backup" "$NEW_ASSET" "$(sha256sum "$new" | awk '{print $1}')"
+          REMOTE
+
+      - name: Verify production origin and Cast API routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
+            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
+            https://studio.myvitaworld.online/ | grep -Fq "/$NEW_ASSET"
+          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
+            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
+            "https://studio.myvitaworld.online/$NEW_ASSET" | grep -Fq 'async uploadReferenceAsset(r,n,s,d)'
+
+          ssh -o BatchMode=yes -o ConnectTimeout=10 \
+            -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          base=http://127.0.0.1:4310
+          uuid=00000000-0000-4000-8000-000000000000
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$base/api/assets/upload?bucket=creator-references&creatorId=$uuid&referenceType=headshot")
+          test "$code" = 401
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE "$base/api/references/$uuid")
+          test "$code" = 401
+          echo 'Cast upload/delete routes present and auth-protected.'
+          REMOTE

@@ -54,6 +54,7 @@ jobs:
           set -euo pipefail
           old="$WEB/$OLD_ASSET"
           new="$WEB/$NEW_ASSET"
+          tmp_new="${new}.tmp.js"
           index="$WEB/index.html"
 
           test -r "$old" && test -w "$WEB/assets" && test -r "$index" && test -w "$index"
@@ -71,8 +72,9 @@ jobs:
           printf '%s\n' "$EXPECTED_JS_SHA256  $OLD_ASSET" > "$backup/SHA256SUMS"
           printf '%s\n' "$EXPECTED_HTML_SHA256  index.html" >> "$backup/SHA256SUMS"
 
-          cp "$old" "$new.tmp"
-          python3 - "$new.tmp" <<'PY'
+          rm -f "$tmp_new"
+          cp "$old" "$tmp_new"
+          python3 - "$tmp_new" <<'PY'
           import sys
           path = sys.argv[1]
           text = open(path, 'r', encoding='utf-8').read()
@@ -85,9 +87,9 @@ jobs:
           text = text.replace(old, new, 1)
           open(path, 'w', encoding='utf-8', newline='').write(text)
           PY
-          node --check "$new.tmp"
-          chmod 644 "$new.tmp"
-          mv -f "$new.tmp" "$new"
+          node --check "$tmp_new"
+          chmod 644 "$tmp_new"
+          mv -f "$tmp_new" "$new"
 
           cp "$index" "$index.tmp"
           python3 - "$index.tmp" "$OLD_ASSET" "$NEW_ASSET" <<'PY'

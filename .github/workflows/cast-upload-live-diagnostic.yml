@@ -35,6 +35,20 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
+      - name: Copy exact deployed frontend bundle read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          WEB=/home/brandingbybella/public_html/studio
+          SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT")
+          SCP=(scp -q -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -P "$CPANEL_SSH_PORT")
+          target="$CPANEL_SSH_USER@$CPANEL_SSH_HOST"
+          asset=$("${SSH[@]}" "$target" "grep -oE 'assets/[^\" ]+\\.js' '$WEB/index.html' | head -1")
+          test -n "$asset"
+          printf '%s\n' "$asset" > active-asset.txt
+          "${SCP[@]}" "$target:$WEB/index.html" live-index.html
+          "${SCP[@]}" "$target:$WEB/$asset" live-index.js
+
       - name: Inspect live Cast upload implementation read-only
         shell: bash
         run: |
@@ -57,39 +71,15 @@ jobs:
           echo '=== deployed index asset refs ==='
           grep -oE 'assets/[^" ]+\.js' "$WEB/index.html" 2>/dev/null | head -20 || true
 
-          echo '=== bounded bundle contexts ==='
-          python3 - "$WEB" <<'PY'
-          import glob, os, sys
-          web = sys.argv[1]
-          keys = [
-              'uploadReferenceAsset', 'listReferenceAssets', 'removeReferenceAsset',
-              'This action needs local studio services', 'LOCAL_ACTION_UNAVAILABLE',
-              'reference-assets', 'reference_assets', '/api/creators', '/api/uploads'
-          ]
-          files = glob.glob(os.path.join(web, 'assets', '*.js'))
-          for path in sorted(files):
-              try:
-                  data = open(path, 'r', encoding='utf-8', errors='ignore').read()
-              except Exception:
-                  continue
-              hits = [(k, data.find(k)) for k in keys if data.find(k) >= 0]
-              if not hits:
-                  continue
-              print(f'FILE {os.path.basename(path)}')
-              for key, pos in hits:
-                  lo, hi = max(0, pos-600), min(len(data), pos+1400)
-                  snippet = data[lo:hi].replace('\n', ' ')
-                  print(f'--- KEY {key} @ {pos} ---')
-                  print(snippet)
-          PY
-
           echo '=== unauthenticated API shape ==='
           base=http://127.0.0.1:4310
           uuid=00000000-0000-4000-8000-000000000000
           for path in \
             "/api/creators/$uuid/references" \
+            "/api/creators/$uuid/references/upload" \
             "/api/creators/$uuid/reference-assets" \
             "/api/creators/$uuid/assets" \
+            "/api/creator-references" \
             "/api/reference-assets" \
             "/api/uploads"; do
             for method in GET POST DELETE; do
@@ -106,10 +96,14 @@ jobs:
           done
           REMOTE
 
-      - name: Upload diagnostic artifact
+      - name: Upload deployed bundle and diagnostic
         uses: actions/upload-artifact@v4
         with:
-          name: cast-live-diagnostic
-          path: cast-live-diagnostic.txt
+          name: cast-live-bundle
+          path: |
+            active-asset.txt
+            live-index.html
+            live-index.js
+            cast-live-diagnostic.txt
           if-no-files-found: error
           retention-days: 1

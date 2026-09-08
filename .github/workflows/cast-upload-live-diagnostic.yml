@@ -17,7 +17,6 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
 
     steps:
       - name: Configure scoped SSH
@@ -31,52 +30,28 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect recent upload request trail read-only
+      - name: Trace the user's Step 2 request sequence read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' | tee cast-upload-trail.txt
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' | tee cast-step2-trace.txt
           set -eu
-          echo '=== utc now ==='
-          date -u
-          echo '=== process snapshot ==='
-          ps -eo user,pid,ppid,etime,stat,cmd | grep -E 'thee-studio|node|4310' | grep -v grep | head -80 || true
-          echo '=== home log candidates ==='
-          find "$HOME" -maxdepth 4 \( -type f -o -type l \) \
-            \( -iname '*access*log*' -o -iname '*error*log*' -o -iname '*.log' -o -path '*/access-logs/*' \) \
-            -print 2>/dev/null | head -120 || true
-          echo '=== recent /api/assets/upload matches in readable home logs ==='
-          while IFS= read -r p; do
-            [ -r "$p" ] || continue
-            hits=$(grep -aE '/api/assets/upload|/assets/upload' "$p" 2>/dev/null | tail -20 || true)
-            if [ -n "$hits" ]; then
-              echo "--- $p ---"
-              printf '%s\n' "$hits"
-            fi
-          done < <(find "$HOME" -maxdepth 4 \( -type f -o -type l \) \
-            \( -iname '*access*log*' -o -iname '*error*log*' -o -iname '*.log' -o -path '*/access-logs/*' \) -print 2>/dev/null)
-          echo '=== common cPanel access-log symlinks ==='
-          for p in "$HOME/access-logs"/* "$HOME/logs"/*; do
-            [ -e "$p" ] || continue
-            printf '%s -> ' "$p"
-            readlink -f "$p" 2>/dev/null || true
-            if [ -r "$p" ]; then
-              grep -aE '/api/assets/upload|/assets/upload' "$p" 2>/dev/null | tail -20 || true
-            fi
-          done
-          echo '=== public endpoint timing unauthenticated ==='
-          curl -sS -o /tmp/u.out -w 'code=%{http_code} total=%{time_total}s connect=%{time_connect}s start=%{time_starttransfer}s\n' \
-            -X POST -F 'file=@/etc/hosts;type=image/png;filename=test.png' \
-            'http://127.0.0.1:4310/api/assets/upload?bucket=creator-references&creatorId=00000000-0000-4000-8000-000000000000&referenceType=headshot' || true
-          head -c 300 /tmp/u.out 2>/dev/null; echo
+          LOG="$HOME/access-logs/studio.myvitaworld.online-ssl_log"
+          test -r "$LOG"
+          echo '=== 16:34-16:37 Studio API traffic ==='
+          grep -a '08/Sep/2026:16:3[4-7]:' "$LOG" | grep -E ' /api/|/studio/images' | tail -160 || true
+          echo '=== current creator request chain ==='
+          grep -a 'fc86ee91-267f-4f9e-9d09-9903ab1ee309' "$LOG" | tail -120 || true
+          echo '=== creator routes around the three headshot uploads ==='
+          grep -aE '08/Sep/2026:16:35:|08/Sep/2026:16:36:' "$LOG" | grep -E '/api/creators/|/api/assets/upload|/api/auth/csrf' | tail -160 || true
           REMOTE
 
-      - name: Upload diagnostic artifact
+      - name: Upload trace artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cast-upload-trail
-          path: cast-upload-trail.txt
+          name: cast-step2-trace
+          path: cast-step2-trace.txt
           if-no-files-found: error
           retention-days: 1

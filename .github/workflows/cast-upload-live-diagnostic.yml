@@ -31,59 +31,38 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect live Brand step and pill CSS read-only
+      - name: Inspect live Brand step controls read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee cast-brand-step-trace.txt
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee cast-brand-controls-trace.txt
           set -euo pipefail
           asset_rel=$(grep -oE 'assets/index-[^" ]+\.js' "$WEB/index.html" | head -1)
           asset="$WEB/$asset_rel"
           echo "ACTIVE_ASSET=$asset_rel"
           echo "ACTIVE_SHA256=$(sha256sum "$asset" | awk '{print $1}')"
-
-          echo '=== BRAND STEP JS CONTEXT ==='
           python3 - "$asset" <<'PY'
           import sys
           text=open(sys.argv[1],'r',encoding='utf-8',errors='ignore').read()
-          keys=['function cd({label:t,active:r,onClick:n})','function dd(t,r)','function RV({draft:t,onChange:r,onSave:n,saving:s})','Their World','Content Photography Style','Creator Niche']
-          for key in keys:
-              pos=text.find(key)
-              print(f'\n--- {key!r} @ {pos} ---')
-              if pos >= 0:
-                  print(text[max(0,pos-1200):min(len(text),pos+7600)].replace('\n',' '))
-          print('\n=== dd CALL COUNT ===')
-          print(text.count('dd('))
-          PY
-
-          echo '=== CSS / POINTER EVENTS CONTEXT ==='
-          for css in "$WEB"/assets/*.css; do
-            [ -r "$css" ] || continue
-            echo "CSS_FILE=$(basename "$css")"
-            python3 - "$css" <<'PY'
-          import sys,re
-          text=open(sys.argv[1],'r',encoding='utf-8',errors='ignore').read()
-          for pat in ['.ts-pill','pointer-events','button:disabled','fieldset']:
-              start=0
-              shown=0
+          for key in ['className:"ts-select-trigger"','ts-select-trigger','function Ke(','function cd({label:t,active:r,onClick:n})','Signature Look / Clothing']:
+              start=0; shown=0
               while True:
-                  pos=text.find(pat,start)
-                  if pos < 0 or shown >= 12: break
-                  shown += 1
-                  print(f'--- {pat} #{shown} @ {pos} ---')
-                  print(text[max(0,pos-500):min(len(text),pos+1200)].replace('\n',' '))
-                  start=pos+len(pat)
+                  pos=text.find(key,start)
+                  if pos<0 or shown>=8: break
+                  shown+=1
+                  print(f'\n--- {key!r} #{shown} @ {pos} ---')
+                  print(text[max(0,pos-2200):min(len(text),pos+5200)].replace('\n',' '))
+                  start=pos+len(key)
           PY
-          done
           REMOTE
 
       - name: Upload trace
         uses: actions/upload-artifact@v4
         with:
-          name: cast-brand-step-trace
-          path: cast-brand-step-trace.txt
+          name: cast-brand-controls-trace
+          path: cast-brand-controls-trace.txt
           if-no-files-found: error
           retention-days: 1

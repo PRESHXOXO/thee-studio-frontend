@@ -1,4 +1,4 @@
-name: Temporary Creator Response Probe
+name: Temporary Generation Request Trace
 
 on:
   push:
@@ -17,8 +17,6 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
-      ASSET: assets/index-DhbQbUSO-genfix2-20260908.js
 
     steps:
       - name: Configure scoped SSH
@@ -31,22 +29,38 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect creators calls in active bundle read-only
+      - name: Trace recent generation traffic and readable logs
+        shell: bash
         run: |
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' ASSET='$ASSET' bash -s" <<'REMOTE'
-          set -euo pipefail
-          python3 - "$WEB/$ASSET" <<'PY'
-          import sys
-          text=open(sys.argv[1],encoding='utf-8',errors='ignore').read()
-          for needle in ['"/creators"', "'/creators'", '/compat/creators']:
-              print(f'=== {needle} count={text.count(needle)} ===')
-              start=0
-              for i in range(12):
-                  pos=text.find(needle,start)
-                  if pos < 0: break
-                  print(text[max(0,pos-1200):min(len(text),pos+2200)])
-                  print('\n---\n')
-                  start=pos+len(needle)
-          PY
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          echo '=== RECENT ACCESS LOG GENERATION REQUESTS ==='
+          for f in \
+            "$HOME/access-logs/studio.myvitaworld.online" \
+            "$HOME/access-logs/studio.myvitaworld.online-ssl_log" \
+            "$HOME/logs/studio.myvitaworld.online" \
+            "$HOME/logs/studio.myvitaworld.online-ssl_log"; do
+            test -r "$f" || continue
+            echo "--- $f ---"
+            grep -E '(/api/generation|/api/creators)' "$f" | tail -80 || true
+          done
+
+          echo '=== COMPRESSED ACCESS LOG GENERATION REQUESTS ==='
+          find "$HOME" -maxdepth 4 -type f \( -name '*studio*gz' -o -name '*ssl*gz' -o -name '*access*gz' \) -print 2>/dev/null | tail -30 | while read -r f; do
+            hits=$(zgrep -E '(/api/generation|/api/creators)' "$f" 2>/dev/null | tail -40 || true)
+            if [ -n "$hits" ]; then
+              echo "--- $f ---"
+              printf '%s\n' "$hits"
+            fi
+          done
+
+          echo '=== READABLE APP/ERROR LOG HITS ==='
+          find "$HOME" -maxdepth 5 -type f \( -iname '*.log' -o -iname '*error*' -o -iname '*.out' \) -size -25M -print 2>/dev/null | while read -r f; do
+            test -r "$f" || continue
+            hits=$(grep -Ei 'failedPrompt|prompt and creator|generation.*invalid|creator.*invalid|generation_failed' "$f" 2>/dev/null | tail -30 || true)
+            if [ -n "$hits" ]; then
+              echo "--- $f ---"
+              printf '%s\n' "$hits"
+            fi
+          done
           REMOTE

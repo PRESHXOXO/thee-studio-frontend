@@ -1,4 +1,4 @@
-name: Temporary Fastify Source Copy Probe
+name: Temporary Fastify Schema Probe
 
 on:
   push:
@@ -29,22 +29,42 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Locate readable generation source/test copies without mutation
+      - name: Probe OpenAPI and route schema endpoints read-only
         run: |
           ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          echo '=== CANDIDATE FILES UNDER OPERATOR HOME ==='
-          find "$HOME" -type f \( \
-            -name 'generation.js' -o \
-            -name 'owner-credit.test.js' -o \
-            -name '*generation*.test.js' -o \
-            -name '*generation*.spec.js' -o \
-            -name '*smoke*.json' -o \
-            -name '*smoke*.js' -o \
-            -name '*smoke*.sh' \
-          \) -readable -print 2>/dev/null | head -250
-
-          echo '=== MATCHING SOURCE TEXT UNDER SMALL READABLE FILES ==='
-          find "$HOME" -type f -readable -size -2M \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.json' -o -name '*.txt' -o -name '*.sh' \) -print0 2>/dev/null | \
-            xargs -0 grep -IlE 'registerGenerationRoutes|Prompt and creator are invalid|billing_exempt|owner-credit|stillGenerationId' 2>/dev/null | head -120 || true
+          base='http://127.0.0.1:4310'
+          for path in \
+            '/documentation/json' \
+            '/documentation/yaml' \
+            '/docs/json' \
+            '/docs/openapi.json' \
+            '/openapi.json' \
+            '/swagger.json' \
+            '/api/documentation/json' \
+            '/api/docs/json' \
+            '/api/openapi.json' \
+            '/api/swagger.json'; do
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' "$base$path" || true)
+            ctype=$(file -b --mime-type "$tmp" 2>/dev/null || true)
+            printf '%-32s status=%s bytes=%s type=%s\n' "$path" "$code" "$(wc -c < "$tmp" | tr -d ' ')" "$ctype"
+            if [ "$code" = 200 ]; then
+              python3 - "$tmp" <<'PY'
+          import sys,json
+          p=sys.argv[1]
+          raw=open(p,'r',encoding='utf-8',errors='ignore').read()
+          try:
+              doc=json.loads(raw)
+          except Exception:
+              print(raw[:1500]); raise SystemExit
+          paths=doc.get('paths',{}) if isinstance(doc,dict) else {}
+          for key,val in paths.items():
+              if 'generation' in key.lower():
+                  print('SCHEMA_PATH',key)
+                  print(json.dumps(val,indent=2)[:12000])
+          PY
+            fi
+            rm -f "$tmp"
+          done
           REMOTE

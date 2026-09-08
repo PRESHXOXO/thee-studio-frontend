@@ -1,4 +1,4 @@
-name: Temporary Fastify Schema Probe
+name: Temporary Generation Validation Journal Trace
 
 on:
   push:
@@ -29,42 +29,26 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Probe OpenAPI and route schema endpoints read-only
+      - name: Read sanitized API journal around generation validation
         run: |
           ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          base='http://127.0.0.1:4310'
-          for path in \
-            '/documentation/json' \
-            '/documentation/yaml' \
-            '/docs/json' \
-            '/docs/openapi.json' \
-            '/openapi.json' \
-            '/swagger.json' \
-            '/api/documentation/json' \
-            '/api/docs/json' \
-            '/api/openapi.json' \
-            '/api/swagger.json'; do
-            tmp=$(mktemp)
-            code=$(curl -sS -o "$tmp" -w '%{http_code}' "$base$path" || true)
-            ctype=$(file -b --mime-type "$tmp" 2>/dev/null || true)
-            printf '%-32s status=%s bytes=%s type=%s\n' "$path" "$code" "$(wc -c < "$tmp" | tr -d ' ')" "$ctype"
-            if [ "$code" = 200 ]; then
-              python3 - "$tmp" <<'PY'
-          import sys,json
-          p=sys.argv[1]
-          raw=open(p,'r',encoding='utf-8',errors='ignore').read()
-          try:
-              doc=json.loads(raw)
-          except Exception:
-              print(raw[:1500]); raise SystemExit
-          paths=doc.get('paths',{}) if isinstance(doc,dict) else {}
-          for key,val in paths.items():
-              if 'generation' in key.lower():
-                  print('SCHEMA_PATH',key)
-                  print(json.dumps(val,indent=2)[:12000])
-          PY
-            fi
-            rm -f "$tmp"
-          done
+          sanitize() {
+            sed -E \
+              -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g' \
+              -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/[UUID]/g' \
+              -e 's/("?(authorization|cookie|token|secret|password)"?[=: ]+)[^, }]+/\1[REDACTED]/Ig' \
+              -e 's/("prompt"[[:space:]]*:[[:space:]]*")[^"]*(")/\1[REDACTED]\2/Ig'
+          }
+
+          echo '=== SERVICE METADATA ==='
+          systemctl show thee-studio-api.service -p User -p Group -p WorkingDirectory -p ExecStart --no-pager 2>&1 | sanitize || true
+
+          echo '=== API JOURNAL RECENT GENERATION ==='
+          journalctl -u thee-studio-api.service --since '2026-09-08 17:30:00' --no-pager -o cat 2>&1 | \
+            grep -Ei 'generation|creator|prompt|invalid|400|request|validation|schema|error' | tail -n 500 | sanitize || true
+
+          echo '=== WORKER JOURNAL RECENT GENERATION ==='
+          journalctl -u thee-studio-worker.service --since '2026-09-08 17:30:00' --no-pager -o cat 2>&1 | \
+            grep -Ei 'generation|creator|prompt|invalid|400|request|validation|schema|error' | tail -n 300 | sanitize || true
           REMOTE

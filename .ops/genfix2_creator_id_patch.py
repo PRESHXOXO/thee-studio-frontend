@@ -13,4 +13,5 @@ if count != 1:
     raise SystemExit(f"Expected one Fastify Director batch constructor, found {count}")
 
 text = text.replace(old, new, 1)
-path.write_text(text, encoding="utf-8", newline="")
+with path.open("w", encoding="utf-8", newline="") as handle:
+    handle.write(text)

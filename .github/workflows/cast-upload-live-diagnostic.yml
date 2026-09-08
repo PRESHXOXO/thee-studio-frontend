@@ -1,4 +1,4 @@
-name: Temporary Generation Helper Diagnostic
+name: Temporary Director Generation Function Diagnostic
 
 on:
   push:
@@ -31,14 +31,14 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect live API helper definitions read-only
+      - name: Inspect exact Director generation functions read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee generation-helper-trace.txt
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee director-generation-functions.txt
           set -euo pipefail
           asset_rel=$(grep -oE 'assets/index-[^" ]+\.js' "$WEB/index.html" | head -1)
           asset="$WEB/$asset_rel"
@@ -47,23 +47,19 @@ jobs:
           python3 - "$asset" <<'PY'
           import sys
           text=open(sys.argv[1],'r',encoding='utf-8',errors='ignore').read()
-          keys=['async function hL(', 'function hL(', 'const hL=', 'async function pa(', 'function pa(', 'const pa=', 'const vL=', 'function lB(']
+          keys=['async function nO(', 'async function cO(', 'async function zz(', 'async function IL(', 'async function Tz(', 'async function iO(', 'function qr(']
           for key in keys:
-              start=0; shown=0
-              while True:
-                  pos=text.find(key,start)
-                  if pos<0 or shown>=8: break
-                  shown+=1
-                  print(f'\n--- {key!r} #{shown} @ {pos} ---')
-                  print(text[max(0,pos-2600):min(len(text),pos+6500)].replace('\n',' '))
-                  start=pos+len(key)
+              pos=text.find(key)
+              print(f'\n=== {key} @ {pos} ===')
+              if pos>=0:
+                  print(text[max(0,pos-1200):min(len(text),pos+15000)].replace('\n',' '))
           PY
           REMOTE
 
       - name: Upload trace
         uses: actions/upload-artifact@v4
         with:
-          name: generation-helper-trace
-          path: generation-helper-trace.txt
+          name: director-generation-functions
+          path: director-generation-functions.txt
           if-no-files-found: error
           retention-days: 1

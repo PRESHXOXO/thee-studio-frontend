@@ -1,4 +1,4 @@
-name: Temporary Generation Contract Diagnostic
+name: Temporary Owner Smoke Contract Diagnostic
 
 on:
   push:
@@ -30,46 +30,47 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect live generation route without privilege escalation
+      - name: Inspect prior successful owner smoke evidence read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "bash -s" <<'REMOTE' | tee generation-contract-trace.txt
+            "bash -s" <<'REMOTE' | tee owner-smoke-contract.txt
           set -u
+          root=/tmp/thee-owner-credit-fix
           echo "USER=$(id)"
-          echo "=== PATH ACCESS ==="
-          namei -l /opt/thee-studio-app/src/generation.js 2>&1 || true
-          echo "=== FILE READABILITY ==="
-          if test -r /opt/thee-studio-app/src/generation.js; then
-            echo GENERATION_JS_READABLE=yes
-            python3 - <<'PY'
-          from pathlib import Path
-          p=Path('/opt/thee-studio-app/src/generation.js')
-          text=p.read_text(encoding='utf-8',errors='ignore')
-          needles=['failedPrompt','creator','creatorId','app.post','/api/generation','Insufficient generation credits','request.body']
-          for needle in needles:
-              print(f'\n=== {needle!r} count={text.count(needle)} ===')
-              start=0
-              for i in range(12):
-                  pos=text.find(needle,start)
-                  if pos<0: break
-                  print(f'--- hit {i+1} @ {pos} ---')
-                  print(text[max(0,pos-1800):min(len(text),pos+5000)])
-                  start=pos+len(needle)
+          echo "=== SMOKE DIRECTORY ==="
+          ls -la "$root" 2>&1 || true
+          echo "=== READABLE FILES ==="
+          find "$root" -maxdepth 2 -type f -printf '%M %u %g %s %p\n' 2>/dev/null || true
+          echo "=== RELEVANT CONTENT ==="
+          for f in "$root"/*; do
+            test -f "$f" || continue
+            test -r "$f" || { echo "UNREADABLE $f"; continue; }
+            case "$(basename "$f")" in
+              *.json|*.txt|*.log|*.sh|*.js|*.mjs|*.cjs)
+                echo "--- FILE $f ---"
+                python3 - "$f" <<'PY'
+          import sys,re
+          p=sys.argv[1]
+          text=open(p,'r',encoding='utf-8',errors='ignore').read()
+          # Redact likely credentials/secrets while retaining request-shape evidence.
+          text=re.sub(r'(?i)(password|authorization|cookie|csrf|token|secret)(["\'\s:=]+)([^,\n}\"]+|"[^"]*")', r'\1\2<REDACTED>', text)
+          needles=['/api/generation','generation','prompt','creator','creatorId','creator_id','providerRunId','stillGenerationId','projectId','shotId','idempotency']
+          if any(n in text for n in needles):
+              print(text[:40000])
           PY
-          else
-            echo GENERATION_JS_READABLE=no
-            ls -ld /opt /opt/thee-studio-app /opt/thee-studio-app/src 2>&1 || true
-          fi
+                ;;
+            esac
+          done
           REMOTE
 
       - name: Upload trace
         uses: actions/upload-artifact@v4
         with:
-          name: generation-contract-trace
-          path: generation-contract-trace.txt
+          name: owner-smoke-contract
+          path: owner-smoke-contract.txt
           if-no-files-found: error
           retention-days: 1

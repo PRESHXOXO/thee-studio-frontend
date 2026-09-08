@@ -1,57 +1,130 @@
-name: Temporary Generation Prompt Exact Boundary
+name: One-Time Genfix4 Prompt Contract Fix
 
 on:
   push:
-    branches:
-      - ops/cast-upload-debug-20260908
+    branches: [ops/cast-upload-debug-20260908]
+    paths: [.github/workflows/cast-upload-live-diagnostic.yml]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  inspect:
+  deploy:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    environment: production
     env:
-      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
-      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+      CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
+      EXPECTED_JS_SHA256: 3f6f8483eeb2d3ba831a3ada8686cbdf5757da4d360b37bd687b7979878095dd
+      CURRENT_ASSET: assets/index-DhbQbUSO-genfix3-20260908.js
+      NEW_ASSET: assets/index-DhbQbUSO-genfix4-20260908.js
 
     steps:
-      - name: Authenticate and pin exact prompt length with fake creator
+      - name: Configure scoped SSH
+        env:
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+
+      - name: Validate prompt limiter behavior
         shell: bash
         run: |
           set -euo pipefail
-          node - <<'NODE'
-          const fs=require('fs');
-          const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g,'').trim().toLowerCase();
-          const password=String(process.env.CUTOVER_OWNER_PASSWORD||'');
-          if(!email||!password) process.exit(2);
-          fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});
+          node <<'NODE'
+          const tsFastifyDirectorPromptLimit=4000;
+          function tsFastifyDirectorPrompt(t,r){const n=String(t||"").trim(),s=String(r||"").trim(),d=tsFastifyDirectorPromptLimit,c=s?`${n}\n\nAvoid: ${s}`:n;if(c.length<=d)return c;if(n.length<=d)return n;const h="VISUAL REFERENCE MAP — STRICT ROLE AUTHORITY:",f=n.indexOf(h);let y=f>=0?n.slice(0,f).trim():n,k="";if(f>=0){const m=n.slice(f).split("\n").map(v=>v.trim()).filter(Boolean),v=m.filter(v=>v===h||v.startsWith("Image ")||v.startsWith("Keep each image in its assigned role."));k=v.join("\n")}const b=Math.max(0,d-(k?k.length+2:0));if(y.length>b){const m="\n[Director prompt compacted to fit generation contract]\n",v=Math.max(0,b-m.length),p=Math.floor(v*.72),g=v-p;let x=y.slice(0,p),q=y.slice(Math.max(0,y.length-g));const w=x.lastIndexOf("\n");if(w>p*.55)x=x.slice(0,w);const z=q.indexOf("\n");if(z>=0&&z<g*.45)q=q.slice(z+1);y=`${x.trimEnd()}${m}${q.trimStart()}`.slice(0,b).trimEnd()}const o=k?`${y}\n\n${k}`:y;return o.slice(0,d).trimEnd()}
+          const short=tsFastifyDirectorPrompt('portrait prompt','bad anatomy');
+          if(!short.includes('Avoid: bad anatomy')) throw new Error('short negative prompt regression');
+          const near=tsFastifyDirectorPrompt('A'.repeat(3900),'B'.repeat(300));
+          if(near.length!==3900 || near.includes('Avoid:')) throw new Error('overflow should drop duplicate negative block first');
+          const long=['IDENTITY LOCK: preserve the selected creator exactly.','A'.repeat(4300),'DIRECTOR NOTES: keep the red coat and night street.','VISUAL REFERENCE MAP — STRICT ROLE AUTHORITY:','Image 2 — OUTFIT: exact red coat.','Image 3 — POSE: hands in pockets.','OUTFIT AUTHORITY: duplicated verbose authority copy.','Keep each image in its assigned role. Identity images establish the person only.'].join('\n');
+          const compact=tsFastifyDirectorPrompt(long,'B'.repeat(500));
+          if(compact.length>4000) throw new Error('prompt exceeds Fastify contract');
+          if(!compact.includes('IDENTITY LOCK:')) throw new Error('identity head was lost');
+          if(!compact.includes('DIRECTOR NOTES:')) throw new Error('current shot tail was lost');
+          if(!compact.includes('Image 2 — OUTFIT: exact red coat.')) throw new Error('role map was lost');
+          if(compact.includes('OUTFIT AUTHORITY: duplicated verbose authority copy.')) throw new Error('duplicate authority copy was not compacted');
+          console.log(`LIMITER_OK short=${short.length} overflow=${near.length} compact=${compact.length}`);
           NODE
-          trap 'rm -f /tmp/login.json /tmp/jar /tmp/csrf /tmp/body /tmp/payload.json' EXIT
-          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          base='https://studio.myvitaworld.online/api'
-          fake='00000000-0000-4000-8000-000000000000'
 
-          test "$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")" = 200
-          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/auth/csrf" -o /tmp/csrf
-          csrf=$(node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/csrf','utf8'));process.stdout.write(String(p.csrfToken||''));")
-          test -n "$csrf"
+      - name: Deploy guarded Genfix4 bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "WEB='$CPANEL_DEPLOY_PATH' BACKUP_ROOT='$CPANEL_BACKUP_ROOT' EXPECTED='$EXPECTED_JS_SHA256' CURRENT='$CURRENT_ASSET' NEW='$NEW_ASSET' bash -s" <<'REMOTE'
+          set -euo pipefail
+          current="$WEB/$CURRENT"; new="$WEB/$NEW"; index="$WEB/index.html"; tmp="${new}.tmp.js"
+          test -f "$current"
+          test "$(sha256sum "$current" | awk '{print $1}')" = "$EXPECTED"
+          test "$(grep -oF "/$CURRENT" "$index" | wc -l)" = 1
+          test ! -e "$new"
 
-          for len in 4000 4001 4010 4020 4030 4040 4050 4060 4070 4080 4090 4094 4095 4096; do
-            LEN="$len" FAKE="$fake" node - <<'NODE'
-          const fs=require('fs');
-          const len=Number(process.env.LEN);
-          fs.writeFileSync('/tmp/payload.json',JSON.stringify({prompt:'A'.repeat(len),creatorId:process.env.FAKE,idempotencyKey:`prompt-exact-${len}`}),{mode:0o600});
-          NODE
-            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -X POST --data-binary @/tmp/payload.json -o /tmp/body -w '%{http_code}' "$base/generation")
-            msg=$(node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/body','utf8'));}catch{};process.stdout.write(String(p.error||p.message||''));")
-            case "$msg" in
-              *'Creator not found'*) cls=ACCEPTED ;;
-              *'Prompt and creator are invalid'*) cls=REJECTED ;;
-              *) cls=OTHER ;;
-            esac
-            printf 'prompt_len=%s status=%s class=%s\n' "$len" "$code" "$cls"
-          done
+          backup="$BACKUP_ROOT/director-prompt-contract-fix-$(date -u +%Y%m%dT%H%M%SZ)"
+          mkdir -p "$backup/assets"
+          cp -p "$index" "$backup/index.html"
+          cp -p "$current" "$backup/$CURRENT"
+          cp "$current" "$tmp"
+
+          python3 - "$tmp" <<'PY'
+          import sys
+          path=sys.argv[1]
+          text=open(path,encoding='utf-8').read()
+          old='''function tsFastifyDirectorPrompt(t,r){const n=String(t||"").trim(),s=String(r||"").trim();return s?`${n}\\n\\nAvoid: ${s}`:n}'''
+          new='''const tsFastifyDirectorPromptLimit=4000;function tsFastifyDirectorPrompt(t,r){const n=String(t||"").trim(),s=String(r||"").trim(),d=tsFastifyDirectorPromptLimit,c=s?`${n}\\n\\nAvoid: ${s}`:n;if(c.length<=d)return c;if(n.length<=d)return n;const h="VISUAL REFERENCE MAP — STRICT ROLE AUTHORITY:",f=n.indexOf(h);let y=f>=0?n.slice(0,f).trim():n,k="";if(f>=0){const m=n.slice(f).split("\\n").map(v=>v.trim()).filter(Boolean),v=m.filter(v=>v===h||v.startsWith("Image ")||v.startsWith("Keep each image in its assigned role."));k=v.join("\\n")}const b=Math.max(0,d-(k?k.length+2:0));if(y.length>b){const m="\\n[Director prompt compacted to fit generation contract]\\n",v=Math.max(0,b-m.length),p=Math.floor(v*.72),g=v-p;let x=y.slice(0,p),q=y.slice(Math.max(0,y.length-g));const w=x.lastIndexOf("\\n");if(w>p*.55)x=x.slice(0,w);const z=q.indexOf("\\n");if(z>=0&&z<g*.45)q=q.slice(z+1);y=`${x.trimEnd()}${m}${q.trimStart()}`.slice(0,b).trimEnd()}const o=k?`${y}\\n\\n${k}`:y;return o.slice(0,d).trimEnd()}'''
+          count=text.count(old)
+          if count != 1:
+              raise SystemExit(f'Refusing patch: expected one old prompt helper, found {count}')
+          text=text.replace(old,new,1)
+          if text.count('tsFastifyDirectorPromptLimit=4000') != 1:
+              raise SystemExit('Prompt-limit marker missing or duplicated')
+          open(path,'w',encoding='utf-8').write(text)
+          PY
+
+          node --check "$tmp"
+          grep -Fq 'tsFastifyDirectorPromptLimit=4000' "$tmp"
+          grep -Fq 'Director prompt compacted to fit generation contract' "$tmp"
+          grep -Fq 'hL("/creators")' "$tmp"
+          grep -Fq 'Array.isArray(r.data.creators)' "$tmp"
+          if grep -Fq 'hL("/compat/creators")' "$tmp"; then exit 41; fi
+
+          chmod 644 "$tmp"
+          mv -f "$tmp" "$new"
+          python3 - "$index" "/$CURRENT" "/$NEW" <<'PY'
+          import sys
+          p,o,n=sys.argv[1:]
+          s=open(p,encoding='utf-8').read()
+          assert s.count(o)==1
+          assert s.count(n)==0
+          open(p,'w',encoding='utf-8').write(s.replace(o,n,1))
+          PY
+          grep -Fq "/$NEW" "$index"
+          test "$(grep -oF "/$NEW" "$index" | wc -l)" = 1
+          echo "DEPLOY_OK sha256=$(sha256sum "$new" | awk '{print $1}') backup=$backup"
+          REMOTE
+
+      - name: Verify public Genfix4 bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36'
+          curl -fsS -A "$ua" --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/index.html https://studio.myvitaworld.online/
+          grep -Fq "src=\"/$NEW_ASSET\"" /tmp/index.html
+          if grep -Fq "src=\"/$CURRENT_ASSET\"" /tmp/index.html; then exit 51; fi
+          curl -fsS -A "$ua" --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/genfix4.js "https://studio.myvitaworld.online/$NEW_ASSET"
+          node --check /tmp/genfix4.js
+          grep -Fq 'tsFastifyDirectorPromptLimit=4000' /tmp/genfix4.js
+          grep -Fq 'Director prompt compacted to fit generation contract' /tmp/genfix4.js
+          grep -Fq 'hL("/creators")' /tmp/genfix4.js
+          grep -Fq 'Array.isArray(r.data.creators)' /tmp/genfix4.js
+          if grep -Fq 'hL("/compat/creators")' /tmp/genfix4.js; then exit 52; fi
+          echo "PUBLIC_GENFIX4_OK sha256=$(sha256sum /tmp/genfix4.js | awk '{print $1}')"

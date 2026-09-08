@@ -1,4 +1,4 @@
-name: Temporary Generation Prompt Boundary Probe
+name: Temporary Generation Prompt Exact Boundary
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
       CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
 
     steps:
-      - name: Authenticate and probe prompt lengths with fake creator only
+      - name: Authenticate and pin exact prompt length with fake creator
         shell: bash
         run: |
           set -euo pipefail
@@ -35,22 +35,23 @@ jobs:
           base='https://studio.myvitaworld.online/api'
           fake='00000000-0000-4000-8000-000000000000'
 
-          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")
-          echo "owner_login_status=$code"
-          test "$code" = 200
-
+          test "$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")" = 200
           curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/auth/csrf" -o /tmp/csrf
           csrf=$(node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/csrf','utf8'));process.stdout.write(String(p.csrfToken||''));")
           test -n "$csrf"
 
-          for len in 1 2 10 100 500 1000 2000 3000 4000 4096 4097 5000 6000 8000 10000 12000 16000 20000 32000; do
+          for len in 4000 4001 4010 4020 4030 4040 4050 4060 4070 4080 4090 4094 4095 4096; do
             LEN="$len" FAKE="$fake" node - <<'NODE'
           const fs=require('fs');
           const len=Number(process.env.LEN);
-          const prompt='A'.repeat(len);
-          fs.writeFileSync('/tmp/payload.json',JSON.stringify({prompt,creatorId:process.env.FAKE,idempotencyKey:`prompt-boundary-${len}`}),{mode:0o600});
+          fs.writeFileSync('/tmp/payload.json',JSON.stringify({prompt:'A'.repeat(len),creatorId:process.env.FAKE,idempotencyKey:`prompt-exact-${len}`}),{mode:0o600});
           NODE
             code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -X POST --data-binary @/tmp/payload.json -o /tmp/body -w '%{http_code}' "$base/generation")
             msg=$(node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/body','utf8'));}catch{};process.stdout.write(String(p.error||p.message||''));")
-            printf 'prompt_len=%s status=%s class=%s\n' "$len" "$code" "$(case "$msg" in *'Creator not found'*) echo PROMPT_ACCEPTED ;; *'Prompt and creator are invalid'*) echo PROMPT_REJECTED ;; *) echo OTHER ;; esac)"
+            case "$msg" in
+              *'Creator not found'*) cls=ACCEPTED ;;
+              *'Prompt and creator are invalid'*) cls=REJECTED ;;
+              *) cls=OTHER ;;
+            esac
+            printf 'prompt_len=%s status=%s class=%s\n' "$len" "$code" "$cls"
           done

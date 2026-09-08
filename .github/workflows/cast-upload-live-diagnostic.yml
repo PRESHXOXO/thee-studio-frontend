@@ -1,4 +1,4 @@
-name: Temporary Cast Rehydration Diagnostic
+name: Temporary Credit Regression Diagnostic
 
 on:
   push:
@@ -31,7 +31,7 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect Fastify auth bootstrap wiring read-only
+      - name: Trace production credit failure read-only
         shell: bash
         run: |
           set -euo pipefail
@@ -45,21 +45,27 @@ jobs:
           )
           echo "ACTIVE_ASSET=$asset"
           node --check "$WEB/$asset"
+          echo "=== FRONTEND GENERATION CALL SITE ==="
           node - "$WEB/$asset" <<'NODE'
           const fs=require('fs'); const s=fs.readFileSync(process.argv[2],'utf8');
-          const terms=['__api','/auth/session','getSession','signInWithPassword','bootstrapCloudStore','Cloud sync is unavailable.','tsFastifyHydrateCreatorRoster','function JT(','JT('];
+          const terms=['/generation','Insufficient generation credits','reserveLocalCredits','billing_exempt','account_entitlements'];
           for(const term of terms){
             let from=0, hit=0;
-            while(true){const i=s.indexOf(term,from); if(i<0) break; hit++; console.log(`\n=== ${term} HIT ${hit} @ ${i} ===`); console.log(s.slice(Math.max(0,i-3400),Math.min(s.length,i+6200))); from=i+term.length; if(hit>=12) break;}
+            while(true){const i=s.indexOf(term,from); if(i<0) break; hit++; console.log(`\n=== ${term} HIT ${hit} @ ${i} ===`); console.log(s.slice(Math.max(0,i-1800),Math.min(s.length,i+3600))); from=i+term.length; if(hit>=8) break;}
             console.log(`COUNT ${term} ${hit}`);
           }
           NODE
-          echo "=== MOST RECENT USER TRAFFIC ==="
+          echo "=== RECENT GENERATION TRAFFIC 19:18-19:24 ET ==="
           for f in "$HOME"/access-logs/*studio* "$HOME"/access-logs/*ssl* "$HOME"/logs/*studio*; do
             test -f "$f" || continue
             case "$f" in
-              *.gz) zgrep -E '08/Sep/2026:19:(14|15|16).*"(GET|POST) /(assets/index-DhbQbUSO-rosterfix1-20260908.js|studio/characters|api/auth/(session|login|csrf)|api/creators)' "$f" 2>/dev/null | tail -n 120 || true ;;
-              *) grep -E '08/Sep/2026:19:(14|15|16).*"(GET|POST) /(assets/index-DhbQbUSO-rosterfix1-20260908.js|studio/characters|api/auth/(session|login|csrf)|api/creators)' "$f" 2>/dev/null | tail -n 120 || true ;;
+              *.gz) zgrep -E '08/Sep/2026:19:(18|19|20|21|22|23|24).*"(GET|POST|PATCH|PUT) /(assets/index-DhbQbUSO-rosterfix2-20260908.js|studio/|api/(auth/(session|login|csrf)|generation|generation/[^ ]+|creators|library))' "$f" 2>/dev/null | tail -n 220 || true ;;
+              *) grep -E '08/Sep/2026:19:(18|19|20|21|22|23|24).*"(GET|POST|PATCH|PUT) /(assets/index-DhbQbUSO-rosterfix2-20260908.js|studio/|api/(auth/(session|login|csrf)|generation|generation/[^ ]+|creators|library))' "$f" 2>/dev/null | tail -n 220 || true ;;
             esac
+          done
+          echo "=== SEARCH USER-READABLE LOGS FOR CREDIT ERRORS ==="
+          for d in "$HOME/logs" "$HOME"; do
+            test -d "$d" || continue
+            grep -RniE --exclude='*.gz' --exclude='*.js' --exclude='*.map' 'insufficient generation credits|billing_exempt|generation credits|credit' "$d" 2>/dev/null | tail -n 120 || true
           done
           REMOTE

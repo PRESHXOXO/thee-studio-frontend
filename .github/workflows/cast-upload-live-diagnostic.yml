@@ -1,49 +1,13 @@
-name: Temporary Fastify Credit Source Trace
+name: Archived Credit Diagnostics
 
 on:
-  push:
-    branches: [ops/cast-upload-debug-20260908]
-    paths: [.github/workflows/cast-upload-live-diagnostic.yml]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  inspect:
+  archived:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
     steps:
-      - name: Configure scoped SSH
-        env:
-          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
-          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-
-      - name: Trace credit phrase in current Fastify app source
-        shell: bash
-        run: |
-          set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          root=/opt/thee-studio-app/src
-          echo "source_dir_exists=$(test -d "$root" && echo yes || echo no)"
-          echo "generation_readable=$(test -r "$root/generation.js" && echo yes || echo no)"
-          for f in generation.js worker.js worker-main.js app.js server.js; do
-            p="$root/$f"
-            if test -r "$p"; then
-              echo "=== FILE $f ==="
-              grep -n -C 8 -E 'Insufficient generation credits|insufficient_quota|credit_balance_exhausted|project_spend_limit_exceeded|organization_spend_limit_exceeded|billing_exempt|credit|OpenAI|openai|last_error' "$p" | head -n 260 || true
-            fi
-          done
-          REMOTE
+      - run: echo "Credit diagnostics completed; workflow archived."

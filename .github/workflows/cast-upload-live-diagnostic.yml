@@ -31,7 +31,7 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect current bundle and recent creator traffic read-only
+      - name: Inspect rosterfix1 and latest authenticated traffic read-only
         shell: bash
         run: |
           set -euo pipefail
@@ -52,25 +52,19 @@ jobs:
 
           node - "$WEB/$asset" <<'NODE'
           const fs=require('fs'); const p=process.argv[2]; const s=fs.readFileSync(p,'utf8');
-          for (const term of ['Craft consistent, iconic identities for your AI creations.','ts_characters','Cloud creator link failed','Build with Thee Studio','/creators']) {
-            let from=0, hit=0;
-            while (true) {
-              const i=s.indexOf(term,from); if(i<0) break; hit++;
-              console.log(`\n=== ${term} HIT ${hit} @ ${i} ===`);
-              console.log(s.slice(Math.max(0,i-4200),Math.min(s.length,i+6200)));
-              from=i+term.length;
-              if(hit>=8) break;
-            }
-            console.log(`COUNT ${term} ${hit}`);
+          for (const term of ['tsFastifyHydrateCreatorRoster','t&&t.__api&&await tsFastifyHydrateCreatorRoster()','function uz()','function JT(','/api/assets/download/creator-references/']) {
+            const i=s.indexOf(term);
+            console.log(`\n=== ${term} @ ${i} ===`);
+            if(i>=0) console.log(s.slice(Math.max(0,i-2600),Math.min(s.length,i+7200)));
           }
           NODE
 
-          echo "=== RECENT CREATOR API TRAFFIC ==="
+          echo "=== LATEST STUDIO REQUESTS ==="
           for f in "$HOME"/access-logs/*studio* "$HOME"/access-logs/*ssl* "$HOME"/logs/*studio*; do
             test -f "$f" || continue
             case "$f" in
-              *.gz) zgrep -E '(/api/creators|/api/assets/upload).*HTTP/' "$f" 2>/dev/null | tail -n 80 || true ;;
-              *) grep -E '(/api/creators|/api/assets/upload).*HTTP/' "$f" 2>/dev/null | tail -n 80 || true ;;
+              *.gz) zgrep -E '(rosterfix1|/api/(auth|session|me|creators|assets/download/creator-references|studio_documents)|/studio/(characters|images)).*HTTP/' "$f" 2>/dev/null | tail -n 160 || true ;;
+              *) grep -E '(rosterfix1|/api/(auth|session|me|creators|assets/download/creator-references|studio_documents)|/studio/(characters|images)).*HTTP/' "$f" 2>/dev/null | tail -n 160 || true ;;
             esac
           done
           REMOTE

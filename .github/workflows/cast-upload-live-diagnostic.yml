@@ -1,4 +1,4 @@
-name: Temporary Cherry Creator ID Log Check
+name: Temporary Director Fastify Handoff Trace
 
 on:
   push:
@@ -17,6 +17,8 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+      ASSET: assets/index-DhbQbUSO-genfix3-20260908.js
 
     steps:
       - name: Configure scoped SSH
@@ -30,38 +32,24 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Classify creator IDs from recent reference-upload traffic
+      - name: Inspect every Fastify batch callsite read-only
         run: |
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "WEB='$CPANEL_DEPLOY_PATH' ASSET='$ASSET' bash -s" <<'REMOTE'
           set -euo pipefail
-          tmp=$(mktemp)
-          trap 'rm -f "$tmp"' EXIT
-
-          for f in "$HOME"/access-logs/* "$HOME"/logs/*; do
-            test -f "$f" || continue
-            case "$f" in
-              *.gz) zgrep -h 'creator-references.*creatorId=' "$f" 2>/dev/null >> "$tmp" || true ;;
-              *) test -r "$f" && grep -h 'creator-references.*creatorId=' "$f" 2>/dev/null >> "$tmp" || true ;;
-            esac
-          done
-
-          python3 - "$tmp" <<'PY'
-          import re,sys,urllib.parse,collections
-          text=open(sys.argv[1],encoding='utf-8',errors='ignore').read().splitlines()
-          ids=[]
-          for line in text:
-              m=re.search(r'creatorId=([^&\s"]+)',line)
-              if m:
-                  ids.append(urllib.parse.unquote(m.group(1)))
-          counts=collections.Counter(ids)
-          print('unique_creator_ids_in_reference_uploads='+str(len(counts)))
-          uuid_re=re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',re.I)
-          for i,(value,count) in enumerate(counts.most_common(20),1):
-              print(f'id_{i}_count={count}')
-              print(f'id_{i}_length={len(value)}')
-              print(f'id_{i}_is_uuid={bool(uuid_re.fullmatch(value))}')
-              print(f'id_{i}_is_numeric={value.isdigit()}')
-              if len(value)>=8:
-                  print(f'id_{i}_prefix_class={re.sub(r"[0-9]","N",re.sub(r"[A-Za-z]","A",value[:8]))}')
+          python3 - "$WEB/$ASSET" <<'PY'
+          import sys
+          text=open(sys.argv[1],encoding='utf-8',errors='ignore').read()
+          needles=['tsFastifyCreateDirectorBatch(', 'positivePrompt:', 'characterGenerate']
+          for needle in needles:
+              print(f'=== {needle} count={text.count(needle)} ===')
+              start=0
+              for i in range(20):
+                  pos=text.find(needle,start)
+                  if pos<0: break
+                  print(f'--- HIT {i+1} @ {pos} ---')
+                  print(text[max(0,pos-2200):min(len(text),pos+5200)])
+                  print('\n')
+                  start=pos+len(needle)
           PY
           REMOTE

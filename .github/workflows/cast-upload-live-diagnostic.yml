@@ -1,4 +1,4 @@
-name: Temporary Cast Brand Step Diagnostic
+name: Temporary Generation Gate Diagnostic
 
 on:
   push:
@@ -31,38 +31,62 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect live Brand step controls read-only
+      - name: Inspect live generation gate read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee cast-brand-controls-trace.txt
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee generation-gate-trace.txt
           set -euo pipefail
           asset_rel=$(grep -oE 'assets/index-[^" ]+\.js' "$WEB/index.html" | head -1)
           asset="$WEB/$asset_rel"
           echo "ACTIVE_ASSET=$asset_rel"
           echo "ACTIVE_SHA256=$(sha256sum "$asset" | awk '{print $1}')"
+
+          echo '=== MESSAGE / GENERATION CONTEXT ==='
           python3 - "$asset" <<'PY'
           import sys
           text=open(sys.argv[1],'r',encoding='utf-8',errors='ignore').read()
-          for key in ['className:"ts-select-trigger"','ts-select-trigger','function Ke(','function cd({label:t,active:r,onClick:n})','Signature Look / Clothing']:
+          keys=[
+            'This action needs local studio services and is unavailable in cloud. Coming soon.',
+            'LOCAL_ACTION_UNAVAILABLE',
+            'generateImage',
+            'generateImages',
+            '/generation',
+            '/generate',
+            '/api/jobs',
+            'createGeneration',
+            'Generate Images',
+            'Generate'
+          ]
+          for key in keys:
               start=0; shown=0
               while True:
                   pos=text.find(key,start)
-                  if pos<0 or shown>=8: break
+                  if pos<0 or shown>=12: break
                   shown+=1
                   print(f'\n--- {key!r} #{shown} @ {pos} ---')
-                  print(text[max(0,pos-2200):min(len(text),pos+5200)].replace('\n',' '))
+                  print(text[max(0,pos-3200):min(len(text),pos+7600)].replace('\n',' '))
                   start=pos+len(key)
           PY
+
+          echo '=== RECENT GENERATION REQUESTS ==='
+          for log in "$HOME"/access-logs/*studio.myvitaworld.online* "$HOME"/logs/studio.myvitaworld.online*; do
+            [ -e "$log" ] || continue
+            [ -r "$log" ] || continue
+            case "$log" in
+              *.gz) zgrep -Ei '/api/[^ ]*(generat|jobs|provider|runs)' "$log" 2>/dev/null | tail -100 || true ;;
+              *) grep -Ei '/api/[^ ]*(generat|jobs|provider|runs)' "$log" 2>/dev/null | tail -100 || true ;;
+            esac
+          done
           REMOTE
 
       - name: Upload trace
         uses: actions/upload-artifact@v4
         with:
-          name: cast-brand-controls-trace
-          path: cast-brand-controls-trace.txt
+          name: generation-gate-trace
+          path: generation-gate-trace.txt
           if-no-files-found: error
           retention-days: 1

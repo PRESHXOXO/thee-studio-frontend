@@ -1,4 +1,4 @@
-name: Temporary Cast Upload Live Diagnostic
+name: Temporary Cast Brand Step Diagnostic
 
 on:
   push:
@@ -31,52 +31,59 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Trace full-body upload and live handler read-only
+      - name: Inspect live Brand step and pill CSS read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee cast-fullbody-trace.txt
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee cast-brand-step-trace.txt
           set -euo pipefail
           asset_rel=$(grep -oE 'assets/index-[^" ]+\.js' "$WEB/index.html" | head -1)
           asset="$WEB/$asset_rel"
           echo "ACTIVE_ASSET=$asset_rel"
+          echo "ACTIVE_SHA256=$(sha256sum "$asset" | awk '{print $1}')"
 
-          echo '=== LIVE FULL-BODY UI/HANDLER CONTEXT ==='
+          echo '=== BRAND STEP JS CONTEXT ==='
           python3 - "$asset" <<'PY'
           import sys
           text=open(sys.argv[1],'r',encoding='utf-8',errors='ignore').read()
-          keys=['Upload Full-Body Reference','full_body', 'Qe=async', 'onUploadFullBody', 'Full body reference']
+          keys=['function cd({label:t,active:r,onClick:n})','function dd(t,r)','function RV({draft:t,onChange:r,onSave:n,saving:s})','Their World','Content Photography Style','Creator Niche']
           for key in keys:
-              start=0
-              count=0
-              while True:
-                  pos=text.find(key,start)
-                  if pos<0 or count>=6:
-                      break
-                  count+=1
-                  print(f'\n--- {key!r} #{count} @ {pos} ---')
-                  print(text[max(0,pos-1800):min(len(text),pos+3800)].replace('\n',' '))
-                  start=pos+len(key)
+              pos=text.find(key)
+              print(f'\n--- {key!r} @ {pos} ---')
+              if pos >= 0:
+                  print(text[max(0,pos-1200):min(len(text),pos+7600)].replace('\n',' '))
+          print('\n=== dd CALL COUNT ===')
+          print(text.count('dd('))
           PY
 
-          echo '=== RECENT FULL-BODY / CREATOR REFERENCE REQUESTS ==='
-          for log in "$HOME"/access-logs/*studio.myvitaworld.online* "$HOME"/logs/studio.myvitaworld.online*; do
-            [ -e "$log" ] || continue
-            [ -r "$log" ] || continue
-            case "$log" in
-              *.gz) zgrep -E '/api/(assets/upload|creators/.*/references|assets/download/creator-references)' "$log" 2>/dev/null | tail -120 || true ;;
-              *) grep -E '/api/(assets/upload|creators/.*/references|assets/download/creator-references)' "$log" 2>/dev/null | tail -120 || true ;;
-            esac
+          echo '=== CSS / POINTER EVENTS CONTEXT ==='
+          for css in "$WEB"/assets/*.css; do
+            [ -r "$css" ] || continue
+            echo "CSS_FILE=$(basename "$css")"
+            python3 - "$css" <<'PY'
+          import sys,re
+          text=open(sys.argv[1],'r',encoding='utf-8',errors='ignore').read()
+          for pat in ['.ts-pill','pointer-events','button:disabled','fieldset']:
+              start=0
+              shown=0
+              while True:
+                  pos=text.find(pat,start)
+                  if pos < 0 or shown >= 12: break
+                  shown += 1
+                  print(f'--- {pat} #{shown} @ {pos} ---')
+                  print(text[max(0,pos-500):min(len(text),pos+1200)].replace('\n',' '))
+                  start=pos+len(pat)
+          PY
           done
           REMOTE
 
       - name: Upload trace
         uses: actions/upload-artifact@v4
         with:
-          name: cast-fullbody-trace
-          path: cast-fullbody-trace.txt
+          name: cast-brand-step-trace
+          path: cast-brand-step-trace.txt
           if-no-files-found: error
           retention-days: 1

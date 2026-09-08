@@ -1,4 +1,4 @@
-name: Temporary Generation Validation Diagnostic
+name: Temporary Generation Contract Diagnostic
 
 on:
   push:
@@ -17,7 +17,6 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
 
     steps:
       - name: Configure scoped SSH
@@ -31,41 +30,46 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Trace production validation source read-only
+      - name: Inspect live generation route without privilege escalation
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee generation-validation-trace.txt
-          set -euo pipefail
-          asset_rel=$(grep -oE 'assets/index-[^" ]+\.js' "$WEB/index.html" | head -1)
-          asset="$WEB/$asset_rel"
-          echo "ACTIVE_ASSET=$asset_rel"
-          echo "ACTIVE_SHA256=$(sha256sum "$asset" | awk '{print $1}')"
-          python3 - "$asset" <<'PY'
-          import sys
-          text=open(sys.argv[1],'r',encoding='utf-8',errors='ignore').read()
-          needles=['failedPrompt','creator are invalid','creator is invalid','invalid.','tsFastifySubmitDirectorSlot','/generation']
+            "bash -s" <<'REMOTE' | tee generation-contract-trace.txt
+          set -u
+          echo "USER=$(id)"
+          echo "=== PATH ACCESS ==="
+          namei -l /opt/thee-studio-app/src/generation.js 2>&1 || true
+          echo "=== FILE READABILITY ==="
+          if test -r /opt/thee-studio-app/src/generation.js; then
+            echo GENERATION_JS_READABLE=yes
+            python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/opt/thee-studio-app/src/generation.js')
+          text=p.read_text(encoding='utf-8',errors='ignore')
+          needles=['failedPrompt','creator','creatorId','app.post','/api/generation','Insufficient generation credits','request.body']
           for needle in needles:
-              print(f'\n=== NEEDLE {needle!r} count={text.count(needle)} ===')
+              print(f'\n=== {needle!r} count={text.count(needle)} ===')
               start=0
-              for idx in range(8):
+              for i in range(12):
                   pos=text.find(needle,start)
                   if pos<0: break
-                  print(f'--- hit {idx+1} @ {pos} ---')
-                  print(text[max(0,pos-1800):min(len(text),pos+4200)].replace('\n',' '))
+                  print(f'--- hit {i+1} @ {pos} ---')
+                  print(text[max(0,pos-1800):min(len(text),pos+5000)])
                   start=pos+len(needle)
           PY
-          echo '\n=== HOME LOG CANDIDATES ==='
-          find "$HOME" -maxdepth 4 -type f \( -name '*.log' -o -name '*error*' -o -name '*access*' \) -mmin -180 2>/dev/null | head -80 || true
+          else
+            echo GENERATION_JS_READABLE=no
+            ls -ld /opt /opt/thee-studio-app /opt/thee-studio-app/src 2>&1 || true
+          fi
           REMOTE
 
       - name: Upload trace
         uses: actions/upload-artifact@v4
         with:
-          name: generation-validation-trace
-          path: generation-validation-trace.txt
+          name: generation-contract-trace
+          path: generation-contract-trace.txt
           if-no-files-found: error
           retention-days: 1

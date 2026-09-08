@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   hotfix:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
@@ -21,9 +21,9 @@ jobs:
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
       CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
       CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
-      EXPECTED_JS_SHA256: ec12361714834eb2416c43b7c7169247955ba966d5fa06a4149dbd347a873867
-      CURRENT_ASSET: assets/index-DhbQbUSO-castfix2-20260908.js
-      NEW_ASSET: assets/index-DhbQbUSO-castfix3-20260908.js
+      EXPECTED_JS_SHA256: f098c23778749a2373c7eeda8350d164bf664bf5ec093858465152116114237e
+      CURRENT_ASSET: assets/index-DhbQbUSO-castfix3-20260908.js
+      NEW_ASSET: assets/index-DhbQbUSO-castfix4-20260908.js
 
     steps:
       - name: Configure scoped SSH
@@ -42,7 +42,7 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Apply guarded private-preview URL repair
+      - name: Apply guarded optional-reference browser preview repair
         shell: bash
         run: |
           set -euo pipefail
@@ -85,17 +85,12 @@ jobs:
           path=sys.argv[1]
           text=open(path,'r',encoding='utf-8').read()
 
-          old='function Ll(t,r){return{id:t.id,label:r,referenceType:t.reference_type,storagePath:t.storage_path,originalFilename:t.original_filename,mimeType:t.mime_type,sizeBytes:t.size_bytes,width:t.width,height:t.height,url:t.signed_url,status:"approved"}}'
-          new='function Ll(t,r){const n=t.signed_url||t.signedUrl||t.url||t.preview_url||t.previewUrl||t.download_url||t.downloadUrl||(t.storage_path?`/api/assets/download/creator-references/${String(t.storage_path).split("/").map(encodeURIComponent).join("/")}`:null);return{id:t.id,label:r,referenceType:t.reference_type||t.referenceType,storagePath:t.storage_path||t.storagePath,originalFilename:t.original_filename||t.originalFilename,mimeType:t.mime_type||t.mimeType,sizeBytes:t.size_bytes||t.sizeBytes,width:t.width,height:t.height,url:n,status:"approved"}}'
-          if text.count(old) != 1:
-              raise SystemExit(f'Expected one creator-reference mapper, found {text.count(old)}')
+          old='i.jsx("img",{src:m.url,alt:m.label,style:{width:"100%",height:"100%",objectFit:"cover"}})'
+          new='i.jsx("img",{src:m.url,alt:m.label,onError:async e=>{const a=e.currentTarget;if(a.dataset.privatePreviewRetry)return;a.dataset.privatePreviewRetry="1";try{const o=await fetch(m.url,{credentials:"same-origin"});if(!o.ok)return;const p=new Blob([await o.arrayBuffer()],{type:m.mimeType||o.headers.get("content-type")||"image/jpeg"}),u=URL.createObjectURL(p),g=()=>URL.revokeObjectURL(u);a.onload=g,a.src=u}catch{}},style:{width:"100%",height:"100%",objectFit:"cover"}})'
+          count=text.count(old)
+          if count != 1:
+              raise SystemExit(f'Expected one Preserve References image renderer, found {count}')
           text=text.replace(old,new,1)
-
-          old_check='const dt=Ll(Oe,"Headshot"),N=Ar('
-          new_check='const dt=Ll(Oe,"Headshot");if(!dt.url)throw new Error("Headshot saved, but its private preview URL is unavailable.");const N=Ar('
-          if text.count(old_check) != 1:
-              raise SystemExit(f'Expected one Step 2 mapped-headshot assignment, found {text.count(old_check)}')
-          text=text.replace(old_check,new_check,1)
 
           open(path,'w',encoding='utf-8',newline='').write(text)
           PY
@@ -118,8 +113,8 @@ jobs:
           mv -f "$index.tmp" "$index"
 
           grep -Fq "$new_ref" "$index"
-          grep -Fq '/api/assets/download/creator-references/' "$new"
-          grep -Fq 'private preview URL is unavailable' "$new"
+          grep -Fq 'privatePreviewRetry' "$new"
+          grep -Fq 'credentials:"same-origin"' "$new"
           if grep -Fq "$current_ref\"" "$index"; then
             echo 'Old Cast bundle is still active.' >&2
             exit 33
@@ -128,7 +123,7 @@ jobs:
           printf 'backup=%s\nnew_asset=%s\nnew_sha256=%s\n' "$backup" "$NEW_ASSET" "$(sha256sum "$new" | awk '{print $1}')"
           REMOTE
 
-      - name: Verify disk public HTTPS and preview route
+      - name: Verify disk public HTTPS and private route contract
         shell: bash
         run: |
           set -euo pipefail
@@ -142,8 +137,8 @@ jobs:
           test -s "$asset" && test -s "$index"
           grep -Fq "src=\"/$NEW_ASSET\"" "$index"
           node --check "$asset"
-          grep -Fq '/api/assets/download/creator-references/' "$asset"
-          grep -Fq 'private preview URL is unavailable' "$asset"
+          grep -Fq 'privatePreviewRetry' "$asset"
+          grep -Fq 'credentials:"same-origin"' "$asset"
           code=$(curl -sS -o /dev/null -w '%{http_code}' 'http://127.0.0.1:4310/api/assets/download/creator-references/test.png')
           test "$code" = 401
           printf '%s\n' "$(sha256sum "$asset" | awk '{print $1}')"
@@ -165,5 +160,5 @@ jobs:
           public_sha=$(sha256sum /tmp/thee-cast-preview-fix.js | awk '{print $1}')
           test "$public_sha" = "$expected_new_sha"
           node --check /tmp/thee-cast-preview-fix.js
-          grep -Fq '/api/assets/download/creator-references/' /tmp/thee-cast-preview-fix.js
-          echo "CAST_PREVIEW_HOTFIX_OK asset=$NEW_ASSET sha256=$public_sha"
+          grep -Fq 'privatePreviewRetry' /tmp/thee-cast-preview-fix.js
+          echo "CAST_OPTIONAL_PREVIEW_HOTFIX_OK asset=$NEW_ASSET sha256=$public_sha"

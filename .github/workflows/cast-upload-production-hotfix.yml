@@ -1,4 +1,4 @@
-name: Temporary Production Cast Step 2 Hotfix
+name: Temporary Production Cast Preview Hotfix
 
 on:
   push:
@@ -21,9 +21,9 @@ jobs:
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
       CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
       CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
-      EXPECTED_JS_SHA256: 83e2b1a4a49309d5442081578338d50f85694f127a00ef88b000bee801ede0bc
-      CURRENT_ASSET: assets/index-DhbQbUSO-castfix-20260908.js
-      NEW_ASSET: assets/index-DhbQbUSO-castfix2-20260908.js
+      EXPECTED_JS_SHA256: ec12361714834eb2416c43b7c7169247955ba966d5fa06a4149dbd347a873867
+      CURRENT_ASSET: assets/index-DhbQbUSO-castfix2-20260908.js
+      NEW_ASSET: assets/index-DhbQbUSO-castfix3-20260908.js
 
     steps:
       - name: Configure scoped SSH
@@ -42,7 +42,7 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Apply guarded Step 2 success-state repair
+      - name: Apply guarded private-preview URL repair
         shell: bash
         run: |
           set -euo pipefail
@@ -71,7 +71,7 @@ jobs:
           test "$count" = 1 || { echo "Refusing hotfix: expected one active bundle reference, found $count"; exit 32; }
 
           stamp=$(date -u +%Y%m%dT%H%M%SZ)
-          backup="$BACKUP_ROOT/cast-step2-hotfix-$stamp"
+          backup="$BACKUP_ROOT/cast-preview-hotfix-$stamp"
           mkdir -p "$backup/assets"
           cp -p "$index" "$backup/index.html"
           cp -p "$current" "$backup/$CURRENT_ASSET"
@@ -85,18 +85,18 @@ jobs:
           path=sys.argv[1]
           text=open(path,'r',encoding='utf-8').read()
 
-          old_restore='s=r.references.find(h=>h.reference_type==="headshot"&&h.is_canonical),d='
-          new_restore='s=r.references.find(h=>h.reference_type==="headshot"&&h.is_canonical)||r.references.find(h=>h.reference_type==="headshot"),d='
-          if text.count(old_restore) != 1:
-              raise SystemExit(f'Expected one headshot restore selector, found {text.count(old_restore)}')
+          old='function Ll(t,r){return{id:t.id,label:r,referenceType:t.reference_type,storagePath:t.storage_path,originalFilename:t.original_filename,mimeType:t.mime_type,sizeBytes:t.size_bytes,width:t.width,height:t.height,url:t.signed_url,status:"approved"}}'
+          new='function Ll(t,r){const n=t.signed_url||t.signedUrl||t.url||t.preview_url||t.previewUrl||t.download_url||t.downloadUrl||(t.storage_path?`/api/assets/download/creator-references/${String(t.storage_path).split("/").map(encodeURIComponent).join("/")}`:null);return{id:t.id,label:r,referenceType:t.reference_type||t.referenceType,storagePath:t.storage_path||t.storagePath,originalFilename:t.original_filename||t.originalFilename,mimeType:t.mime_type||t.mimeType,sizeBytes:t.size_bytes||t.sizeBytes,width:t.width,height:t.height,url:n,status:"approved"}}'
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one creator-reference mapper, found {text.count(old)}')
+          text=text.replace(old,new,1)
 
-          old_handler='He=async be=>{if(!T.current){T.current=!0,G(!0),$("");try{const ce=await ne(),Fe=await f.uploadReferenceAsset(ce.cloudCreatorId,"headshot",be),Oe=Ll(Fe,"Headshot"),dt=Ar({...ce,status:Pr.FACE_APPROVED,identityReferences:{...ce.identityReferences,images:[Oe,...ce.identityReferences.images.filter(Ue=>Ue.referenceType==="additional")],primaryReference:0}});await me(dt,"draft")}catch(ce){$(ce.message||"Headshot upload failed.")}finally{T.current=!1,G(!1)}}}'
-          new_handler='He=async be=>{if(!T.current){T.current=!0,G(!0),$("");try{const ce=await ne();await f.uploadReferenceAsset(ce.cloudCreatorId,"headshot",be);const Fe=await f.listReferenceAssets(ce.cloudCreatorId),Oe=Fe.find(Ue=>Ue.reference_type==="headshot"&&Ue.is_canonical)||Fe.find(Ue=>Ue.reference_type==="headshot");if(!Oe)throw new Error("Headshot saved, but it could not be loaded.");const dt=Ll(Oe,"Headshot"),N=Ar({...ce,status:Pr.FACE_APPROVED,identityReferences:{...ce.identityReferences,images:[dt,...Fe.filter(Ue=>Ue.reference_type==="additional").map((Ue,ae)=>Ll(Ue,`Reference ${ae+1}`))],primaryReference:0}});m(N)}catch(ce){$(ce.message||"Headshot upload failed.")}finally{T.current=!1,G(!1)}}}'
-          if text.count(old_handler) != 1:
-              raise SystemExit(f'Expected one Step 2 headshot handler, found {text.count(old_handler)}')
+          old_check='const dt=Ll(Oe,"Headshot"),N=Ar('
+          new_check='const dt=Ll(Oe,"Headshot");if(!dt.url)throw new Error("Headshot saved, but its private preview URL is unavailable.");const N=Ar('
+          if text.count(old_check) != 1:
+              raise SystemExit(f'Expected one Step 2 mapped-headshot assignment, found {text.count(old_check)}')
+          text=text.replace(old_check,new_check,1)
 
-          text=text.replace(old_restore,new_restore,1)
-          text=text.replace(old_handler,new_handler,1)
           open(path,'w',encoding='utf-8',newline='').write(text)
           PY
 
@@ -118,17 +118,17 @@ jobs:
           mv -f "$index.tmp" "$index"
 
           grep -Fq "$new_ref" "$index"
-          grep -Fq 'await f.listReferenceAssets(ce.cloudCreatorId)' "$new"
-          grep -Fq 'headshot"&&h.is_canonical)||r.references.find' "$new"
+          grep -Fq '/api/assets/download/creator-references/' "$new"
+          grep -Fq 'private preview URL is unavailable' "$new"
           if grep -Fq "$current_ref\"" "$index"; then
-            echo 'Old Step 2 bundle is still active.' >&2
+            echo 'Old Cast bundle is still active.' >&2
             exit 33
           fi
 
           printf 'backup=%s\nnew_asset=%s\nnew_sha256=%s\n' "$backup" "$NEW_ASSET" "$(sha256sum "$new" | awk '{print $1}')"
           REMOTE
 
-      - name: Verify disk and public HTTPS
+      - name: Verify disk public HTTPS and preview route
         shell: bash
         run: |
           set -euo pipefail
@@ -142,8 +142,10 @@ jobs:
           test -s "$asset" && test -s "$index"
           grep -Fq "src=\"/$NEW_ASSET\"" "$index"
           node --check "$asset"
-          grep -Fq 'await f.listReferenceAssets(ce.cloudCreatorId)' "$asset"
-          grep -Fq 'headshot"&&h.is_canonical)||r.references.find' "$asset"
+          grep -Fq '/api/assets/download/creator-references/' "$asset"
+          grep -Fq 'private preview URL is unavailable' "$asset"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' 'http://127.0.0.1:4310/api/assets/download/creator-references/test.png')
+          test "$code" = 401
           printf '%s\n' "$(sha256sum "$asset" | awk '{print $1}')"
           REMOTE
           )
@@ -158,11 +160,10 @@ jobs:
 
           curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
             --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
-            -o /tmp/thee-step2-fix.js \
+            -o /tmp/thee-cast-preview-fix.js \
             "https://studio.myvitaworld.online/$NEW_ASSET"
-          public_sha=$(sha256sum /tmp/thee-step2-fix.js | awk '{print $1}')
+          public_sha=$(sha256sum /tmp/thee-cast-preview-fix.js | awk '{print $1}')
           test "$public_sha" = "$expected_new_sha"
-          node --check /tmp/thee-step2-fix.js
-          grep -Fq 'await f.listReferenceAssets(ce.cloudCreatorId)' /tmp/thee-step2-fix.js
-          grep -Fq 'headshot"&&h.is_canonical)||r.references.find' /tmp/thee-step2-fix.js
-          echo "STEP2_HOTFIX_OK asset=$NEW_ASSET sha256=$public_sha"
+          node --check /tmp/thee-cast-preview-fix.js
+          grep -Fq '/api/assets/download/creator-references/' /tmp/thee-cast-preview-fix.js
+          echo "CAST_PREVIEW_HOTFIX_OK asset=$NEW_ASSET sha256=$public_sha"

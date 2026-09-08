@@ -31,7 +31,7 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect rosterfix1 and latest authenticated traffic read-only
+      - name: Inspect Fastify auth bootstrap wiring read-only
         shell: bash
         run: |
           set -euo pipefail
@@ -40,31 +40,26 @@ jobs:
           set -euo pipefail
           asset=$(python3 - "$WEB/index.html" <<'PY'
           import re,sys
-          s=open(sys.argv[1],encoding='utf-8').read()
-          m=re.search(r'src="/([^"]+\.js)"',s)
-          print(m.group(1) if m else '')
+          s=open(sys.argv[1],encoding='utf-8').read(); m=re.search(r'src="/([^"]+\.js)"',s); print(m.group(1) if m else '')
           PY
           )
           echo "ACTIVE_ASSET=$asset"
-          test -n "$asset" && test -r "$WEB/$asset"
-          echo "ACTIVE_SHA=$(sha256sum "$WEB/$asset" | awk '{print $1}')"
           node --check "$WEB/$asset"
-
           node - "$WEB/$asset" <<'NODE'
-          const fs=require('fs'); const p=process.argv[2]; const s=fs.readFileSync(p,'utf8');
-          for (const term of ['tsFastifyHydrateCreatorRoster','t&&t.__api&&await tsFastifyHydrateCreatorRoster()','function uz()','function JT(','/api/assets/download/creator-references/']) {
-            const i=s.indexOf(term);
-            console.log(`\n=== ${term} @ ${i} ===`);
-            if(i>=0) console.log(s.slice(Math.max(0,i-2600),Math.min(s.length,i+7200)));
+          const fs=require('fs'); const s=fs.readFileSync(process.argv[2],'utf8');
+          const terms=['__api','/auth/session','getSession','signInWithPassword','bootstrapCloudStore','Cloud sync is unavailable.','tsFastifyHydrateCreatorRoster','function JT(','JT('];
+          for(const term of terms){
+            let from=0, hit=0;
+            while(true){const i=s.indexOf(term,from); if(i<0) break; hit++; console.log(`\n=== ${term} HIT ${hit} @ ${i} ===`); console.log(s.slice(Math.max(0,i-3400),Math.min(s.length,i+6200))); from=i+term.length; if(hit>=12) break;}
+            console.log(`COUNT ${term} ${hit}`);
           }
           NODE
-
-          echo "=== LATEST STUDIO REQUESTS ==="
+          echo "=== MOST RECENT USER TRAFFIC ==="
           for f in "$HOME"/access-logs/*studio* "$HOME"/access-logs/*ssl* "$HOME"/logs/*studio*; do
             test -f "$f" || continue
             case "$f" in
-              *.gz) zgrep -E '(rosterfix1|/api/(auth|session|me|creators|assets/download/creator-references|studio_documents)|/studio/(characters|images)).*HTTP/' "$f" 2>/dev/null | tail -n 160 || true ;;
-              *) grep -E '(rosterfix1|/api/(auth|session|me|creators|assets/download/creator-references|studio_documents)|/studio/(characters|images)).*HTTP/' "$f" 2>/dev/null | tail -n 160 || true ;;
+              *.gz) zgrep -E '08/Sep/2026:19:(14|15|16).*"(GET|POST) /(assets/index-DhbQbUSO-rosterfix1-20260908.js|studio/characters|api/auth/(session|login|csrf)|api/creators)' "$f" 2>/dev/null | tail -n 120 || true ;;
+              *) grep -E '08/Sep/2026:19:(14|15|16).*"(GET|POST) /(assets/index-DhbQbUSO-rosterfix1-20260908.js|studio/characters|api/auth/(session|login|csrf)|api/creators)' "$f" 2>/dev/null | tail -n 120 || true ;;
             esac
           done
           REMOTE

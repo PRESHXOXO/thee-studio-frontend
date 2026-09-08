@@ -1,13 +1,75 @@
-name: Archived Genfix4 Prompt Contract Fix
+name: Temporary Owner Credit Diagnostic
 
 on:
+  push:
+    branches: [ops/cast-upload-debug-20260908]
+    paths: [.github/workflows/cast-upload-live-diagnostic.yml]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  archived:
+  inspect:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production
+    env:
+      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
+      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
     steps:
-      - run: echo "Genfix4 prompt-contract fix is deployed and this one-time workflow is archived."
+      - name: Inspect authenticated owner account and recent generation state
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs=require('fs');
+          const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g,'').trim().toLowerCase();
+          const password=String(process.env.CUTOVER_OWNER_PASSWORD||'');
+          if(!email||!password) process.exit(2);
+          fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});
+          NODE
+          trap 'rm -f /tmp/login.json /tmp/jar /tmp/body /tmp/probe.json' EXIT
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          base='https://studio.myvitaworld.online/api'
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /tmp/body -w '%{http_code}' "$base/auth/login")
+          echo "login_status=$code"
+          test "$code" = 200
+
+          for path in auth/me me account credits billing entitlements jobs generation; do
+            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base/$path")
+            PATH_NAME="$path" STATUS="$code" node - <<'NODE'
+          const fs=require('fs');
+          const path=process.env.PATH_NAME, status=process.env.STATUS;
+          let body=''; try{body=fs.readFileSync('/tmp/body','utf8')}catch{}
+          let p=null; try{p=JSON.parse(body)}catch{}
+          const out={path,status};
+          if(p && typeof p==='object'){
+            const source=p.user||p.account||p.profile||p;
+            for(const k of ['id','email','role','is_admin','admin','billing_exempt','credits','credit_balance','balance','plan','state','status']) if(source?.[k]!==undefined) out[k]=source[k];
+            const list=Array.isArray(p)?p:Array.isArray(p.jobs)?p.jobs:Array.isArray(p.generations)?p.generations:Array.isArray(p.items)?p.items:null;
+            if(list){
+              out.count=list.length;
+              out.recent=list.slice(0,5).map(x=>({id:x.id||x.job_id||null,state:x.state||x.status||null,error:x.error||x.last_error||x.failure_message||x.message||null,created_at:x.created_at||x.createdAt||null}));
+            }
+            if(!list) out.keys=Object.keys(p).slice(0,30);
+          }else out.body=body.slice(0,300);
+          console.log(JSON.stringify(out));
+          NODE
+          done
+
+          # Non-provider probe: valid-length prompt + impossible creator id. If billing exemption is active,
+          # request should get past the credit gate and fail on creator lookup instead of 402 credits.
+          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/auth/csrf" -o /tmp/body
+          csrf=$(node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/body','utf8'));process.stdout.write(String(p.csrfToken||''));")
+          test -n "$csrf"
+          node - <<'NODE'
+          const fs=require('fs');
+          fs.writeFileSync('/tmp/probe.json',JSON.stringify({prompt:'Owner credit gate diagnostic — do not generate',creatorId:'00000000-0000-4000-8000-000000000000',idempotencyKey:`owner-credit-diag-${Date.now()}`}),{mode:0o600});
+          NODE
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -X POST --data-binary @/tmp/probe.json -o /tmp/body -w '%{http_code}' "$base/generation")
+          STATUS="$code" node - <<'NODE'
+          const fs=require('fs'); let body=''; try{body=fs.readFileSync('/tmp/body','utf8')}catch{}
+          let p={}; try{p=JSON.parse(body)}catch{}
+          console.log(JSON.stringify({credit_gate_probe_status:process.env.STATUS,error:p.error||p.message||body.slice(0,200)}));
+          NODE

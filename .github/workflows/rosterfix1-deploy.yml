@@ -1,102 +1,13 @@
-name: One-Time Cast Roster Rehydration Fix
+name: Archived Cast Roster Rehydration Fix
 
 on:
-  push:
-    branches: [ops/cast-upload-debug-20260908]
-    paths: [.github/workflows/rosterfix1-deploy.yml]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  deploy:
+  archived:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
-      CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
-      EXPECTED_SHA: 500fda834430359300753abdbf7dd14d5381c38b85cf0648a6e18fab1299b1df
-      CURRENT_ASSET: assets/index-DhbQbUSO-genfix4-20260908.js
-      NEW_ASSET: assets/index-DhbQbUSO-rosterfix1-20260908.js
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure scoped SSH
-        env:
-          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
-        run: |
-          set -euo pipefail
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
-          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-
-      - name: Stage patch helper
-        run: |
-          scp -q -o BatchMode=yes -i ~/.ssh/thee_operator -P "$CPANEL_SSH_PORT" \
-            .ops/rosterfix1_patch.py \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST:.thee-rosterfix1-patch.py"
-
-      - name: Deploy guarded roster fix
-        shell: bash
-        run: |
-          set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' BACKUP_ROOT='$CPANEL_BACKUP_ROOT' EXPECTED='$EXPECTED_SHA' CURRENT='$CURRENT_ASSET' NEW='$NEW_ASSET' bash -s" <<'REMOTE'
-          set -euo pipefail
-          current="$WEB/$CURRENT"; new="$WEB/$NEW"; index="$WEB/index.html"; tmp="${new}.tmp.js"
-          test -s "$current" && test -s "$index"
-          actual=$(sha256sum "$current" | awk '{print $1}')
-          test "$actual" = "$EXPECTED" || { echo "Refusing deploy: active bundle changed ($actual)"; exit 31; }
-          test "$(grep -oF "/$CURRENT" "$index" | wc -l)" = 1 || { echo "Refusing deploy: current asset not uniquely active"; exit 32; }
-          test ! -e "$new"
-
-          backup="$BACKUP_ROOT/cast-roster-rehydration-$(date -u +%Y%m%dT%H%M%SZ)"
-          mkdir -p "$backup/assets"
-          cp -p "$index" "$backup/index.html"
-          cp -p "$current" "$backup/$CURRENT"
-          printf '%s  %s\n' "$actual" "$CURRENT" > "$backup/SHA256SUMS"
-
-          cp "$current" "$tmp"
-          python3 "$HOME/.thee-rosterfix1-patch.py" "$tmp"
-          node --check "$tmp"
-          grep -Fq 'tsFastifyHydrateCreatorRoster' "$tmp"
-          grep -Fq 't&&t.__api&&await tsFastifyHydrateCreatorRoster()' "$tmp"
-          grep -Fq 'hL("/creators")' "$tmp"
-          grep -Fq '/api/assets/download/creator-references/' "$tmp"
-          grep -Fq 'tsFastifyDirectorPromptLimit=4000' "$tmp"
-          chmod 644 "$tmp"
-          mv -f "$tmp" "$new"
-
-          python3 - "$index" "/$CURRENT" "/$NEW" <<'PY'
-          import sys
-          p,o,n=sys.argv[1:]
-          s=open(p,encoding='utf-8').read()
-          if s.count(o)!=1 or s.count(n)!=0:
-              raise SystemExit('Unexpected active asset references')
-          open(p,'w',encoding='utf-8').write(s.replace(o,n,1))
-          PY
-          rm -f "$HOME/.thee-rosterfix1-patch.py"
-          grep -Fq "/$NEW" "$index"
-          echo "ROSTERFIX_DEPLOY_OK sha256=$(sha256sum "$new" | awk '{print $1}') backup=$backup"
-          REMOTE
-
-      - name: Verify public production bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36'
-          curl -fsS -A "$ua" --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/index.html https://studio.myvitaworld.online/
-          grep -Fq "src=\"/$NEW_ASSET\"" /tmp/index.html
-          curl -fsS -A "$ua" --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/rosterfix1.js "https://studio.myvitaworld.online/$NEW_ASSET"
-          node --check /tmp/rosterfix1.js
-          grep -Fq 'tsFastifyHydrateCreatorRoster' /tmp/rosterfix1.js
-          grep -Fq 't&&t.__api&&await tsFastifyHydrateCreatorRoster()' /tmp/rosterfix1.js
-          grep -Fq 'tsFastifyDirectorPromptLimit=4000' /tmp/rosterfix1.js
-          echo "PUBLIC_ROSTERFIX_OK sha256=$(sha256sum /tmp/rosterfix1.js | awk '{print $1}')"
+      - run: echo "Cast roster rehydration fix is deployed and this one-time workflow is archived."

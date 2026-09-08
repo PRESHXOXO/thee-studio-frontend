@@ -17,7 +17,6 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
 
     steps:
       - name: Configure scoped SSH
@@ -31,53 +30,26 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Compact credit trace read-only
+      - name: Inspect readable generation source read-only
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          asset=$(python3 - "$WEB/index.html" <<'PY'
-          import re,sys
-          s=open(sys.argv[1],encoding='utf-8').read(); m=re.search(r'src="/([^"]+\.js)"',s); print(m.group(1) if m else '')
-          PY
-          )
-          echo "ACTIVE_ASSET=$asset"
-          node --check "$WEB/$asset"
-          node - "$WEB/$asset" <<'NODE'
-          const fs=require('fs'); const s=fs.readFileSync(process.argv[2],'utf8');
-          for (const term of ['Insufficient generation credits','reserveLocalCredits','billing_exempt','account_entitlements']) {
-            let count=0, pos=0; while((pos=s.indexOf(term,pos))>=0){count++;pos+=term.length}
-            console.log(`${term.replace(/[^A-Za-z0-9]+/g,'_').toUpperCase()}_COUNT=${count}`)
-          }
-          NODE
-          tmp=$(mktemp)
-          for f in "$HOME"/access-logs/*studio* "$HOME"/access-logs/*ssl* "$HOME"/logs/*studio*; do
-            test -f "$f" || continue
-            case "$f" in
-              *.gz) zgrep -E '08/Sep/2026:19:(1[8-9]|2[0-9]|3[0-9]).*"(GET|POST|PATCH|PUT) /api/(generation|generation/[^ ]+|jobs|jobs/[^ ]+|auth/session)' "$f" 2>/dev/null >> "$tmp" || true ;;
-              *) grep -E '08/Sep/2026:19:(1[8-9]|2[0-9]|3[0-9]).*"(GET|POST|PATCH|PUT) /api/(generation|generation/[^ ]+|jobs|jobs/[^ ]+|auth/session)' "$f" 2>/dev/null >> "$tmp" || true ;;
-            esac
+          echo "USER=$(id -un)"
+          for p in /opt/thee-studio-app/src/generation.js /opt/thee-studio-app/src/worker.js /opt/thee-studio-app/src/worker-main.js /opt/thee-studio-app/tests/owner-credit.test.js; do
+            if test -r "$p"; then
+              echo "READABLE $p"
+              if [[ "$p" == */generation.js ]]; then
+                echo "=== GENERATION CREDIT EXCERPTS ==="
+                grep -nE -C 8 'billing_exempt|Insufficient generation credits|account_entitlements|owner|admin|credit' "$p" | head -n 220 || true
+              fi
+            else
+              echo "NOT_READABLE $p"
+            fi
           done
-          echo "=== GENERATION/JOBS TRAFFIC ==="
-          sort -u "$tmp" | tail -n 80
-          echo "=== STATUS SUMMARY ==="
-          python3 - "$tmp" <<'PY'
-          import re,sys,collections
-          c=collections.Counter()
-          for line in open(sys.argv[1],errors='ignore'):
-              m=re.search(r'"(GET|POST|PATCH|PUT) (/api/(?:generation|jobs)[^ ]*) HTTP/[^\"]+" (\d{3})',line)
-              if m:c[(m.group(1),m.group(2),m.group(3))]+=1
-          for k,v in sorted(c.items()): print('STATUS',*k,'COUNT',v)
-          PY
-          echo "=== CREDIT ERROR LOG LINES ==="
-          found=0
-          for d in "$HOME/logs" "$HOME"; do
-            test -d "$d" || continue
-            hits=$(grep -RniE --exclude='*.gz' --exclude='*.js' --exclude='*.map' --exclude='*.yml' 'insufficient generation credits' "$d" 2>/dev/null | tail -n 20 || true)
-            if test -n "$hits"; then printf '%s\n' "$hits"; found=1; fi
-          done
-          echo "CREDIT_ERROR_LOG_FOUND=$found"
-          rm -f "$tmp"
+          echo "=== PATH PERMISSIONS ==="
+          namei -l /opt/thee-studio-app/src/generation.js 2>/dev/null || true
+          echo "=== HOME CANDIDATES ==="
+          find "$HOME" -maxdepth 5 -type f \( -name generation.js -o -name owner-credit.test.js \) -print 2>/dev/null | head -n 40
           REMOTE

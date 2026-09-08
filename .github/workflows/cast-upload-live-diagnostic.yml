@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   inspect:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
@@ -31,49 +31,43 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Verify private reference preview route contract read-only
+      - name: Trace recent creator-reference preview requests read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee cast-preview-route-trace.txt
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee cast-preview-request-trace.txt
           set -euo pipefail
-          base=http://127.0.0.1:4310
+          echo "HOME=$HOME"
           asset_rel=$(grep -oE 'assets/index-[^" ]+\.js' "$WEB/index.html" | head -1)
           echo "ACTIVE_ASSET=$asset_rel"
-          echo '=== unauthenticated preview-route probes ==='
-          for path in \
-            '/api/assets/download/creator-references/test.png' \
-            '/api/assets/download/creator-references/foo/bar/test.png' \
-            '/api/assets/creator-references/foo/bar/test.png' \
-            '/api/references/test/download' \
-            '/api/assets/download/test'; do
-            tmp=$(mktemp)
-            code=$(curl -sS --max-time 5 -o "$tmp" -w '%{http_code}' "$base$path" || true)
-            body=$(head -c 300 "$tmp" | tr '\n' ' ')
-            rm -f "$tmp"
-            printf 'GET %s -> %s | %s\n' "$path" "$code" "$body"
-          done
-
-          echo '=== frontend API storage shim ==='
-          asset="$WEB/$asset_rel"
-          python3 - "$asset" <<'PY'
-          import sys
-          text=open(sys.argv[1],'r',encoding='utf-8',errors='ignore').read()
-          needle='createSignedUrl:async n=>({data:{signedUrl:`${vL}/assets/download/${r}/${n}`}'
-          print('storage_shim_exact_match=', needle in text)
-          pos=text.find('/assets/download/${r}/${n}')
-          if pos >= 0:
-              print(text[max(0,pos-500):min(len(text),pos+700)].replace('\n',' '))
-          PY
+          echo '=== candidate readable web logs ==='
+          find "$HOME" -maxdepth 4 \( -type f -o -type l \) \
+            \( -iname '*access*log*' -o -iname '*error*log*' -o -path '*/logs/*' \) \
+            -print 2>/dev/null | head -80
+          echo '=== recent private creator-reference requests ==='
+          found=0
+          while IFS= read -r log; do
+            [ -r "$log" ] || continue
+            matches=$(grep -F '/api/assets/download/creator-references/' "$log" 2>/dev/null | tail -40 || true)
+            if [ -n "$matches" ]; then
+              found=1
+              echo "--- $log ---"
+              printf '%s\n' "$matches"
+            fi
+          done < <(find "$HOME" -maxdepth 4 \( -type f -o -type l \) \
+            \( -iname '*access*log*' -o -iname '*error*log*' -o -path '*/logs/*' \) -print 2>/dev/null)
+          if [ "$found" = 0 ]; then
+            echo 'NO_MATCHING_REQUESTS_IN_READABLE_USER_LOGS'
+          fi
           REMOTE
 
-      - name: Upload route trace
+      - name: Upload trace
         uses: actions/upload-artifact@v4
         with:
-          name: cast-preview-route-trace
-          path: cast-preview-route-trace.txt
+          name: cast-preview-request-trace
+          path: cast-preview-request-trace.txt
           if-no-files-found: error
           retention-days: 1

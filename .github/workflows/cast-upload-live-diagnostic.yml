@@ -1,4 +1,4 @@
-name: Temporary Director Generation Function Diagnostic
+name: Temporary Generation Validation Diagnostic
 
 on:
   push:
@@ -31,14 +31,14 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect exact Director generation functions read-only
+      - name: Trace production validation source read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee director-generation-functions.txt
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee generation-validation-trace.txt
           set -euo pipefail
           asset_rel=$(grep -oE 'assets/index-[^" ]+\.js' "$WEB/index.html" | head -1)
           asset="$WEB/$asset_rel"
@@ -47,19 +47,25 @@ jobs:
           python3 - "$asset" <<'PY'
           import sys
           text=open(sys.argv[1],'r',encoding='utf-8',errors='ignore').read()
-          keys=['async function nO(', 'async function cO(', 'async function zz(', 'async function IL(', 'async function Tz(', 'async function iO(', 'function qr(']
-          for key in keys:
-              pos=text.find(key)
-              print(f'\n=== {key} @ {pos} ===')
-              if pos>=0:
-                  print(text[max(0,pos-1200):min(len(text),pos+15000)].replace('\n',' '))
+          needles=['failedPrompt','creator are invalid','creator is invalid','invalid.','tsFastifySubmitDirectorSlot','/generation']
+          for needle in needles:
+              print(f'\n=== NEEDLE {needle!r} count={text.count(needle)} ===')
+              start=0
+              for idx in range(8):
+                  pos=text.find(needle,start)
+                  if pos<0: break
+                  print(f'--- hit {idx+1} @ {pos} ---')
+                  print(text[max(0,pos-1800):min(len(text),pos+4200)].replace('\n',' '))
+                  start=pos+len(needle)
           PY
+          echo '\n=== HOME LOG CANDIDATES ==='
+          find "$HOME" -maxdepth 4 -type f \( -name '*.log' -o -name '*error*' -o -name '*access*' \) -mmin -180 2>/dev/null | head -80 || true
           REMOTE
 
       - name: Upload trace
         uses: actions/upload-artifact@v4
         with:
-          name: director-generation-functions
-          path: director-generation-functions.txt
+          name: generation-validation-trace
+          path: generation-validation-trace.txt
           if-no-files-found: error
           retention-days: 1

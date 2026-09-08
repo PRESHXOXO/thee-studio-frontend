@@ -36,11 +36,12 @@ jobs:
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
       - name: Inspect live Cast upload implementation read-only
+        shell: bash
         run: |
-          set -eu
+          set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' | tee cast-live-diagnostic.txt
           set -eu
           APP=/opt/thee-studio-app
           WEB=/home/brandingbybella/public_html/studio
@@ -53,16 +54,36 @@ jobs:
             "$(test -r "$WEB" && echo yes || echo no)" \
             "$(test -w "$WEB" && echo yes || echo no)"
 
-          echo '=== deployed frontend matches: exact runtime symbol/message ==='
-          if [ -d "$WEB" ]; then
-            grep -RniE --include='*.js' --include='*.html' \
-              'uploadReferenceAsset|This action needs local studio services|LOCAL_ACTION_UNAVAILABLE|reference-assets|reference_assets' \
-              "$WEB" 2>/dev/null | head -120 || true
-            echo '=== deployed index asset refs ==='
-            grep -oE 'assets/[^" ]+\.js' "$WEB/index.html" 2>/dev/null | head -20 || true
-          fi
+          echo '=== deployed index asset refs ==='
+          grep -oE 'assets/[^" ]+\.js' "$WEB/index.html" 2>/dev/null | head -20 || true
 
-          echo '=== unauthenticated API shape (status only) ==='
+          echo '=== bounded bundle contexts ==='
+          python3 - "$WEB" <<'PY'
+          import glob, os, sys
+          web = sys.argv[1]
+          keys = [
+              'uploadReferenceAsset', 'listReferenceAssets', 'removeReferenceAsset',
+              'This action needs local studio services', 'LOCAL_ACTION_UNAVAILABLE',
+              'reference-assets', 'reference_assets', '/api/creators', '/api/uploads'
+          ]
+          files = glob.glob(os.path.join(web, 'assets', '*.js'))
+          for path in sorted(files):
+              try:
+                  data = open(path, 'r', encoding='utf-8', errors='ignore').read()
+              except Exception:
+                  continue
+              hits = [(k, data.find(k)) for k in keys if data.find(k) >= 0]
+              if not hits:
+                  continue
+              print(f'FILE {os.path.basename(path)}')
+              for key, pos in hits:
+                  lo, hi = max(0, pos-600), min(len(data), pos+1400)
+                  snippet = data[lo:hi].replace('\n', ' ')
+                  print(f'--- KEY {key} @ {pos} ---')
+                  print(snippet)
+          PY
+
+          echo '=== unauthenticated API shape ==='
           base=http://127.0.0.1:4310
           uuid=00000000-0000-4000-8000-000000000000
           for path in \
@@ -72,12 +93,23 @@ jobs:
             "/api/reference-assets" \
             "/api/uploads"; do
             for method in GET POST DELETE; do
+              tmp=$(mktemp)
               if [ "$method" = POST ]; then
-                code=$(curl -sS --max-time 5 -X POST -H 'Content-Type: application/json' -d '{}' -o /dev/null -w '%{http_code}' "$base$path" || true)
+                code=$(curl -sS --max-time 5 -X POST -H 'Content-Type: application/json' -d '{}' -o "$tmp" -w '%{http_code}' "$base$path" || true)
               else
-                code=$(curl -sS --max-time 5 -X "$method" -o /dev/null -w '%{http_code}' "$base$path" || true)
+                code=$(curl -sS --max-time 5 -X "$method" -o "$tmp" -w '%{http_code}' "$base$path" || true)
               fi
-              printf '%s %s -> %s\n' "$method" "$path" "$code"
+              body=$(head -c 400 "$tmp" | tr '\n' ' ')
+              rm -f "$tmp"
+              printf '%s %s -> %s | %s\n' "$method" "$path" "$code" "$body"
             done
           done
           REMOTE
+
+      - name: Upload diagnostic artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cast-live-diagnostic
+          path: cast-live-diagnostic.txt
+          if-no-files-found: error
+          retention-days: 1

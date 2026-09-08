@@ -30,28 +30,41 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Trace the user's Step 2 request sequence read-only
+      - name: Trace newest Step 2 attempt read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' | tee cast-step2-trace.txt
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' | tee cast-step2-current-trace.txt
           set -eu
           LOG="$HOME/access-logs/studio.myvitaworld.online-ssl_log"
           test -r "$LOG"
-          echo '=== 16:34-16:37 Studio API traffic ==='
-          grep -a '08/Sep/2026:16:3[4-7]:' "$LOG" | grep -E ' /api/|/studio/images' | tail -160 || true
-          echo '=== current creator request chain ==='
-          grep -a 'fc86ee91-267f-4f9e-9d09-9903ab1ee309' "$LOG" | tail -120 || true
-          echo '=== creator routes around the three headshot uploads ==='
-          grep -aE '08/Sep/2026:16:35:|08/Sep/2026:16:36:' "$LOG" | grep -E '/api/creators/|/api/assets/upload|/api/auth/csrf' | tail -160 || true
+
+          echo '=== current server time ==='
+          date
+          echo '=== active frontend bundle in index ==='
+          grep -oE 'assets/index-[^" ]+\.js' "$HOME/public_html/studio/index.html" | head -5 || true
+
+          echo '=== browser traffic 16:44-16:55 ==='
+          grep -aE '08/Sep/2026:16:(4[4-9]|5[0-5]):' "$LOG" \
+            | grep -E 'studio/images|/assets/index-|/api/auth/|/api/creators/|/api/assets/upload|/api/references/' \
+            | tail -260 || true
+
+          echo '=== newest headshot uploads ==='
+          grep -a '/api/assets/upload' "$LOG" | grep 'referenceType=headshot' | tail -20 || true
+
+          echo '=== newest references reads ==='
+          grep -aE 'GET /api/creators/.+/references' "$LOG" | tail -30 || true
+
+          echo '=== newest creator writes ==='
+          grep -aE '(PATCH /api/creators/|PUT /api/creators/.+/identity)' "$LOG" | tail -40 || true
           REMOTE
 
       - name: Upload trace artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cast-step2-trace
-          path: cast-step2-trace.txt
+          name: cast-step2-current-trace
+          path: cast-step2-current-trace.txt
           if-no-files-found: error
           retention-days: 1

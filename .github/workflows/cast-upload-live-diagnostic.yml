@@ -1,4 +1,4 @@
-name: Temporary Genfix2 Verification
+name: Temporary Creator Route Probe
 
 on:
   push:
@@ -17,8 +17,6 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
-      ASSET: assets/index-DhbQbUSO-genfix2-20260908.js
 
     steps:
       - name: Configure scoped SSH
@@ -31,27 +29,24 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Verify disk bundle read-only
+      - name: Probe protected creator routes read-only
         run: |
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' ASSET='$ASSET' bash -s" <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          test -s "$WEB/$ASSET"
-          grep -Fq "src=\"/$ASSET\"" "$WEB/index.html"
-          node --check "$WEB/$ASSET"
-          grep -Fq 'tsFastifyResolveCreatorId' "$WEB/$ASSET"
-          grep -Fq '"/compat/creators"' "$WEB/$ASSET"
-          echo "DISK_OK sha256=$(sha256sum "$WEB/$ASSET" | awk '{print $1}')"
+          base='http://127.0.0.1:4310/api'
+          for path in \
+            '/compat/creators' \
+            '/creators' \
+            '/creator' \
+            '/cast' \
+            '/cast/creators' \
+            '/studio/creators' \
+            '/production/creators' \
+            '/compat/cast' \
+            '/compat/studio-creators'
+          do
+            code=$(curl -sS -o /tmp/route-body -w '%{http_code}' "$base$path" || true)
+            body=$(head -c 220 /tmp/route-body 2>/dev/null | tr '\n' ' ' || true)
+            printf '%-28s status=%s body=%s\n' "$path" "$code" "$body"
+          done
           REMOTE
-
-      - name: Verify public HTTPS as browser
-        run: |
-          set -euo pipefail
-          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36'
-          curl -fsS -A "$ua" --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/index.html https://studio.myvitaworld.online/
-          grep -Fq "src=\"/$ASSET\"" /tmp/index.html
-          curl -fsS -A "$ua" --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/genfix2.js "https://studio.myvitaworld.online/$ASSET"
-          node --check /tmp/genfix2.js
-          grep -Fq 'tsFastifyResolveCreatorId' /tmp/genfix2.js
-          grep -Fq '"/compat/creators"' /tmp/genfix2.js
-          echo "PUBLIC_OK sha256=$(sha256sum /tmp/genfix2.js | awk '{print $1}')"

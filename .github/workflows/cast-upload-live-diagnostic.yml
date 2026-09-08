@@ -53,29 +53,31 @@ jobs:
             "$(test -r "$WEB" && echo yes || echo no)" \
             "$(test -w "$WEB" && echo yes || echo no)"
 
-          echo '=== app summary ==='
-          if [ -d "$APP" ]; then
-            printf 'app_path=%s\n' "$APP"
-            if [ -d "$APP/.git" ]; then
-              git -C "$APP" status --short --branch || true
-              git -C "$APP" log -1 --oneline || true
-            fi
-            find "$APP/src" -maxdepth 2 -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \) -print 2>/dev/null | sort | head -120
-          fi
-
-          echo '=== backend matches: upload/reference/creator routes ==='
-          if [ -d "$APP/src" ]; then
-            grep -RniE --include='*.js' --include='*.mjs' --include='*.cjs' \
-              'uploadReferenceAsset|reference-assets|reference_assets|creator.*reference|references.*creator|multipart|request\.file|request\.parts' \
-              "$APP/src" 2>/dev/null | head -240 || true
-          fi
-
           echo '=== deployed frontend matches: exact runtime symbol/message ==='
           if [ -d "$WEB" ]; then
             grep -RniE --include='*.js' --include='*.html' \
               'uploadReferenceAsset|This action needs local studio services|LOCAL_ACTION_UNAVAILABLE|reference-assets|reference_assets' \
               "$WEB" 2>/dev/null | head -120 || true
             echo '=== deployed index asset refs ==='
-            grep -oE 'assets/[^"'"' ]+\.js' "$WEB/index.html" 2>/dev/null | head -20 || true
+            grep -oE 'assets/[^" ]+\.js' "$WEB/index.html" 2>/dev/null | head -20 || true
           fi
+
+          echo '=== unauthenticated API shape (status only) ==='
+          base=http://127.0.0.1:4310
+          uuid=00000000-0000-4000-8000-000000000000
+          for path in \
+            "/api/creators/$uuid/references" \
+            "/api/creators/$uuid/reference-assets" \
+            "/api/creators/$uuid/assets" \
+            "/api/reference-assets" \
+            "/api/uploads"; do
+            for method in GET POST DELETE; do
+              if [ "$method" = POST ]; then
+                code=$(curl -sS --max-time 5 -X POST -H 'Content-Type: application/json' -d '{}' -o /dev/null -w '%{http_code}' "$base$path" || true)
+              else
+                code=$(curl -sS --max-time 5 -X "$method" -o /dev/null -w '%{http_code}' "$base$path" || true)
+              fi
+              printf '%s %s -> %s\n' "$method" "$path" "$code"
+            done
+          done
           REMOTE

@@ -31,31 +31,32 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect live optional reference renderer read-only
+      - name: Inspect live private-image helper read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee cast-reference-renderer-trace.txt
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee cast-private-image-helper-trace.txt
           set -euo pipefail
           asset_rel=$(grep -oE 'assets/index-[^" ]+\.js' "$WEB/index.html" | head -1)
           asset="$WEB/$asset_rel"
           echo "ACTIVE_ASSET=$asset_rel"
           python3 - "$asset" <<'PY'
-          import sys
+          import re,sys
           text=open(sys.argv[1],'r',encoding='utf-8',errors='ignore').read()
-          for key in ['Preserve ', 'Add References', 'REFERENCE 1', 'Reference 1', 'images.map', 'objectFit:"cover"']:
+          keys=['function Sl','Sl=','async function Sl','Fe.map(ke=>Sl(ke.url)','readAsDataURL','arrayBuffer()','blob()']
+          for key in keys:
               start=0
               count=0
               while True:
                   pos=text.find(key,start)
-                  if pos<0 or count>=8:
+                  if pos<0 or count>=10:
                       break
                   count+=1
                   print(f'\n--- {key!r} #{count} @ {pos} ---')
-                  print(text[max(0,pos-1800):min(len(text),pos+4200)].replace('\n',' '))
+                  print(text[max(0,pos-1400):min(len(text),pos+2600)].replace('\n',' '))
                   start=pos+len(key)
           PY
           REMOTE
@@ -63,7 +64,7 @@ jobs:
       - name: Upload trace
         uses: actions/upload-artifact@v4
         with:
-          name: cast-reference-renderer-trace
-          path: cast-reference-renderer-trace.txt
+          name: cast-private-image-helper-trace
+          path: cast-private-image-helper-trace.txt
           if-no-files-found: error
           retention-days: 1

@@ -1,0 +1,81 @@
+name: Temporary Cast Upload Live Diagnostic
+
+on:
+  push:
+    branches:
+      - ops/cast-upload-debug-20260908
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+
+    steps:
+      - name: Configure scoped SSH
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          test -n "$CPANEL_SSH_HOST"
+          test -n "$CPANEL_SSH_PORT"
+          test -n "$CPANEL_SSH_USER"
+          test -n "$CPANEL_SSH_PRIVATE_KEY"
+          test -n "$CPANEL_SSH_KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+
+      - name: Inspect live Cast upload implementation read-only
+        run: |
+          set -eu
+          ssh -o BatchMode=yes -o ConnectTimeout=10 \
+            -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -eu
+          APP=/opt/thee-studio-app
+          WEB=/home/brandingbybella/public_html/studio
+
+          echo '=== identity / access ==='
+          id
+          printf 'app_readable=%s app_writable=%s web_readable=%s web_writable=%s\n' \
+            "$(test -r "$APP/src" && echo yes || echo no)" \
+            "$(test -w "$APP/src" && echo yes || echo no)" \
+            "$(test -r "$WEB" && echo yes || echo no)" \
+            "$(test -w "$WEB" && echo yes || echo no)"
+
+          echo '=== app summary ==='
+          if [ -d "$APP" ]; then
+            printf 'app_path=%s\n' "$APP"
+            if [ -d "$APP/.git" ]; then
+              git -C "$APP" status --short --branch || true
+              git -C "$APP" log -1 --oneline || true
+            fi
+            find "$APP/src" -maxdepth 2 -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \) -print 2>/dev/null | sort | head -120
+          fi
+
+          echo '=== backend matches: upload/reference/creator routes ==='
+          if [ -d "$APP/src" ]; then
+            grep -RniE --include='*.js' --include='*.mjs' --include='*.cjs' \
+              'uploadReferenceAsset|reference-assets|reference_assets|creator.*reference|references.*creator|multipart|request\.file|request\.parts' \
+              "$APP/src" 2>/dev/null | head -240 || true
+          fi
+
+          echo '=== deployed frontend matches: exact runtime symbol/message ==='
+          if [ -d "$WEB" ]; then
+            grep -RniE --include='*.js' --include='*.html' \
+              'uploadReferenceAsset|This action needs local studio services|LOCAL_ACTION_UNAVAILABLE|reference-assets|reference_assets' \
+              "$WEB" 2>/dev/null | head -120 || true
+            echo '=== deployed index asset refs ==='
+            grep -oE 'assets/[^"'"' ]+\.js' "$WEB/index.html" 2>/dev/null | head -20 || true
+          fi
+          REMOTE

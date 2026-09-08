@@ -17,6 +17,7 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
 
     steps:
       - name: Configure scoped SSH
@@ -30,26 +31,26 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect readable generation source read-only
+      - name: Inspect entitlement client surface read-only
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE'
           set -euo pipefail
-          echo "USER=$(id -un)"
-          for p in /opt/thee-studio-app/src/generation.js /opt/thee-studio-app/src/worker.js /opt/thee-studio-app/src/worker-main.js /opt/thee-studio-app/tests/owner-credit.test.js; do
-            if test -r "$p"; then
-              echo "READABLE $p"
-              if [[ "$p" == */generation.js ]]; then
-                echo "=== GENERATION CREDIT EXCERPTS ==="
-                grep -nE -C 8 'billing_exempt|Insufficient generation credits|account_entitlements|owner|admin|credit' "$p" | head -n 220 || true
-              fi
-            else
-              echo "NOT_READABLE $p"
-            fi
-          done
-          echo "=== PATH PERMISSIONS ==="
-          namei -l /opt/thee-studio-app/src/generation.js 2>/dev/null || true
-          echo "=== HOME CANDIDATES ==="
-          find "$HOME" -maxdepth 5 -type f \( -name generation.js -o -name owner-credit.test.js \) -print 2>/dev/null | head -n 40
+          asset=$(python3 - "$WEB/index.html" <<'PY'
+          import re,sys
+          s=open(sys.argv[1],encoding='utf-8').read(); m=re.search(r'src="/([^"]+\.js)"',s); print(m.group(1) if m else '')
+          PY
+          )
+          echo "ACTIVE_ASSET=$asset"
+          node - "$WEB/$asset" <<'NODE'
+          const fs=require('fs'); const s=fs.readFileSync(process.argv[2],'utf8');
+          const terms=['billing_exempt','account_entitlements','entitlement','credits','reserveLocalCredits'];
+          for(const term of terms){
+            let from=0,hit=0;
+            while(true){const p=s.indexOf(term,from);if(p<0)break;hit++;console.log(`=== ${term} ${hit} ===`);console.log(s.slice(Math.max(0,p-700),Math.min(s.length,p+1300)));from=p+term.length;if(hit>=5)break;}
+            console.log(`COUNT_${term.replace(/[^A-Za-z0-9]/g,'_')}=${hit}`)
+          }
+          NODE
           REMOTE

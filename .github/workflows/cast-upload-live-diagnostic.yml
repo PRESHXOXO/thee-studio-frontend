@@ -1,4 +1,4 @@
-name: Temporary Director Fastify Handoff Trace
+name: Temporary Generation Prompt Boundary Probe
 
 on:
   push:
@@ -13,43 +13,44 @@ jobs:
   inspect:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    environment: production
     env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
-      ASSET: assets/index-DhbQbUSO-genfix3-20260908.js
+      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
+      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
 
     steps:
-      - name: Configure scoped SSH
-        env:
-          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+      - name: Authenticate and probe prompt lengths with fake creator only
+        shell: bash
         run: |
           set -euo pipefail
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
-          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+          node - <<'NODE'
+          const fs=require('fs');
+          const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g,'').trim().toLowerCase();
+          const password=String(process.env.CUTOVER_OWNER_PASSWORD||'');
+          if(!email||!password) process.exit(2);
+          fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});
+          NODE
+          trap 'rm -f /tmp/login.json /tmp/jar /tmp/csrf /tmp/body /tmp/payload.json' EXIT
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          base='https://studio.myvitaworld.online/api'
+          fake='00000000-0000-4000-8000-000000000000'
 
-      - name: Inspect every Fastify batch callsite read-only
-        run: |
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' ASSET='$ASSET' bash -s" <<'REMOTE'
-          set -euo pipefail
-          python3 - "$WEB/$ASSET" <<'PY'
-          import sys
-          text=open(sys.argv[1],encoding='utf-8',errors='ignore').read()
-          needles=['tsFastifyCreateDirectorBatch(', 'positivePrompt:', 'characterGenerate']
-          for needle in needles:
-              print(f'=== {needle} count={text.count(needle)} ===')
-              start=0
-              for i in range(20):
-                  pos=text.find(needle,start)
-                  if pos<0: break
-                  print(f'--- HIT {i+1} @ {pos} ---')
-                  print(text[max(0,pos-2200):min(len(text),pos+5200)])
-                  print('\n')
-                  start=pos+len(needle)
-          PY
-          REMOTE
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")
+          echo "owner_login_status=$code"
+          test "$code" = 200
+
+          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/auth/csrf" -o /tmp/csrf
+          csrf=$(node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('/tmp/csrf','utf8'));process.stdout.write(String(p.csrfToken||''));")
+          test -n "$csrf"
+
+          for len in 1 2 10 100 500 1000 2000 3000 4000 4096 4097 5000 6000 8000 10000 12000 16000 20000 32000; do
+            LEN="$len" FAKE="$fake" node - <<'NODE'
+          const fs=require('fs');
+          const len=Number(process.env.LEN);
+          const prompt='A'.repeat(len);
+          fs.writeFileSync('/tmp/payload.json',JSON.stringify({prompt,creatorId:process.env.FAKE,idempotencyKey:`prompt-boundary-${len}`}),{mode:0o600});
+          NODE
+            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -H "x-csrf-token: $csrf" -X POST --data-binary @/tmp/payload.json -o /tmp/body -w '%{http_code}' "$base/generation")
+            msg=$(node -e "const fs=require('fs');let p={};try{p=JSON.parse(fs.readFileSync('/tmp/body','utf8'));}catch{};process.stdout.write(String(p.error||p.message||''));")
+            printf 'prompt_len=%s status=%s class=%s\n' "$len" "$code" "$(case "$msg" in *'Creator not found'*) echo PROMPT_ACCEPTED ;; *'Prompt and creator are invalid'*) echo PROMPT_REJECTED ;; *) echo OTHER ;; esac)"
+          done

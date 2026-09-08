@@ -18,8 +18,6 @@ jobs:
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
       CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
-      NEW_ASSET: assets/index-DhbQbUSO-castfix-20260908.js
-      EXPECTED_NEW_SHA256: 83e2b1a4a49309d5442081578338d50f85694f127a00ef88b000bee801ede0bc
 
     steps:
       - name: Configure scoped SSH
@@ -28,66 +26,57 @@ jobs:
           CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-          test -n "$CPANEL_DEPLOY_PATH"
           install -d -m 700 ~/.ssh
           printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Verify deployed files and Fastify Cast routes read-only
+      - name: Inspect recent upload request trail read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' NEW_ASSET='$NEW_ASSET' EXPECTED_NEW_SHA256='$EXPECTED_NEW_SHA256' bash -s" <<'REMOTE'
-          set -euo pipefail
-          index="$WEB/index.html"
-          asset="$WEB/$NEW_ASSET"
-
-          test -s "$index"
-          test -s "$asset"
-          grep -Fq "src=\"/$NEW_ASSET\"" "$index"
-          if grep -Fq 'src="/assets/index-DhbQbUSO.js"' "$index"; then
-            echo 'Old Cast bundle is still active in index.html.' >&2
-            exit 41
-          fi
-
-          actual=$(sha256sum "$asset" | awk '{print $1}')
-          test "$actual" = "$EXPECTED_NEW_SHA256"
-          node --check "$asset"
-          grep -Fq 'Je=!Rz()&&!_t()&&!xL' "$asset"
-          grep -Fq 'async uploadReferenceAsset(r,n,s,d)' "$asset"
-          grep -Fq '`/assets/upload?${h.toString()}`' "$asset"
-
-          base=http://127.0.0.1:4310
-          uuid=00000000-0000-4000-8000-000000000000
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$base/api/assets/upload?bucket=creator-references&creatorId=$uuid&referenceType=headshot")
-          test "$code" = 401
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE "$base/api/references/$uuid")
-          test "$code" = 401
-
-          echo "DISK_OK asset=$NEW_ASSET sha256=$actual upload_route=401 delete_route=401"
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' | tee cast-upload-trail.txt
+          set -eu
+          echo '=== utc now ==='
+          date -u
+          echo '=== process snapshot ==='
+          ps -eo user,pid,ppid,etime,stat,cmd | grep -E 'thee-studio|node|4310' | grep -v grep | head -80 || true
+          echo '=== home log candidates ==='
+          find "$HOME" -maxdepth 4 \( -type f -o -type l \) \
+            \( -iname '*access*log*' -o -iname '*error*log*' -o -iname '*.log' -o -path '*/access-logs/*' \) \
+            -print 2>/dev/null | head -120 || true
+          echo '=== recent /api/assets/upload matches in readable home logs ==='
+          while IFS= read -r p; do
+            [ -r "$p" ] || continue
+            hits=$(grep -aE '/api/assets/upload|/assets/upload' "$p" 2>/dev/null | tail -20 || true)
+            if [ -n "$hits" ]; then
+              echo "--- $p ---"
+              printf '%s\n' "$hits"
+            fi
+          done < <(find "$HOME" -maxdepth 4 \( -type f -o -type l \) \
+            \( -iname '*access*log*' -o -iname '*error*log*' -o -iname '*.log' -o -path '*/access-logs/*' \) -print 2>/dev/null)
+          echo '=== common cPanel access-log symlinks ==='
+          for p in "$HOME/access-logs"/* "$HOME/logs"/*; do
+            [ -e "$p" ] || continue
+            printf '%s -> ' "$p"
+            readlink -f "$p" 2>/dev/null || true
+            if [ -r "$p" ]; then
+              grep -aE '/api/assets/upload|/assets/upload' "$p" 2>/dev/null | tail -20 || true
+            fi
+          done
+          echo '=== public endpoint timing unauthenticated ==='
+          curl -sS -o /tmp/u.out -w 'code=%{http_code} total=%{time_total}s connect=%{time_connect}s start=%{time_starttransfer}s\n' \
+            -X POST -F 'file=@/etc/hosts;type=image/png;filename=test.png' \
+            'http://127.0.0.1:4310/api/assets/upload?bucket=creator-references&creatorId=00000000-0000-4000-8000-000000000000&referenceType=headshot' || true
+          head -c 300 /tmp/u.out 2>/dev/null; echo
           REMOTE
 
-      - name: Verify public HTTPS serves the cache-busted Cast fix
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
-            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
-            -o /tmp/thee-index.html \
-            https://studio.myvitaworld.online/
-          grep -Fq "src=\"/$NEW_ASSET\"" /tmp/thee-index.html
-
-          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
-            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
-            -o /tmp/thee-cast-fix.js \
-            "https://studio.myvitaworld.online/$NEW_ASSET"
-          actual=$(sha256sum /tmp/thee-cast-fix.js | awk '{print $1}')
-          test "$actual" = "$EXPECTED_NEW_SHA256"
-          node --check /tmp/thee-cast-fix.js
-          grep -Fq 'Je=!Rz()&&!_t()&&!xL' /tmp/thee-cast-fix.js
-          grep -Fq 'async uploadReferenceAsset(r,n,s,d)' /tmp/thee-cast-fix.js
-          echo "HTTPS_OK asset=$NEW_ASSET sha256=$actual"
+      - name: Upload diagnostic artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cast-upload-trail
+          path: cast-upload-trail.txt
+          if-no-files-found: error
+          retention-days: 1

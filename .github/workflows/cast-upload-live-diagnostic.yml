@@ -1,4 +1,4 @@
-name: Temporary Generation Callsite Trace
+name: Temporary Fastify Source Copy Probe
 
 on:
   push:
@@ -17,8 +17,6 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
-      ASSET: assets/index-DhbQbUSO-genfix3-20260908.js
 
     steps:
       - name: Configure scoped SSH
@@ -31,27 +29,22 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Print every generation callsite read-only
+      - name: Locate readable generation source/test copies without mutation
         run: |
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' ASSET='$ASSET' bash -s" <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          python3 - "$WEB/$ASSET" <<'PY'
-          import sys
-          text=open(sys.argv[1],encoding='utf-8',errors='ignore').read()
-          needles=['hL("/generation"','tt("/generation"','`/generation/','"/generation"']
-          seen=set()
-          for needle in needles:
-              start=0
-              while True:
-                  pos=text.find(needle,start)
-                  if pos<0: break
-                  if pos not in seen:
-                      seen.add(pos)
-                      print(f'=== HIT {pos} needle={needle} ===')
-                      print(text[max(0,pos-2500):min(len(text),pos+6500)])
-                      print('\n---\n')
-                  start=pos+len(needle)
-          print(f'TOTAL_UNIQUE_HITS={len(seen)}')
-          PY
+          echo '=== CANDIDATE FILES UNDER OPERATOR HOME ==='
+          find "$HOME" -type f \( \
+            -name 'generation.js' -o \
+            -name 'owner-credit.test.js' -o \
+            -name '*generation*.test.js' -o \
+            -name '*generation*.spec.js' -o \
+            -name '*smoke*.json' -o \
+            -name '*smoke*.js' -o \
+            -name '*smoke*.sh' \
+          \) -readable -print 2>/dev/null | head -250
+
+          echo '=== MATCHING SOURCE TEXT UNDER SMALL READABLE FILES ==='
+          find "$HOME" -type f -readable -size -2M \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.json' -o -name '*.txt' -o -name '*.sh' \) -print0 2>/dev/null | \
+            xargs -0 grep -IlE 'registerGenerationRoutes|Prompt and creator are invalid|billing_exempt|owner-credit|stillGenerationId' 2>/dev/null | head -120 || true
           REMOTE

@@ -42,7 +42,7 @@ jobs:
           ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
             "WEB='$CPANEL_DEPLOY_PATH' BACKUP_ROOT='$CPANEL_BACKUP_ROOT' EXPECTED='$EXPECTED_JS_SHA256' CURRENT='$CURRENT_ASSET' NEW='$NEW_ASSET' bash -s" <<'REMOTE'
           set -euo pipefail
-          current="$WEB/$CURRENT"; new="$WEB/$NEW"; index="$WEB/index.html"; tmp="${new}.tmp"
+          current="$WEB/$CURRENT"; new="$WEB/$NEW"; index="$WEB/index.html"; tmp="${new}.tmp.js"
           test "$(sha256sum "$current" | awk '{print $1}')" = "$EXPECTED"
           test "$(grep -oF "/$CURRENT" "$index" | wc -l)" = 1
           backup="$BACKUP_ROOT/director-creator-id-repair-$(date -u +%Y%m%dT%H%M%SZ)"

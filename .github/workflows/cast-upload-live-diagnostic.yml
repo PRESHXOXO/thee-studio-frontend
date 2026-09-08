@@ -1,4 +1,4 @@
-name: Temporary Creator Route Probe
+name: Temporary Creator Response Probe
 
 on:
   push:
@@ -17,6 +17,8 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+      ASSET: assets/index-DhbQbUSO-genfix2-20260908.js
 
     steps:
       - name: Configure scoped SSH
@@ -29,24 +31,22 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Probe protected creator routes read-only
+      - name: Inspect creators calls in active bundle read-only
         run: |
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "WEB='$CPANEL_DEPLOY_PATH' ASSET='$ASSET' bash -s" <<'REMOTE'
           set -euo pipefail
-          base='http://127.0.0.1:4310/api'
-          for path in \
-            '/compat/creators' \
-            '/creators' \
-            '/creator' \
-            '/cast' \
-            '/cast/creators' \
-            '/studio/creators' \
-            '/production/creators' \
-            '/compat/cast' \
-            '/compat/studio-creators'
-          do
-            code=$(curl -sS -o /tmp/route-body -w '%{http_code}' "$base$path" || true)
-            body=$(head -c 220 /tmp/route-body 2>/dev/null | tr '\n' ' ' || true)
-            printf '%-28s status=%s body=%s\n' "$path" "$code" "$body"
-          done
+          python3 - "$WEB/$ASSET" <<'PY'
+          import sys
+          text=open(sys.argv[1],encoding='utf-8',errors='ignore').read()
+          for needle in ['"/creators"', "'/creators'", '/compat/creators']:
+              print(f'=== {needle} count={text.count(needle)} ===')
+              start=0
+              for i in range(12):
+                  pos=text.find(needle,start)
+                  if pos < 0: break
+                  print(text[max(0,pos-1200):min(len(text),pos+2200)])
+                  print('\n---\n')
+                  start=pos+len(needle)
+          PY
           REMOTE

@@ -1,4 +1,4 @@
-name: Temporary Production Cast Upload Hotfix
+name: Temporary Production Cast Step 2 Hotfix
 
 on:
   push:
@@ -21,10 +21,9 @@ jobs:
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
       CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
       CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
-      EXPECTED_JS_SHA256: 68475a3ac502fc1be4e39d0c83b6d60bc33a90ca1868e5c8cb3a7092b5039b2b
-      EXPECTED_HTML_SHA256: 1a3dd45a97513bfe3642bafb5f1277f2808cfaea65a3af67d5da8cb5483652e9
-      OLD_ASSET: assets/index-DhbQbUSO.js
-      NEW_ASSET: assets/index-DhbQbUSO-castfix-20260908.js
+      EXPECTED_JS_SHA256: 83e2b1a4a49309d5442081578338d50f85694f127a00ef88b000bee801ede0bc
+      CURRENT_ASSET: assets/index-DhbQbUSO-castfix-20260908.js
+      NEW_ASSET: assets/index-DhbQbUSO-castfix2-20260908.js
 
     steps:
       - name: Configure scoped SSH
@@ -43,95 +42,127 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Apply guarded cache-busted Cast hotfix
+      - name: Apply guarded Step 2 success-state repair
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' BACKUP_ROOT='$CPANEL_BACKUP_ROOT' EXPECTED_JS_SHA256='$EXPECTED_JS_SHA256' EXPECTED_HTML_SHA256='$EXPECTED_HTML_SHA256' OLD_ASSET='$OLD_ASSET' NEW_ASSET='$NEW_ASSET' bash -s" <<'REMOTE'
+            "WEB='$CPANEL_DEPLOY_PATH' BACKUP_ROOT='$CPANEL_BACKUP_ROOT' EXPECTED_JS_SHA256='$EXPECTED_JS_SHA256' CURRENT_ASSET='$CURRENT_ASSET' NEW_ASSET='$NEW_ASSET' bash -s" <<'REMOTE'
           set -euo pipefail
-          old="$WEB/$OLD_ASSET"
+          current="$WEB/$CURRENT_ASSET"
           new="$WEB/$NEW_ASSET"
           tmp_new="${new}.tmp.js"
           index="$WEB/index.html"
 
-          test -r "$old" && test -w "$WEB/assets" && test -r "$index" && test -w "$index"
+          test -r "$current" && test -w "$WEB/assets" && test -r "$index" && test -w "$index"
+          actual_js=$(sha256sum "$current" | awk '{print $1}')
+          test "$actual_js" = "$EXPECTED_JS_SHA256" || { echo "Refusing hotfix: active JS changed ($actual_js)"; exit 31; }
 
-          actual_js=$(sha256sum "$old" | awk '{print $1}')
-          actual_html=$(sha256sum "$index" | awk '{print $1}')
-          test "$actual_js" = "$EXPECTED_JS_SHA256" || { echo "Refusing hotfix: live JS changed ($actual_js)"; exit 31; }
-          test "$actual_html" = "$EXPECTED_HTML_SHA256" || { echo "Refusing hotfix: live index changed ($actual_html)"; exit 32; }
+          current_ref="/$CURRENT_ASSET"
+          new_ref="/$NEW_ASSET"
+          count=$(python3 - "$index" "$current_ref" <<'PY'
+          import sys
+          text=open(sys.argv[1],encoding='utf-8').read()
+          print(text.count(sys.argv[2]))
+          PY
+          )
+          test "$count" = 1 || { echo "Refusing hotfix: expected one active bundle reference, found $count"; exit 32; }
 
           stamp=$(date -u +%Y%m%dT%H%M%SZ)
-          backup="$BACKUP_ROOT/cast-upload-hotfix-$stamp"
+          backup="$BACKUP_ROOT/cast-step2-hotfix-$stamp"
           mkdir -p "$backup/assets"
           cp -p "$index" "$backup/index.html"
-          cp -p "$old" "$backup/$OLD_ASSET"
-          printf '%s\n' "$EXPECTED_JS_SHA256  $OLD_ASSET" > "$backup/SHA256SUMS"
-          printf '%s\n' "$EXPECTED_HTML_SHA256  index.html" >> "$backup/SHA256SUMS"
+          cp -p "$current" "$backup/$CURRENT_ASSET"
+          printf '%s  %s\n' "$actual_js" "$CURRENT_ASSET" > "$backup/SHA256SUMS"
+          sha256sum "$index" >> "$backup/SHA256SUMS"
 
           rm -f "$tmp_new"
-          cp "$old" "$tmp_new"
+          cp "$current" "$tmp_new"
           python3 - "$tmp_new" <<'PY'
           import sys
-          path = sys.argv[1]
-          text = open(path, 'r', encoding='utf-8').read()
-          old = 'Je=!Rz()&&!_t()'
-          new = 'Je=!Rz()&&!_t()&&!xL'
-          if text.count(old) != 1:
-              raise SystemExit(f'Expected exactly one Cast API-mode gate, found {text.count(old)}')
-          if 'async uploadReferenceAsset(r,n,s,d)' not in text or '`/assets/upload?${h.toString()}`' not in text:
-              raise SystemExit('Fastify uploadReferenceAsset implementation is missing from inspected bundle')
-          text = text.replace(old, new, 1)
-          open(path, 'w', encoding='utf-8', newline='').write(text)
+          path=sys.argv[1]
+          text=open(path,'r',encoding='utf-8').read()
+
+          old_restore='s=r.references.find(h=>h.reference_type==="headshot"&&h.is_canonical),d='
+          new_restore='s=r.references.find(h=>h.reference_type==="headshot"&&h.is_canonical)||r.references.find(h=>h.reference_type==="headshot"),d='
+          if text.count(old_restore) != 1:
+              raise SystemExit(f'Expected one headshot restore selector, found {text.count(old_restore)}')
+
+          old_handler='He=async be=>{if(!T.current){T.current=!0,G(!0),$("");try{const ce=await ne(),Fe=await f.uploadReferenceAsset(ce.cloudCreatorId,"headshot",be),Oe=Ll(Fe,"Headshot"),dt=Ar({...ce,status:Pr.FACE_APPROVED,identityReferences:{...ce.identityReferences,images:[Oe,...ce.identityReferences.images.filter(Ue=>Ue.referenceType==="additional")],primaryReference:0}});await me(dt,"draft")}catch(ce){$(ce.message||"Headshot upload failed.")}finally{T.current=!1,G(!1)}}}'
+          new_handler='He=async be=>{if(!T.current){T.current=!0,G(!0),$("");try{const ce=await ne();await f.uploadReferenceAsset(ce.cloudCreatorId,"headshot",be);const Fe=await f.listReferenceAssets(ce.cloudCreatorId),Oe=Fe.find(Ue=>Ue.reference_type==="headshot"&&Ue.is_canonical)||Fe.find(Ue=>Ue.reference_type==="headshot");if(!Oe)throw new Error("Headshot saved, but it could not be loaded.");const dt=Ll(Oe,"Headshot"),N=Ar({...ce,status:Pr.FACE_APPROVED,identityReferences:{...ce.identityReferences,images:[dt,...Fe.filter(Ue=>Ue.reference_type==="additional").map((Ue,ae)=>Ll(Ue,`Reference ${ae+1}`))],primaryReference:0}});m(N)}catch(ce){$(ce.message||"Headshot upload failed.")}finally{T.current=!1,G(!1)}}}'
+          if text.count(old_handler) != 1:
+              raise SystemExit(f'Expected one Step 2 headshot handler, found {text.count(old_handler)}')
+
+          text=text.replace(old_restore,new_restore,1)
+          text=text.replace(old_handler,new_handler,1)
+          open(path,'w',encoding='utf-8',newline='').write(text)
           PY
+
           node --check "$tmp_new"
           chmod 644 "$tmp_new"
           mv -f "$tmp_new" "$new"
 
           cp "$index" "$index.tmp"
-          python3 - "$index.tmp" "$OLD_ASSET" "$NEW_ASSET" <<'PY'
+          python3 - "$index.tmp" "$current_ref" "$new_ref" <<'PY'
           import sys
-          path, old, new = sys.argv[1:]
-          text = open(path, 'r', encoding='utf-8').read()
-          old_ref = '/' + old
-          new_ref = '/' + new
-          if text.count(old_ref) != 1:
-              raise SystemExit(f'Expected one active bundle reference, found {text.count(old_ref)}')
-          text = text.replace(old_ref, new_ref, 1)
-          open(path, 'w', encoding='utf-8', newline='').write(text)
+          path,old,new=sys.argv[1:]
+          text=open(path,'r',encoding='utf-8').read()
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one current asset reference, found {text.count(old)}')
+          text=text.replace(old,new,1)
+          open(path,'w',encoding='utf-8',newline='').write(text)
           PY
           chmod 644 "$index.tmp"
           mv -f "$index.tmp" "$index"
 
-          grep -Fq "/$NEW_ASSET" "$index"
-          grep -Fq 'Je=!Rz()&&!_t()&&!xL' "$new"
-          grep -Fq 'async uploadReferenceAsset(r,n,s,d)' "$new"
+          grep -Fq "$new_ref" "$index"
+          grep -Fq 'await f.listReferenceAssets(ce.cloudCreatorId)' "$new"
+          grep -Fq 'headshot"&&h.is_canonical)||r.references.find' "$new"
+          if grep -Fq "$current_ref\"" "$index"; then
+            echo 'Old Step 2 bundle is still active.' >&2
+            exit 33
+          fi
+
           printf 'backup=%s\nnew_asset=%s\nnew_sha256=%s\n' "$backup" "$NEW_ASSET" "$(sha256sum "$new" | awk '{print $1}')"
           REMOTE
 
-      - name: Verify production origin and Cast API routes
+      - name: Verify disk and public HTTPS
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
-            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
-            https://studio.myvitaworld.online/ | grep -Fq "/$NEW_ASSET"
-          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
-            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
-            "https://studio.myvitaworld.online/$NEW_ASSET" | grep -Fq 'async uploadReferenceAsset(r,n,s,d)'
-
-          ssh -o BatchMode=yes -o ConnectTimeout=10 \
+          remote_info=$(ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "WEB='$CPANEL_DEPLOY_PATH' NEW_ASSET='$NEW_ASSET' bash -s" <<'REMOTE'
           set -euo pipefail
-          base=http://127.0.0.1:4310
-          uuid=00000000-0000-4000-8000-000000000000
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$base/api/assets/upload?bucket=creator-references&creatorId=$uuid&referenceType=headshot")
-          test "$code" = 401
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE "$base/api/references/$uuid")
-          test "$code" = 401
-          echo 'Cast upload/delete routes present and auth-protected.'
+          asset="$WEB/$NEW_ASSET"
+          index="$WEB/index.html"
+          test -s "$asset" && test -s "$index"
+          grep -Fq "src=\"/$NEW_ASSET\"" "$index"
+          node --check "$asset"
+          grep -Fq 'await f.listReferenceAssets(ce.cloudCreatorId)' "$asset"
+          grep -Fq 'headshot"&&h.is_canonical)||r.references.find' "$asset"
+          printf '%s\n' "$(sha256sum "$asset" | awk '{print $1}')"
           REMOTE
+          )
+          expected_new_sha=$(printf '%s' "$remote_info" | tail -1)
+          test -n "$expected_new_sha"
+
+          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
+            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
+            -o /tmp/thee-index.html \
+            https://studio.myvitaworld.online/
+          grep -Fq "src=\"/$NEW_ASSET\"" /tmp/thee-index.html
+
+          curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
+            --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
+            -o /tmp/thee-step2-fix.js \
+            "https://studio.myvitaworld.online/$NEW_ASSET"
+          public_sha=$(sha256sum /tmp/thee-step2-fix.js | awk '{print $1}')
+          test "$public_sha" = "$expected_new_sha"
+          node --check /tmp/thee-step2-fix.js
+          grep -Fq 'await f.listReferenceAssets(ce.cloudCreatorId)' /tmp/thee-step2-fix.js
+          grep -Fq 'headshot"&&h.is_canonical)||r.references.find' /tmp/thee-step2-fix.js
+          echo "STEP2_HOTFIX_OK asset=$NEW_ASSET sha256=$public_sha"

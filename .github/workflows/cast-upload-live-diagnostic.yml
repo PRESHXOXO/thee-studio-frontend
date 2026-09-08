@@ -1,4 +1,4 @@
-name: Temporary Director Prompt Bridge Trace
+name: Temporary Generation Callsite Trace
 
 on:
   push:
@@ -31,7 +31,7 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect prompt and submit bridge read-only
+      - name: Print every generation callsite read-only
         run: |
           ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
             "WEB='$CPANEL_DEPLOY_PATH' ASSET='$ASSET' bash -s" <<'REMOTE'
@@ -39,11 +39,19 @@ jobs:
           python3 - "$WEB/$ASSET" <<'PY'
           import sys
           text=open(sys.argv[1],encoding='utf-8',errors='ignore').read()
-          for needle in ['function tsFastifyDirectorPrompt','async function tsFastifySubmitDirectorSlot','function tsFastifyRosterCreatorName','async function tsFastifyResolveCreatorId']:
-              pos=text.find(needle)
-              print(f'=== {needle} @ {pos} ===')
-              if pos>=0:
-                  print(text[pos:pos+5000])
-                  print('\n---\n')
+          needles=['hL("/generation"','tt("/generation"','`/generation/','"/generation"']
+          seen=set()
+          for needle in needles:
+              start=0
+              while True:
+                  pos=text.find(needle,start)
+                  if pos<0: break
+                  if pos not in seen:
+                      seen.add(pos)
+                      print(f'=== HIT {pos} needle={needle} ===')
+                      print(text[max(0,pos-2500):min(len(text),pos+6500)])
+                      print('\n---\n')
+                  start=pos+len(needle)
+          print(f'TOTAL_UNIQUE_HITS={len(seen)}')
           PY
           REMOTE

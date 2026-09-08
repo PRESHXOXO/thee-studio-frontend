@@ -1,4 +1,4 @@
-name: Temporary Production Director Fastify Generation Bridge
+name: Temporary Production Director Creator ID Repair
 
 on:
   push:
@@ -21,184 +21,90 @@ jobs:
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
       CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
       CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
-      EXPECTED_JS_SHA256: b6c467cdb874cba4a1cecb2cf3f29d254e3f11c8534d1fb11ac529d72f1c2e7a
-      CURRENT_ASSET: assets/index-DhbQbUSO-castfix6-20260908.js
-      NEW_ASSET: assets/index-DhbQbUSO-genfix1-20260908.js
+      EXPECTED_JS_SHA256: 2d58e5eedb6290989a750843891f189d262c19116505deed1c2ab7c4b8140bcb
+      CURRENT_ASSET: assets/index-DhbQbUSO-genfix1-20260908.js
+      NEW_ASSET: assets/index-DhbQbUSO-genfix2-20260908.js
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Configure scoped SSH
         env:
           CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
           CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-          test -n "$CPANEL_SSH_HOST"
-          test -n "$CPANEL_SSH_PORT"
-          test -n "$CPANEL_SSH_USER"
-          test -n "$CPANEL_DEPLOY_PATH"
-          test -n "$CPANEL_BACKUP_ROOT"
           install -d -m 700 ~/.ssh
           printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Apply guarded Director to Fastify generation bridge
+      - name: Stage guarded patch helper
+        run: |
+          scp -q -o BatchMode=yes -i ~/.ssh/thee_operator -P "$CPANEL_SSH_PORT" \
+            .ops/genfix2_creator_id_patch.py \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST:.thee-genfix2-patch.py"
+
+      - name: Apply guarded creator ID repair
         shell: bash
         run: |
-          set -euo pipefail
-          ssh -o BatchMode=yes -o ConnectTimeout=10 \
-            -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
             "WEB='$CPANEL_DEPLOY_PATH' BACKUP_ROOT='$CPANEL_BACKUP_ROOT' EXPECTED_JS_SHA256='$EXPECTED_JS_SHA256' CURRENT_ASSET='$CURRENT_ASSET' NEW_ASSET='$NEW_ASSET' bash -s" <<'REMOTE'
           set -euo pipefail
           current="$WEB/$CURRENT_ASSET"
           new="$WEB/$NEW_ASSET"
-          tmp_new="${new}.tmp.js"
           index="$WEB/index.html"
+          tmp="${new}.tmp.js"
+          patch="$HOME/.thee-genfix2-patch.py"
 
-          test -r "$current" && test -w "$WEB/assets" && test -r "$index" && test -w "$index"
-          actual_js=$(sha256sum "$current" | awk '{print $1}')
-          test "$actual_js" = "$EXPECTED_JS_SHA256" || { echo "Refusing hotfix: active JS changed ($actual_js)"; exit 31; }
-
-          current_ref="/$CURRENT_ASSET"
-          new_ref="/$NEW_ASSET"
-          count=$(python3 - "$index" "$current_ref" <<'PY'
-          import sys
-          text=open(sys.argv[1],encoding='utf-8').read()
-          print(text.count(sys.argv[2]))
-          PY
-          )
-          test "$count" = 1 || { echo "Refusing hotfix: expected one active bundle reference, found $count"; exit 32; }
+          test -r "$current" && test -r "$patch" && test -w "$WEB/assets" && test -w "$index"
+          actual=$(sha256sum "$current" | awk '{print $1}')
+          test "$actual" = "$EXPECTED_JS_SHA256" || { echo "Refusing hotfix: active JS changed ($actual)"; exit 31; }
+          test "$(grep -oF "/$CURRENT_ASSET" "$index" | wc -l)" = 1 || { echo "Refusing hotfix: active asset reference changed"; exit 32; }
 
           stamp=$(date -u +%Y%m%dT%H%M%SZ)
-          backup="$BACKUP_ROOT/director-generation-bridge-$stamp"
+          backup="$BACKUP_ROOT/director-creator-id-repair-$stamp"
           mkdir -p "$backup/assets"
           cp -p "$index" "$backup/index.html"
           cp -p "$current" "$backup/$CURRENT_ASSET"
-          printf '%s  %s\n' "$actual_js" "$CURRENT_ASSET" > "$backup/SHA256SUMS"
-          sha256sum "$index" >> "$backup/SHA256SUMS"
+          printf '%s  %s\n' "$actual" "$CURRENT_ASSET" > "$backup/SHA256SUMS"
 
-          rm -f "$tmp_new"
-          cp "$current" "$tmp_new"
-          python3 - "$tmp_new" <<'PY'
+          cp "$current" "$tmp"
+          python3 "$patch" "$tmp"
+          node --check "$tmp"
+          grep -Fq 'tsFastifyResolveCreatorId' "$tmp"
+          grep -Fq '"/compat/creators"' "$tmp"
+          chmod 644 "$tmp"
+          mv -f "$tmp" "$new"
+
+          python3 - "$index" "/$CURRENT_ASSET" "/$NEW_ASSET" <<'PY'
           import sys
-          path=sys.argv[1]
-          text=open(path,'r',encoding='utf-8').read()
-
-          marker='async function nO('
-          if text.count(marker) != 1:
-              raise SystemExit(f'Expected one nO generation entrypoint, found {text.count(marker)}')
-
-          bridge=r'''const tsFastifyDirectorBatchPrefix="thee-studio:fastify-director-batch:v1:";function tsFastifyDirectorStorageKey(t){return`${tsFastifyDirectorBatchPrefix}${encodeURIComponent(t)}`}function tsFastifyLoadDirectorBatch(t){if(!t)return null;const r=tsFastifyDirectorStorageKey(t);for(const n of[globalThis.sessionStorage,globalThis.localStorage])try{const s=n==null?void 0:n.getItem(r);if(s)return JSON.parse(s)}catch{}return null}function tsFastifySaveDirectorBatch(t){if(!t||!t.id)return t;const r=JSON.stringify(t),n=tsFastifyDirectorStorageKey(t.id);for(const s of[globalThis.sessionStorage,globalThis.localStorage])try{s==null||s.setItem(n,r)}catch{}return t}function tsFastifyDeleteDirectorBatch(t){if(!t)return;const r=tsFastifyDirectorStorageKey(t);for(const n of[globalThis.sessionStorage,globalThis.localStorage])try{n==null||n.removeItem(r)}catch{}}function tsFastifyDirectorBatchView(t){const r=t.slots||[],n=r.filter(h=>h.status==="succeeded").length,s=r.filter(h=>h.status==="cancelled").length,d=r.some(h=>h.status==="queued"||h.status==="running"),c=d?"running":n===t.requestedCount?"succeeded":n>0?"partial_success":s===t.requestedCount?"cancelled":"failed";return qr({parentBatchId:t.id,jobId:t.id,createdAt:t.createdAt,status:c,requestedCount:t.requestedCount,slots:r},{parentBatchId:t.id,requestedCount:t.requestedCount})}function tsFastifyDirectorPrompt(t,r){const n=String(t||"").trim(),s=String(r||"").trim();return s?`${n}\n\nAvoid: ${s}`:n}async function tsFastifySubmitDirectorSlot(t,r){const n=t.slots[r]||(t.slots[r]={slotIndex:r,status:"queued",attempt:0}),s=Number(n.attempt||0)+1;n.attempt=s,n.status="queued",n.failureMessage=null,n.imageUrl=null,n.assetId=null,n.storagePath=null,n.providerState="queued";const d=tsFastifyDirectorPrompt((t.prompts&&t.prompts[r])||t.prompt,t.negativePrompt),c=await hL("/generation",{method:"POST",body:JSON.stringify({prompt:d,creatorId:t.creatorId||null,idempotencyKey:`${t.requestKey}:${r}:${s}`})});if(c.error)return n.status="failed",n.providerState="failed",n.failureMessage=c.error.message||"Generation job could not be created.",tsFastifySaveDirectorBatch(t),n;const h=c.data&&c.data.job&&c.data.job.id;if(!h)return n.status="failed",n.providerState="failed",n.failureMessage="Generation job was not created.",tsFastifySaveDirectorBatch(t),n;return n.jobId=h,n.status="queued",n.providerState="queued",tsFastifySaveDirectorBatch(t),n}async function tsFastifyCreateDirectorBatch({prompt:t="",negativePrompt:r="",creatorId:n=null,batchSize:s=1,requestKey:d=null,prompts:c=null}={}){const h=Math.max(1,Math.min(5,Number(s)||1)),f=d||crypto.randomUUID(),y={id:`api-${crypto.randomUUID()}`,requestKey:f,prompt:String(t||""),negativePrompt:String(r||""),creatorId:n||null,prompts:Array.isArray(c)?c.slice(0,h):null,requestedCount:h,createdAt:new Date().toISOString(),slots:Array.from({length:h},(k,m)=>({slotIndex:m,status:"queued",attempt:0,providerState:"queued"}))};tsFastifySaveDirectorBatch(y);for(let k=0;k<h;k+=1)await tsFastifySubmitDirectorSlot(y,k);return tsFastifyDirectorBatchView(y)}async function tsFastifyRefreshDirectorBatch(t){const r=typeof t==="string"?tsFastifyLoadDirectorBatch(t):t;if(!r)throw new Error("This Director generation batch is no longer available in this browser session.");let n=!1;for(const s of r.slots){if(!(s.jobId&&(s.status==="queued"||s.status==="running")))continue;if(s.providerState==="succeeded"){n=!0;continue}const d=await hL(`/generation/${s.jobId}`);if(d.error)continue;const c=d.data&&d.data.generation||{},h=String(c.state||"").toLowerCase();h==="succeeded"?(s.providerState="succeeded",s.status="running",n=!0):h==="failed"?(s.providerState="failed",s.status="failed",s.failureMessage=c.last_error||"Generation failed."):h==="cancelled"?(s.providerState="cancelled",s.status="cancelled",s.failureMessage="Generation was cancelled."):h&&(s.providerState=h,s.status=h==="queued"?"queued":"running")}if(n){const s=await hL("/library");if(!s.error){const d=s.data&&Array.isArray(s.data.items)?s.data.items:[];for(const c of r.slots){if(c.providerState!=="succeeded"||c.status==="succeeded")continue;const h=d.find(f=>String(f.job_id||"")===String(c.jobId));if(!h)continue;c.status="succeeded",c.assetId=h.id||null,c.storagePath=h.object_path||null,c.contentType=h.mime_type||null,c.size=h.size_bytes||null,c.imageUrl=`${vL}/library/${encodeURIComponent(h.id)}/preview`}}}tsFastifySaveDirectorBatch(r);const s=tsFastifyDirectorBatchView(r);return s.status==="succeeded"&&tsFastifyDeleteDirectorBatch(r.id),s}async function tsFastifyWaitDirectorBatch(t){let r=t;for(let n=0;n<120&&!Yj(r.status);n+=1)await new Promise(s=>setTimeout(s,2500)),r=await tsFastifyRefreshDirectorBatch(r.parentBatchId);if(!Yj(r.status))throw new Error("Generation is still processing after five minutes. The jobs were preserved in Thee Studio.");return r}'''
-          text=text.replace(marker,bridge+marker,1)
-
-          old='const w=S.length?S.map(_=>_.dataUrl):d;if(_t()){'
-          new='const w=S.length?S.map(_=>_.dataUrl):d;if(xL){if(s&&!k)throw new Error("Save this creator before generating with an Identity reference in production.");const _=L.length?L.map(Q=>[r,Q.prompt].filter(Boolean).join("  ")):null;return tsFastifyCreateDirectorBatch({prompt:r,negativePrompt:n,creatorId:k,batchSize:y,requestKey:v,prompts:_})}if(_t()){'
+          path, old, new = sys.argv[1:]
+          text = open(path, encoding='utf-8').read()
           if text.count(old) != 1:
-              raise SystemExit(f'Expected one nO cloud/local gate, found {text.count(old)}')
-          text=text.replace(old,new,1)
-
-          old='async function Tz(t,{continueBatch:r=!1}={}){const{data:n,error:s}=await Yt().functions.invoke("cast-quick-shoot-status",{body:{jobId:t,continueBatch:r===!0}});'
-          new='async function Tz(t,{continueBatch:r=!1}={}){if(xL&&tsFastifyLoadDirectorBatch(t))return tsFastifyRefreshDirectorBatch(t);const{data:n,error:s}=await Yt().functions.invoke("cast-quick-shoot-status",{body:{jobId:t,continueBatch:r===!0}});'
-          if text.count(old) != 1:
-              raise SystemExit(f'Expected one Tz status entrypoint, found {text.count(old)}')
-          text=text.replace(old,new,1)
-
-          old='async function iO(t,r){const n=Number(r);if(!t)throw new Error("Retry needs a valid parent batch.");if(!Number.isInteger(n)||n<0||n>4)throw new Error("Retry needs a valid image slot.");const s=await Br("cast-quick-shoot-retry-slot",{parentBatchId:t,slotIndex:n});'
-          new='async function iO(t,r){const n=Number(r);if(!t)throw new Error("Retry needs a valid parent batch.");if(!Number.isInteger(n)||n<0||n>4)throw new Error("Retry needs a valid image slot.");if(xL){const s=tsFastifyLoadDirectorBatch(t);if(s)return await tsFastifySubmitDirectorSlot(s,n),tsFastifyDirectorBatchView(s)}const s=await Br("cast-quick-shoot-retry-slot",{parentBatchId:t,slotIndex:n});'
-          if text.count(old) != 1:
-              raise SystemExit(f'Expected one iO retry entrypoint, found {text.count(old)}')
-          text=text.replace(old,new,1)
-
-          old='async function zz({positivePrompt:t,negativePrompt:r,batchSize:n=1,creatorId:s=null,imageSize:d="Vertical 9:16",fashionSafetyMode:c="auto",requestKey:h=null,returnPending:f=!1,directorContext:y=null}={}){const k=await Br("cast-quick-shoot",'
-          new='async function zz({positivePrompt:t,negativePrompt:r,batchSize:n=1,creatorId:s=null,imageSize:d="Vertical 9:16",fashionSafetyMode:c="auto",requestKey:h=null,returnPending:f=!1,directorContext:y=null}={}){if(xL)return tsFastifyCreateDirectorBatch({prompt:t,negativePrompt:r,creatorId:s,batchSize:n,requestKey:h});const k=await Br("cast-quick-shoot",'
-          if text.count(old) != 1:
-              raise SystemExit(f'Expected one zz generation entrypoint, found {text.count(old)}')
-          text=text.replace(old,new,1)
-
-          old='async function cO({engine:t="",performanceMode:r="Balanced",comfyServerUrl:n="http://127.0.0.1:8188",comfyWorkflowPath:s="",imageStyle:d="Lifestyle Creator",positivePrompt:c="",negativePrompt:h="",imageSize:f="Vertical 9:16",quality:y="High",batchSize:k=1,seed:m=-1,cfg:v=7,steps:b=20,width:C=832,height:L=1216}={}){if(_t())return zz({positivePrompt:c,negativePrompt:h,batchSize:k,imageSize:f});'
-          new='async function cO({engine:t="",performanceMode:r="Balanced",comfyServerUrl:n="http://127.0.0.1:8188",comfyWorkflowPath:s="",imageStyle:d="Lifestyle Creator",positivePrompt:c="",negativePrompt:h="",imageSize:f="Vertical 9:16",quality:y="High",batchSize:k=1,seed:m=-1,cfg:v=7,steps:b=20,width:C=832,height:L=1216}={}){if(xL)return{...await tsFastifyWaitDirectorBatch(await tsFastifyCreateDirectorBatch({prompt:c,negativePrompt:h,batchSize:k})),providerStatus:"Fastify API"};if(_t())return zz({positivePrompt:c,negativePrompt:h,batchSize:k,imageSize:f});'
-          if text.count(old) != 1:
-              raise SystemExit(f'Expected one cO generation entrypoint, found {text.count(old)}')
-          text=text.replace(old,new,1)
-
-          open(path,'w',encoding='utf-8',newline='').write(text)
+              raise SystemExit(f'Expected one active asset reference, found {text.count(old)}')
+          text = text.replace(old, new, 1)
+          open(path, 'w', encoding='utf-8', newline='').write(text)
           PY
 
-          node --check "$tmp_new"
-          chmod 644 "$tmp_new"
-          mv -f "$tmp_new" "$new"
-
-          cp "$index" "$index.tmp"
-          python3 - "$index.tmp" "$current_ref" "$new_ref" <<'PY'
-          import sys
-          path,old,new=sys.argv[1:]
-          text=open(path,'r',encoding='utf-8').read()
-          if text.count(old) != 1:
-              raise SystemExit(f'Expected one active bundle reference, found {text.count(old)}')
-          text=text.replace(old,new,1)
-          open(path,'w',encoding='utf-8',newline='').write(text)
-          PY
-          chmod 644 "$index.tmp"
-          mv -f "$index.tmp" "$index"
-
-          grep -Fq "$new_ref" "$index"
-          grep -Fq 'tsFastifyCreateDirectorBatch' "$new"
-          grep -Fq 'tsFastifyRefreshDirectorBatch' "$new"
-          grep -Fq 'tsFastifySubmitDirectorSlot' "$new"
-          grep -Fq 'if(xL&&tsFastifyLoadDirectorBatch(t))' "$new"
-          grep -Fq 'providerStatus:"Fastify API"' "$new"
-          if grep -Fq "$current_ref\"" "$index"; then
-            echo 'Old Studio bundle is still active.' >&2
-            exit 33
-          fi
-
-          printf 'backup=%s\nnew_asset=%s\nnew_sha256=%s\n' "$backup" "$NEW_ASSET" "$(sha256sum "$new" | awk '{print $1}')"
+          grep -Fq "/$NEW_ASSET" "$index"
+          rm -f "$patch"
+          echo "NEW_SHA=$(sha256sum "$new" | awk '{print $1}')"
           REMOTE
 
-      - name: Verify disk public HTTPS and Fastify generation routes
-        shell: bash
+      - name: Verify public production bundle
         run: |
           set -euo pipefail
-          remote_info=$(ssh -o BatchMode=yes -o ConnectTimeout=10 \
-            -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' NEW_ASSET='$NEW_ASSET' bash -s" <<'REMOTE'
-          set -euo pipefail
-          asset="$WEB/$NEW_ASSET"
-          index="$WEB/index.html"
-          test -s "$asset" && test -s "$index"
-          grep -Fq "src=\"/$NEW_ASSET\"" "$index"
-          node --check "$asset"
-          grep -Fq 'tsFastifyCreateDirectorBatch' "$asset"
-          grep -Fq 'tsFastifyRefreshDirectorBatch' "$asset"
-
-          base=http://127.0.0.1:4310
-          code=$(curl -sS -o /dev/null -w '%{http_code}' "$base/api/generation/test-job")
-          test "$code" = 401
-          code=$(curl -sS -o /dev/null -w '%{http_code}' "$base/api/library/test-item/preview")
-          test "$code" = 401
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$base/api/generation")
-          test "$code" = 401
-          printf '%s\n' "$(sha256sum "$asset" | awk '{print $1}')"
-          REMOTE
-          )
-          expected_new_sha=$(printf '%s' "$remote_info" | tail -1)
-          test -n "$expected_new_sha"
-
           curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
             --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
-            -o /tmp/thee-index.html \
-            https://studio.myvitaworld.online/
+            -o /tmp/thee-index.html https://studio.myvitaworld.online/
           grep -Fq "src=\"/$NEW_ASSET\"" /tmp/thee-index.html
 
           curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
             --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
-            -o /tmp/thee-generation-bridge.js \
-            "https://studio.myvitaworld.online/$NEW_ASSET"
-          public_sha=$(sha256sum /tmp/thee-generation-bridge.js | awk '{print $1}')
-          test "$public_sha" = "$expected_new_sha"
-          node --check /tmp/thee-generation-bridge.js
-          grep -Fq 'tsFastifyCreateDirectorBatch' /tmp/thee-generation-bridge.js
-          grep -Fq 'tsFastifyRefreshDirectorBatch' /tmp/thee-generation-bridge.js
-          echo "DIRECTOR_FASTIFY_GENERATION_BRIDGE_OK asset=$NEW_ASSET sha256=$public_sha"
+            -o /tmp/thee-genfix2.js "https://studio.myvitaworld.online/$NEW_ASSET"
+          node --check /tmp/thee-genfix2.js
+          grep -Fq 'tsFastifyResolveCreatorId' /tmp/thee-genfix2.js
+          grep -Fq '"/compat/creators"' /tmp/thee-genfix2.js
+          echo "DIRECTOR_CREATOR_ID_REPAIR_OK asset=$NEW_ASSET sha256=$(sha256sum /tmp/thee-genfix2.js | awk '{print $1}')"

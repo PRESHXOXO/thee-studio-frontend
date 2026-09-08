@@ -1,13 +1,76 @@
-name: Archived Credit Diagnostics
+name: Temporary Cast Rehydration Diagnostic
 
 on:
+  push:
+    branches: [ops/cast-upload-debug-20260908]
+    paths: [.github/workflows/cast-upload-live-diagnostic.yml]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  archived:
+  inspect:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+
     steps:
-      - run: echo "Credit diagnostics completed; workflow archived."
+      - name: Configure scoped SSH
+        env:
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+
+      - name: Inspect current bundle and recent creator traffic read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE'
+          set -euo pipefail
+          asset=$(python3 - "$WEB/index.html" <<'PY'
+          import re,sys
+          s=open(sys.argv[1],encoding='utf-8').read()
+          m=re.search(r'src="/([^"]+\.js)"',s)
+          print(m.group(1) if m else '')
+          PY
+          )
+          echo "ACTIVE_ASSET=$asset"
+          test -n "$asset" && test -r "$WEB/$asset"
+          echo "ACTIVE_SHA=$(sha256sum "$WEB/$asset" | awk '{print $1}')"
+          node --check "$WEB/$asset"
+
+          node - "$WEB/$asset" <<'NODE'
+          const fs=require('fs'); const p=process.argv[2]; const s=fs.readFileSync(p,'utf8');
+          for (const term of ['Craft consistent, iconic identities for your AI creations.','ts_characters','Cloud creator link failed','Build with Thee Studio','/creators']) {
+            let from=0, hit=0;
+            while (true) {
+              const i=s.indexOf(term,from); if(i<0) break; hit++;
+              console.log(`\n=== ${term} HIT ${hit} @ ${i} ===`);
+              console.log(s.slice(Math.max(0,i-4200),Math.min(s.length,i+6200)));
+              from=i+term.length;
+              if(hit>=8) break;
+            }
+            console.log(`COUNT ${term} ${hit}`);
+          }
+          NODE
+
+          echo "=== RECENT CREATOR API TRAFFIC ==="
+          for f in "$HOME"/access-logs/*studio* "$HOME"/access-logs/*ssl* "$HOME"/logs/*studio*; do
+            test -f "$f" || continue
+            case "$f" in
+              *.gz) zgrep -E '(/api/creators|/api/assets/upload).*HTTP/' "$f" 2>/dev/null | tail -n 80 || true ;;
+              *) grep -E '(/api/creators|/api/assets/upload).*HTTP/' "$f" 2>/dev/null | tail -n 80 || true ;;
+            esac
+          done
+          REMOTE

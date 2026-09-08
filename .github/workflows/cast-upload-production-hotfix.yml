@@ -1,4 +1,4 @@
-name: Temporary Production Cast Preview Hotfix
+name: Temporary Production Full-Body Cast Hotfix
 
 on:
   push:
@@ -21,9 +21,9 @@ jobs:
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
       CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
       CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
-      EXPECTED_JS_SHA256: f098c23778749a2373c7eeda8350d164bf664bf5ec093858465152116114237e
-      CURRENT_ASSET: assets/index-DhbQbUSO-castfix3-20260908.js
-      NEW_ASSET: assets/index-DhbQbUSO-castfix4-20260908.js
+      EXPECTED_JS_SHA256: 927eaf96ea4e46e4b10f5e5f98802e1a708062c77496e7ba04fa0c57647d505c
+      CURRENT_ASSET: assets/index-DhbQbUSO-castfix4-20260908.js
+      NEW_ASSET: assets/index-DhbQbUSO-castfix5-20260908.js
 
     steps:
       - name: Configure scoped SSH
@@ -42,7 +42,7 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Apply guarded optional-reference browser preview repair
+      - name: Apply guarded full-body upload state repair
         shell: bash
         run: |
           set -euo pipefail
@@ -71,7 +71,7 @@ jobs:
           test "$count" = 1 || { echo "Refusing hotfix: expected one active bundle reference, found $count"; exit 32; }
 
           stamp=$(date -u +%Y%m%dT%H%M%SZ)
-          backup="$BACKUP_ROOT/cast-preview-hotfix-$stamp"
+          backup="$BACKUP_ROOT/cast-fullbody-hotfix-$stamp"
           mkdir -p "$backup/assets"
           cp -p "$index" "$backup/index.html"
           cp -p "$current" "$backup/$CURRENT_ASSET"
@@ -85,12 +85,17 @@ jobs:
           path=sys.argv[1]
           text=open(path,'r',encoding='utf-8').read()
 
-          old='i.jsx("img",{src:m.url,alt:m.label,style:{width:"100%",height:"100%",objectFit:"cover"}})'
-          new='i.jsx("img",{src:m.url,alt:m.label,onError:async e=>{const a=e.currentTarget;if(a.dataset.privatePreviewRetry)return;a.dataset.privatePreviewRetry="1";try{const o=await fetch(m.url,{credentials:"same-origin"});if(!o.ok)return;const p=new Blob([await o.arrayBuffer()],{type:m.mimeType||o.headers.get("content-type")||"image/jpeg"}),u=URL.createObjectURL(p),g=()=>URL.revokeObjectURL(u);a.onload=g,a.src=u}catch{}},style:{width:"100%",height:"100%",objectFit:"cover"}})'
-          count=text.count(old)
-          if count != 1:
-              raise SystemExit(f'Expected one Preserve References image renderer, found {count}')
-          text=text.replace(old,new,1)
+          old_handler='Qe=async be=>{if(!T.current){T.current=!0,A(!0),se("");try{const ce=await ne(),Fe=await f.uploadReferenceAsset(ce.cloudCreatorId,"full_body",be),Oe=Ar({...ce,identityReferences:{...ce.identityReferences,fullBodyReference:Ll(Fe,"Full Body")}});await me(Oe,"draft")}catch(ce){se(ce.message||"Full-body upload failed.")}finally{T.current=!1,A(!1)}}}'
+          new_handler='Qe=async be=>{if(!T.current){T.current=!0,A(!0),se("");try{const ce=await ne();await f.uploadReferenceAsset(ce.cloudCreatorId,"full_body",be);const Fe=await f.listReferenceAssets(ce.cloudCreatorId),Oe=Fe.find(dt=>dt.reference_type==="full_body"&&dt.is_canonical)||Fe.find(dt=>dt.reference_type==="full_body");if(!Oe)throw new Error("Full-body reference saved, but it could not be loaded.");const dt=Ll(Oe,"Full Body");if(!dt.url)throw new Error("Full-body reference saved, but its private preview URL is unavailable.");const N=Ar({...ce,identityReferences:{...ce.identityReferences,fullBodyReference:dt}});m(N)}catch(ce){se(ce.message||"Full-body upload failed.")}finally{T.current=!1,A(!1)}}}'
+          if text.count(old_handler) != 1:
+              raise SystemExit(f'Expected one old full-body handler, found {text.count(old_handler)}')
+          text=text.replace(old_handler,new_handler,1)
+
+          old_img='n?i.jsx("img",{src:n,alt:"Full body reference",style:{width:"100%",height:"100%",objectFit:"cover"}})'
+          new_img='n?i.jsx("img",{src:n,alt:"Full body reference",onError:async C=>{const L=C.currentTarget;if(L.dataset.fullBodyPreviewRetry)return;L.dataset.fullBodyPreviewRetry="1";try{const S=await fetch(n,{credentials:"same-origin"});if(!S.ok)return;const w=new Uint8Array(await S.arrayBuffer());let I="image/jpeg";w.length>12&&w[0]===137&&w[1]===80&&w[2]===78&&w[3]===71?I="image/png":w.length>12&&String.fromCharCode(...w.slice(0,4))==="RIFF"&&String.fromCharCode(...w.slice(8,12))==="WEBP"?I="image/webp":w.length>3&&w[0]===255&&w[1]===216&&w[2]===255&&(I="image/jpeg");const j=URL.createObjectURL(new Blob([w],{type:I})),H=()=>URL.revokeObjectURL(j);L.onload=H,L.src=j}catch{}},style:{width:"100%",height:"100%",objectFit:"cover"}})'
+          if text.count(old_img) != 1:
+              raise SystemExit(f'Expected one full-body image renderer, found {text.count(old_img)}')
+          text=text.replace(old_img,new_img,1)
 
           open(path,'w',encoding='utf-8',newline='').write(text)
           PY
@@ -113,8 +118,9 @@ jobs:
           mv -f "$index.tmp" "$index"
 
           grep -Fq "$new_ref" "$index"
-          grep -Fq 'privatePreviewRetry' "$new"
-          grep -Fq 'credentials:"same-origin"' "$new"
+          grep -Fq 'Full-body reference saved, but it could not be loaded.' "$new"
+          grep -Fq 'fullBodyPreviewRetry' "$new"
+          grep -Fq 'listReferenceAssets(ce.cloudCreatorId)' "$new"
           if grep -Fq "$current_ref\"" "$index"; then
             echo 'Old Cast bundle is still active.' >&2
             exit 33
@@ -123,7 +129,7 @@ jobs:
           printf 'backup=%s\nnew_asset=%s\nnew_sha256=%s\n' "$backup" "$NEW_ASSET" "$(sha256sum "$new" | awk '{print $1}')"
           REMOTE
 
-      - name: Verify disk public HTTPS and private route contract
+      - name: Verify disk and public HTTPS
         shell: bash
         run: |
           set -euo pipefail
@@ -137,8 +143,9 @@ jobs:
           test -s "$asset" && test -s "$index"
           grep -Fq "src=\"/$NEW_ASSET\"" "$index"
           node --check "$asset"
-          grep -Fq 'privatePreviewRetry' "$asset"
-          grep -Fq 'credentials:"same-origin"' "$asset"
+          grep -Fq 'Full-body reference saved, but it could not be loaded.' "$asset"
+          grep -Fq 'fullBodyPreviewRetry' "$asset"
+          grep -Fq 'listReferenceAssets(ce.cloudCreatorId)' "$asset"
           code=$(curl -sS -o /dev/null -w '%{http_code}' 'http://127.0.0.1:4310/api/assets/download/creator-references/test.png')
           test "$code" = 401
           printf '%s\n' "$(sha256sum "$asset" | awk '{print $1}')"
@@ -155,10 +162,10 @@ jobs:
 
           curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
             --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
-            -o /tmp/thee-cast-preview-fix.js \
+            -o /tmp/thee-cast-fullbody-fix.js \
             "https://studio.myvitaworld.online/$NEW_ASSET"
-          public_sha=$(sha256sum /tmp/thee-cast-preview-fix.js | awk '{print $1}')
+          public_sha=$(sha256sum /tmp/thee-cast-fullbody-fix.js | awk '{print $1}')
           test "$public_sha" = "$expected_new_sha"
-          node --check /tmp/thee-cast-preview-fix.js
-          grep -Fq 'privatePreviewRetry' /tmp/thee-cast-preview-fix.js
-          echo "CAST_OPTIONAL_PREVIEW_HOTFIX_OK asset=$NEW_ASSET sha256=$public_sha"
+          node --check /tmp/thee-cast-fullbody-fix.js
+          grep -Fq 'fullBodyPreviewRetry' /tmp/thee-cast-fullbody-fix.js
+          echo "CAST_FULLBODY_HOTFIX_OK asset=$NEW_ASSET sha256=$public_sha"

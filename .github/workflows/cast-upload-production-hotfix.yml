@@ -1,4 +1,4 @@
-name: Temporary Production Cast Brand Step Hotfix
+name: Temporary Production Director Fastify Generation Bridge
 
 on:
   push:
@@ -21,9 +21,9 @@ jobs:
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
       CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
       CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
-      EXPECTED_JS_SHA256: dcc9ef70c8ddade54a98485dad2c0066db39b3c833cdac4dc9c4cc4482632e62
-      CURRENT_ASSET: assets/index-DhbQbUSO-castfix5-20260908.js
-      NEW_ASSET: assets/index-DhbQbUSO-castfix6-20260908.js
+      EXPECTED_JS_SHA256: b6c467cdb874cba4a1cecb2cf3f29d254e3f11c8534d1fb11ac529d72f1c2e7a
+      CURRENT_ASSET: assets/index-DhbQbUSO-castfix6-20260908.js
+      NEW_ASSET: assets/index-DhbQbUSO-genfix1-20260908.js
 
     steps:
       - name: Configure scoped SSH
@@ -42,7 +42,7 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Apply guarded Brand-step control repair
+      - name: Apply guarded Director to Fastify generation bridge
         shell: bash
         run: |
           set -euo pipefail
@@ -71,7 +71,7 @@ jobs:
           test "$count" = 1 || { echo "Refusing hotfix: expected one active bundle reference, found $count"; exit 32; }
 
           stamp=$(date -u +%Y%m%dT%H%M%SZ)
-          backup="$BACKUP_ROOT/cast-brand-hotfix-$stamp"
+          backup="$BACKUP_ROOT/director-generation-bridge-$stamp"
           mkdir -p "$backup/assets"
           cp -p "$index" "$backup/index.html"
           cp -p "$current" "$backup/$CURRENT_ASSET"
@@ -85,27 +85,42 @@ jobs:
           path=sys.argv[1]
           text=open(path,'r',encoding='utf-8').read()
 
-          old_pill='function cd({label:t,active:r,onClick:n}){return i.jsx("button",{onClick:n,className:"ts-pill",style:{padding:"6px 14px",borderRadius:"var(--radius-pill)",cursor:"pointer",border:`1.5px solid ${r?"var(--accent-deep)":"var(--border)"}`,background:r?"var(--rose-deep)":"transparent",color:r?"var(--accent-deep)":"var(--text-muted)",font:"500 0.78rem/1 var(--font-ui)"},children:t})}'
-          new_pill='function cd({label:t,active:r,onClick:n,disabled:s=!1}){return i.jsx("button",{type:"button","aria-pressed":r,onClick:n,disabled:s,className:"ts-pill",style:{padding:"6px 14px",borderRadius:"var(--radius-pill)",cursor:s?"not-allowed":"pointer",opacity:s?.42:1,border:`1.5px solid ${r?"var(--accent-deep)":"var(--border)"}`,background:r?"var(--rose-deep)":"transparent",color:r?"var(--accent-deep)":"var(--text-muted)",font:"500 0.78rem/1 var(--font-ui)"},children:t})}'
-          if text.count(old_pill) != 1:
-              raise SystemExit(f'Expected one Brand pill component, found {text.count(old_pill)}')
-          text=text.replace(old_pill,new_pill,1)
+          marker='async function nO('
+          if text.count(marker) != 1:
+              raise SystemExit(f'Expected one nO generation entrypoint, found {text.count(marker)}')
 
-          replacements={
-            'i.jsx("div",{style:Xe,children:"Their World"})':'i.jsxs("div",{style:Xe,children:["Their World ",i.jsx("span",{style:{textTransform:"none",letterSpacing:0,fontWeight:500},children:"(choose up to 3)"})]})',
-            'i.jsx("div",{style:Xe,children:"Their Energy"})':'i.jsxs("div",{style:Xe,children:["Their Energy ",i.jsx("span",{style:{textTransform:"none",letterSpacing:0,fontWeight:500},children:"(choose up to 3)"})]})',
-            'i.jsx("div",{style:Xe,children:"Content Photography Style"})':'i.jsxs("div",{style:Xe,children:["Content Photography Style ",i.jsx("span",{style:{textTransform:"none",letterSpacing:0,fontWeight:500},children:"(choose up to 3)"})]})',
-            'i.jsx("div",{style:Xe,children:"Creator Niche"})':'i.jsxs("div",{style:Xe,children:["Creator Niche ",i.jsx("span",{style:{textTransform:"none",letterSpacing:0,fontWeight:500},children:"(choose up to 3)"})]})',
-            'i.jsx(cd,{label:y,active:d.worlds.includes(y),onClick:()=>c("worlds")(dd(d.worlds,y))},y)':'i.jsx(cd,{label:y,active:d.worlds.includes(y),disabled:!d.worlds.includes(y)&&d.worlds.length>=3,onClick:()=>c("worlds")(d.worlds.includes(y)?d.worlds.filter(k=>k!==y):d.worlds.length<3?[...d.worlds,y]:d.worlds)},y)',
-            'i.jsx(cd,{label:y,active:d.energies.includes(y),onClick:()=>c("energies")(dd(d.energies,y))},y)':'i.jsx(cd,{label:y,active:d.energies.includes(y),disabled:!d.energies.includes(y)&&d.energies.length>=3,onClick:()=>c("energies")(d.energies.includes(y)?d.energies.filter(k=>k!==y):d.energies.length<3?[...d.energies,y]:d.energies)},y)',
-            'i.jsx(cd,{label:y,active:d.photographyStyles.includes(y),onClick:()=>c("photographyStyles")(dd(d.photographyStyles,y))},y)':'i.jsx(cd,{label:y,active:d.photographyStyles.includes(y),disabled:!d.photographyStyles.includes(y)&&d.photographyStyles.length>=3,onClick:()=>c("photographyStyles")(d.photographyStyles.includes(y)?d.photographyStyles.filter(k=>k!==y):d.photographyStyles.length<3?[...d.photographyStyles,y]:d.photographyStyles)},y)',
-            'i.jsx(cd,{label:y,active:d.niches.includes(y),onClick:()=>c("niches")(dd(d.niches,y))},y)':'i.jsx(cd,{label:y,active:d.niches.includes(y),disabled:!d.niches.includes(y)&&d.niches.length>=3,onClick:()=>c("niches")(d.niches.includes(y)?d.niches.filter(k=>k!==y):d.niches.length<3?[...d.niches,y]:d.niches)},y)'
-          }
-          for old,new in replacements.items():
-              count=text.count(old)
-              if count != 1:
-                  raise SystemExit(f'Expected one Brand-step target, found {count}: {old[:80]}')
-              text=text.replace(old,new,1)
+          bridge=r'''const tsFastifyDirectorBatchPrefix="thee-studio:fastify-director-batch:v1:";function tsFastifyDirectorStorageKey(t){return`${tsFastifyDirectorBatchPrefix}${encodeURIComponent(t)}`}function tsFastifyLoadDirectorBatch(t){if(!t)return null;const r=tsFastifyDirectorStorageKey(t);for(const n of[globalThis.sessionStorage,globalThis.localStorage])try{const s=n==null?void 0:n.getItem(r);if(s)return JSON.parse(s)}catch{}return null}function tsFastifySaveDirectorBatch(t){if(!t||!t.id)return t;const r=JSON.stringify(t),n=tsFastifyDirectorStorageKey(t.id);for(const s of[globalThis.sessionStorage,globalThis.localStorage])try{s==null||s.setItem(n,r)}catch{}return t}function tsFastifyDeleteDirectorBatch(t){if(!t)return;const r=tsFastifyDirectorStorageKey(t);for(const n of[globalThis.sessionStorage,globalThis.localStorage])try{n==null||n.removeItem(r)}catch{}}function tsFastifyDirectorBatchView(t){const r=t.slots||[],n=r.filter(h=>h.status==="succeeded").length,s=r.filter(h=>h.status==="cancelled").length,d=r.some(h=>h.status==="queued"||h.status==="running"),c=d?"running":n===t.requestedCount?"succeeded":n>0?"partial_success":s===t.requestedCount?"cancelled":"failed";return qr({parentBatchId:t.id,jobId:t.id,createdAt:t.createdAt,status:c,requestedCount:t.requestedCount,slots:r},{parentBatchId:t.id,requestedCount:t.requestedCount})}function tsFastifyDirectorPrompt(t,r){const n=String(t||"").trim(),s=String(r||"").trim();return s?`${n}\n\nAvoid: ${s}`:n}async function tsFastifySubmitDirectorSlot(t,r){const n=t.slots[r]||(t.slots[r]={slotIndex:r,status:"queued",attempt:0}),s=Number(n.attempt||0)+1;n.attempt=s,n.status="queued",n.failureMessage=null,n.imageUrl=null,n.assetId=null,n.storagePath=null,n.providerState="queued";const d=tsFastifyDirectorPrompt((t.prompts&&t.prompts[r])||t.prompt,t.negativePrompt),c=await hL("/generation",{method:"POST",body:JSON.stringify({prompt:d,creatorId:t.creatorId||null,idempotencyKey:`${t.requestKey}:${r}:${s}`})});if(c.error)return n.status="failed",n.providerState="failed",n.failureMessage=c.error.message||"Generation job could not be created.",tsFastifySaveDirectorBatch(t),n;const h=c.data&&c.data.job&&c.data.job.id;if(!h)return n.status="failed",n.providerState="failed",n.failureMessage="Generation job was not created.",tsFastifySaveDirectorBatch(t),n;return n.jobId=h,n.status="queued",n.providerState="queued",tsFastifySaveDirectorBatch(t),n}async function tsFastifyCreateDirectorBatch({prompt:t="",negativePrompt:r="",creatorId:n=null,batchSize:s=1,requestKey:d=null,prompts:c=null}={}){const h=Math.max(1,Math.min(5,Number(s)||1)),f=d||crypto.randomUUID(),y={id:`api-${crypto.randomUUID()}`,requestKey:f,prompt:String(t||""),negativePrompt:String(r||""),creatorId:n||null,prompts:Array.isArray(c)?c.slice(0,h):null,requestedCount:h,createdAt:new Date().toISOString(),slots:Array.from({length:h},(k,m)=>({slotIndex:m,status:"queued",attempt:0,providerState:"queued"}))};tsFastifySaveDirectorBatch(y);for(let k=0;k<h;k+=1)await tsFastifySubmitDirectorSlot(y,k);return tsFastifyDirectorBatchView(y)}async function tsFastifyRefreshDirectorBatch(t){const r=typeof t==="string"?tsFastifyLoadDirectorBatch(t):t;if(!r)throw new Error("This Director generation batch is no longer available in this browser session.");let n=!1;for(const s of r.slots){if(!(s.jobId&&(s.status==="queued"||s.status==="running")))continue;if(s.providerState==="succeeded"){n=!0;continue}const d=await hL(`/generation/${s.jobId}`);if(d.error)continue;const c=d.data&&d.data.generation||{},h=String(c.state||"").toLowerCase();h==="succeeded"?(s.providerState="succeeded",s.status="running",n=!0):h==="failed"?(s.providerState="failed",s.status="failed",s.failureMessage=c.last_error||"Generation failed."):h==="cancelled"?(s.providerState="cancelled",s.status="cancelled",s.failureMessage="Generation was cancelled."):h&&(s.providerState=h,s.status=h==="queued"?"queued":"running")}if(n){const s=await hL("/library");if(!s.error){const d=s.data&&Array.isArray(s.data.items)?s.data.items:[];for(const c of r.slots){if(c.providerState!=="succeeded"||c.status==="succeeded")continue;const h=d.find(f=>String(f.job_id||"")===String(c.jobId));if(!h)continue;c.status="succeeded",c.assetId=h.id||null,c.storagePath=h.object_path||null,c.contentType=h.mime_type||null,c.size=h.size_bytes||null,c.imageUrl=`${vL}/library/${encodeURIComponent(h.id)}/preview`}}}tsFastifySaveDirectorBatch(r);const s=tsFastifyDirectorBatchView(r);return s.status==="succeeded"&&tsFastifyDeleteDirectorBatch(r.id),s}async function tsFastifyWaitDirectorBatch(t){let r=t;for(let n=0;n<120&&!Yj(r.status);n+=1)await new Promise(s=>setTimeout(s,2500)),r=await tsFastifyRefreshDirectorBatch(r.parentBatchId);if(!Yj(r.status))throw new Error("Generation is still processing after five minutes. The jobs were preserved in Thee Studio.");return r}'''
+          text=text.replace(marker,bridge+marker,1)
+
+          old='const w=S.length?S.map(_=>_.dataUrl):d;if(_t()){'
+          new='const w=S.length?S.map(_=>_.dataUrl):d;if(xL){if(s&&!k)throw new Error("Save this creator before generating with an Identity reference in production.");const _=L.length?L.map(Q=>[r,Q.prompt].filter(Boolean).join("  ")):null;return tsFastifyCreateDirectorBatch({prompt:r,negativePrompt:n,creatorId:k,batchSize:y,requestKey:v,prompts:_})}if(_t()){'
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one nO cloud/local gate, found {text.count(old)}')
+          text=text.replace(old,new,1)
+
+          old='async function Tz(t,{continueBatch:r=!1}={}){const{data:n,error:s}=await Yt().functions.invoke("cast-quick-shoot-status",{body:{jobId:t,continueBatch:r===!0}});'
+          new='async function Tz(t,{continueBatch:r=!1}={}){if(xL&&tsFastifyLoadDirectorBatch(t))return tsFastifyRefreshDirectorBatch(t);const{data:n,error:s}=await Yt().functions.invoke("cast-quick-shoot-status",{body:{jobId:t,continueBatch:r===!0}});'
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one Tz status entrypoint, found {text.count(old)}')
+          text=text.replace(old,new,1)
+
+          old='async function iO(t,r){const n=Number(r);if(!t)throw new Error("Retry needs a valid parent batch.");if(!Number.isInteger(n)||n<0||n>4)throw new Error("Retry needs a valid image slot.");const s=await Br("cast-quick-shoot-retry-slot",{parentBatchId:t,slotIndex:n});'
+          new='async function iO(t,r){const n=Number(r);if(!t)throw new Error("Retry needs a valid parent batch.");if(!Number.isInteger(n)||n<0||n>4)throw new Error("Retry needs a valid image slot.");if(xL){const s=tsFastifyLoadDirectorBatch(t);if(s)return await tsFastifySubmitDirectorSlot(s,n),tsFastifyDirectorBatchView(s)}const s=await Br("cast-quick-shoot-retry-slot",{parentBatchId:t,slotIndex:n});'
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one iO retry entrypoint, found {text.count(old)}')
+          text=text.replace(old,new,1)
+
+          old='async function zz({positivePrompt:t,negativePrompt:r,batchSize:n=1,creatorId:s=null,imageSize:d="Vertical 9:16",fashionSafetyMode:c="auto",requestKey:h=null,returnPending:f=!1,directorContext:y=null}={}){const k=await Br("cast-quick-shoot",'
+          new='async function zz({positivePrompt:t,negativePrompt:r,batchSize:n=1,creatorId:s=null,imageSize:d="Vertical 9:16",fashionSafetyMode:c="auto",requestKey:h=null,returnPending:f=!1,directorContext:y=null}={}){if(xL)return tsFastifyCreateDirectorBatch({prompt:t,negativePrompt:r,creatorId:s,batchSize:n,requestKey:h});const k=await Br("cast-quick-shoot",'
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one zz generation entrypoint, found {text.count(old)}')
+          text=text.replace(old,new,1)
+
+          old='async function cO({engine:t="",performanceMode:r="Balanced",comfyServerUrl:n="http://127.0.0.1:8188",comfyWorkflowPath:s="",imageStyle:d="Lifestyle Creator",positivePrompt:c="",negativePrompt:h="",imageSize:f="Vertical 9:16",quality:y="High",batchSize:k=1,seed:m=-1,cfg:v=7,steps:b=20,width:C=832,height:L=1216}={}){if(_t())return zz({positivePrompt:c,negativePrompt:h,batchSize:k,imageSize:f});'
+          new='async function cO({engine:t="",performanceMode:r="Balanced",comfyServerUrl:n="http://127.0.0.1:8188",comfyWorkflowPath:s="",imageStyle:d="Lifestyle Creator",positivePrompt:c="",negativePrompt:h="",imageSize:f="Vertical 9:16",quality:y="High",batchSize:k=1,seed:m=-1,cfg:v=7,steps:b=20,width:C=832,height:L=1216}={}){if(xL)return{...await tsFastifyWaitDirectorBatch(await tsFastifyCreateDirectorBatch({prompt:c,negativePrompt:h,batchSize:k})),providerStatus:"Fastify API"};if(_t())return zz({positivePrompt:c,negativePrompt:h,batchSize:k,imageSize:f});'
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one cO generation entrypoint, found {text.count(old)}')
+          text=text.replace(old,new,1)
 
           open(path,'w',encoding='utf-8',newline='').write(text)
           PY
@@ -120,7 +135,7 @@ jobs:
           path,old,new=sys.argv[1:]
           text=open(path,'r',encoding='utf-8').read()
           if text.count(old) != 1:
-              raise SystemExit(f'Expected one current asset reference, found {text.count(old)}')
+              raise SystemExit(f'Expected one active bundle reference, found {text.count(old)}')
           text=text.replace(old,new,1)
           open(path,'w',encoding='utf-8',newline='').write(text)
           PY
@@ -128,21 +143,20 @@ jobs:
           mv -f "$index.tmp" "$index"
 
           grep -Fq "$new_ref" "$index"
-          grep -Fq '"aria-pressed":r' "$new"
-          grep -Fq 'choose up to 3' "$new"
-          grep -Fq 'd.worlds.length>=3' "$new"
-          grep -Fq 'd.energies.length>=3' "$new"
-          grep -Fq 'd.photographyStyles.length>=3' "$new"
-          grep -Fq 'd.niches.length>=3' "$new"
+          grep -Fq 'tsFastifyCreateDirectorBatch' "$new"
+          grep -Fq 'tsFastifyRefreshDirectorBatch' "$new"
+          grep -Fq 'tsFastifySubmitDirectorSlot' "$new"
+          grep -Fq 'if(xL&&tsFastifyLoadDirectorBatch(t))' "$new"
+          grep -Fq 'providerStatus:"Fastify API"' "$new"
           if grep -Fq "$current_ref\"" "$index"; then
-            echo 'Old Cast bundle is still active.' >&2
+            echo 'Old Studio bundle is still active.' >&2
             exit 33
           fi
 
           printf 'backup=%s\nnew_asset=%s\nnew_sha256=%s\n' "$backup" "$NEW_ASSET" "$(sha256sum "$new" | awk '{print $1}')"
           REMOTE
 
-      - name: Verify disk and public HTTPS
+      - name: Verify disk public HTTPS and Fastify generation routes
         shell: bash
         run: |
           set -euo pipefail
@@ -156,12 +170,16 @@ jobs:
           test -s "$asset" && test -s "$index"
           grep -Fq "src=\"/$NEW_ASSET\"" "$index"
           node --check "$asset"
-          grep -Fq '"aria-pressed":r' "$asset"
-          grep -Fq 'choose up to 3' "$asset"
-          grep -Fq 'd.worlds.length>=3' "$asset"
-          grep -Fq 'd.energies.length>=3' "$asset"
-          grep -Fq 'd.photographyStyles.length>=3' "$asset"
-          grep -Fq 'd.niches.length>=3' "$asset"
+          grep -Fq 'tsFastifyCreateDirectorBatch' "$asset"
+          grep -Fq 'tsFastifyRefreshDirectorBatch' "$asset"
+
+          base=http://127.0.0.1:4310
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "$base/api/generation/test-job")
+          test "$code" = 401
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "$base/api/library/test-item/preview")
+          test "$code" = 401
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$base/api/generation")
+          test "$code" = 401
           printf '%s\n' "$(sha256sum "$asset" | awk '{print $1}')"
           REMOTE
           )
@@ -176,11 +194,11 @@ jobs:
 
           curl --fail --silent --show-error --user-agent 'Mozilla/5.0' \
             --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" \
-            -o /tmp/thee-cast-brand-fix.js \
+            -o /tmp/thee-generation-bridge.js \
             "https://studio.myvitaworld.online/$NEW_ASSET"
-          public_sha=$(sha256sum /tmp/thee-cast-brand-fix.js | awk '{print $1}')
+          public_sha=$(sha256sum /tmp/thee-generation-bridge.js | awk '{print $1}')
           test "$public_sha" = "$expected_new_sha"
-          node --check /tmp/thee-cast-brand-fix.js
-          grep -Fq '"aria-pressed":r' /tmp/thee-cast-brand-fix.js
-          grep -Fq 'choose up to 3' /tmp/thee-cast-brand-fix.js
-          echo "CAST_BRAND_HOTFIX_OK asset=$NEW_ASSET sha256=$public_sha"
+          node --check /tmp/thee-generation-bridge.js
+          grep -Fq 'tsFastifyCreateDirectorBatch' /tmp/thee-generation-bridge.js
+          grep -Fq 'tsFastifyRefreshDirectorBatch' /tmp/thee-generation-bridge.js
+          echo "DIRECTOR_FASTIFY_GENERATION_BRIDGE_OK asset=$NEW_ASSET sha256=$public_sha"

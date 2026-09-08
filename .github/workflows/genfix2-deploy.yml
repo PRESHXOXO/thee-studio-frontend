@@ -1,4 +1,4 @@
-name: One-Time Genfix2 Deploy
+name: One-Time Genfix3 Deploy
 
 on:
   push:
@@ -18,12 +18,13 @@ jobs:
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
       CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
       CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
-      EXPECTED_JS_SHA256: 2d58e5eedb6290989a750843891f189d262c19116505deed1c2ab7c4b8140bcb
-      CURRENT_ASSET: assets/index-DhbQbUSO-genfix1-20260908.js
-      NEW_ASSET: assets/index-DhbQbUSO-genfix2-20260908.js
+      EXPECTED_JS_SHA256: 4c3cc3d7385aadeef2fbaed60d75be3342612e8ae810c59dd062520c0760a60c
+      CURRENT_ASSET: assets/index-DhbQbUSO-genfix2-20260908.js
+      NEW_ASSET: assets/index-DhbQbUSO-genfix3-20260908.js
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Configure scoped SSH
         env:
           KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
@@ -35,7 +36,7 @@ jobs:
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
       - name: Stage patch
-        run: scp -q -o BatchMode=yes -i ~/.ssh/thee_operator -P "$CPANEL_SSH_PORT" .ops/genfix2_creator_id_patch.py "$CPANEL_SSH_USER@$CPANEL_SSH_HOST:.thee-genfix2-patch.py"
+        run: scp -q -o BatchMode=yes -i ~/.ssh/thee_operator -P "$CPANEL_SSH_PORT" .ops/genfix3_creator_route_patch.py "$CPANEL_SSH_USER@$CPANEL_SSH_HOST:.thee-genfix3-patch.py"
 
       - name: Deploy
         run: |
@@ -45,15 +46,21 @@ jobs:
           current="$WEB/$CURRENT"; new="$WEB/$NEW"; index="$WEB/index.html"; tmp="${new}.tmp.js"
           test "$(sha256sum "$current" | awk '{print $1}')" = "$EXPECTED"
           test "$(grep -oF "/$CURRENT" "$index" | wc -l)" = 1
-          backup="$BACKUP_ROOT/director-creator-id-repair-$(date -u +%Y%m%dT%H%M%SZ)"
+
+          backup="$BACKUP_ROOT/director-creator-route-repair-$(date -u +%Y%m%dT%H%M%SZ)"
           mkdir -p "$backup/assets"
           cp -p "$index" "$backup/index.html"
           cp -p "$current" "$backup/$CURRENT"
+
           cp "$current" "$tmp"
-          python3 "$HOME/.thee-genfix2-patch.py" "$tmp"
+          python3 "$HOME/.thee-genfix3-patch.py" "$tmp"
           node --check "$tmp"
-          grep -Fq 'tsFastifyResolveCreatorId' "$tmp"
-          chmod 644 "$tmp"; mv -f "$tmp" "$new"
+          grep -Fq 'hL("/creators")' "$tmp"
+          grep -Fq 'Array.isArray(r.data.creators)' "$tmp"
+          if grep -Fq 'hL("/compat/creators")' "$tmp"; then exit 41; fi
+          chmod 644 "$tmp"
+          mv -f "$tmp" "$new"
+
           python3 - "$index" "/$CURRENT" "/$NEW" <<'PY'
           import sys
           p,o,n=sys.argv[1:]
@@ -61,16 +68,21 @@ jobs:
           assert s.count(o)==1
           open(p,'w',encoding='utf-8').write(s.replace(o,n,1))
           PY
-          rm -f "$HOME/.thee-genfix2-patch.py"
+
+          rm -f "$HOME/.thee-genfix3-patch.py"
           grep -Fq "/$NEW" "$index"
+          echo "DEPLOY_OK sha256=$(sha256sum "$new" | awk '{print $1}')"
           REMOTE
 
-      - name: Verify public bundle
+      - name: Verify public browser bundle
         run: |
-          curl -fsS --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/index.html https://studio.myvitaworld.online/
+          set -euo pipefail
+          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36'
+          curl -fsS -A "$ua" --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/index.html https://studio.myvitaworld.online/
           grep -Fq "src=\"/$NEW_ASSET\"" /tmp/index.html
-          curl -fsS --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/genfix2.js "https://studio.myvitaworld.online/$NEW_ASSET"
-          node --check /tmp/genfix2.js
-          grep -Fq 'tsFastifyResolveCreatorId' /tmp/genfix2.js
-          grep -Fq '"/compat/creators"' /tmp/genfix2.js
-          echo "DIRECTOR_CREATOR_ID_REPAIR_OK sha256=$(sha256sum /tmp/genfix2.js | awk '{print $1}')"
+          curl -fsS -A "$ua" --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/genfix3.js "https://studio.myvitaworld.online/$NEW_ASSET"
+          node --check /tmp/genfix3.js
+          grep -Fq 'hL("/creators")' /tmp/genfix3.js
+          grep -Fq 'Array.isArray(r.data.creators)' /tmp/genfix3.js
+          if grep -Fq 'hL("/compat/creators")' /tmp/genfix3.js; then exit 42; fi
+          echo "PUBLIC_OK sha256=$(sha256sum /tmp/genfix3.js | awk '{print $1}')"

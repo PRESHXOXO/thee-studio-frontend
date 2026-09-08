@@ -1,4 +1,4 @@
-name: Temporary Generation Validation Journal Trace
+name: Temporary Cherry Creator ID Contract Check
 
 on:
   push:
@@ -14,41 +14,61 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
+      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
 
     steps:
-      - name: Configure scoped SSH
-        env:
-          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+      - name: Authenticate and classify Cherry creator id without generation
+        shell: bash
         run: |
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
-          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-
-      - name: Read sanitized API journal around generation validation
-        run: |
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          sanitize() {
-            sed -E \
-              -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[EMAIL]/g' \
-              -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/[UUID]/g' \
-              -e 's/("?(authorization|cookie|token|secret|password)"?[=: ]+)[^, }]+/\1[REDACTED]/Ig' \
-              -e 's/("prompt"[[:space:]]*:[[:space:]]*")[^"]*(")/\1[REDACTED]\2/Ig'
+          node - <<'NODE'
+          const fs=require('fs');
+          const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g,'').trim().toLowerCase();
+          const password=String(process.env.CUTOVER_OWNER_PASSWORD||'');
+          if(!email||!password) process.exit(2);
+          fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});
+          NODE
+          trap 'rm -f /tmp/login.json /tmp/jar /tmp/csrf /tmp/creators.json /tmp/creator.json /tmp/cherry-id' EXIT
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          base='https://studio.myvitaworld.online/api'
+
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")
+          echo "owner_login_status=$code"
+          test "$code" = 200
+
+          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/creators" -o /tmp/creators.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const p=JSON.parse(fs.readFileSync('/tmp/creators.json','utf8'));
+          const rows=Array.isArray(p)?p:(p.creators||p.data||[]);
+          const matches=rows.filter(x=>/cherry/i.test(String(x?.name||'')));
+          console.log('cherry_match_count='+matches.length);
+          for(const [i,c] of matches.entries()){
+            const id=String(c?.id||'');
+            const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+            const numeric=/^\d+$/.test(id);
+            console.log(`cherry_${i+1}_name=${String(c?.name||'').replace(/[^A-Za-z0-9 ._'-]/g,'')}`);
+            console.log(`cherry_${i+1}_id_length=${id.length}`);
+            console.log(`cherry_${i+1}_id_is_uuid=${uuid}`);
+            console.log(`cherry_${i+1}_id_is_numeric=${numeric}`);
+            console.log(`cherry_${i+1}_keys=${Object.keys(c||{}).filter(k=>!['id','userId','user_id'].includes(k)).sort().join(',')}`);
           }
+          if(matches.length===1) fs.writeFileSync('/tmp/cherry-id',String(matches[0].id),{mode:0o600});
+          NODE
 
-          echo '=== SERVICE METADATA ==='
-          systemctl show thee-studio-api.service -p User -p Group -p WorkingDirectory -p ExecStart --no-pager 2>&1 | sanitize || true
+          test -s /tmp/cherry-id
+          cherry_id=$(cat /tmp/cherry-id)
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/creator.json -w '%{http_code}' "$base/creators/$cherry_id")
+          echo "cherry_get_status=$code"
+          test "$code" = 200
 
-          echo '=== API JOURNAL RECENT GENERATION ==='
-          journalctl -u thee-studio-api.service --since '2026-09-08 17:30:00' --no-pager -o cat 2>&1 | \
-            grep -Ei 'generation|creator|prompt|invalid|400|request|validation|schema|error' | tail -n 500 | sanitize || true
-
-          echo '=== WORKER JOURNAL RECENT GENERATION ==='
-          journalctl -u thee-studio-worker.service --since '2026-09-08 17:30:00' --no-pager -o cat 2>&1 | \
-            grep -Ei 'generation|creator|prompt|invalid|400|request|validation|schema|error' | tail -n 300 | sanitize || true
-          REMOTE
+          node - <<'NODE'
+          const fs=require('fs');
+          const p=JSON.parse(fs.readFileSync('/tmp/creator.json','utf8'));
+          const c=p.creator||p.data?.creator||p.data||p;
+          const id=String(c?.id||'');
+          console.log('cherry_get_id_matches_list='+(id===fs.readFileSync('/tmp/cherry-id','utf8')));
+          console.log('cherry_get_has_identity_hint='+Boolean(c?.identity||c?.metadata?.identity||c?.profile));
+          console.log('cherry_get_keys='+Object.keys(c||{}).filter(k=>!['id','userId','user_id'].includes(k)).sort().join(','));
+          NODE

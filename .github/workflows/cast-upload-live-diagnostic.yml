@@ -17,6 +17,7 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
 
     steps:
       - name: Configure scoped SSH
@@ -30,41 +31,60 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Trace newest Step 2 attempt read-only
+      - name: Inspect live reference mapping and preview code read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 \
             -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' | tee cast-step2-current-trace.txt
-          set -eu
-          LOG="$HOME/access-logs/studio.myvitaworld.online-ssl_log"
-          test -r "$LOG"
-
-          echo '=== current server time ==='
-          date
-          echo '=== active frontend bundle in index ==='
-          grep -oE 'assets/index-[^" ]+\.js' "$HOME/public_html/studio/index.html" | head -5 || true
-
-          echo '=== browser traffic 16:44-16:55 ==='
-          grep -aE '08/Sep/2026:16:(4[4-9]|5[0-5]):' "$LOG" \
-            | grep -E 'studio/images|/assets/index-|/api/auth/|/api/creators/|/api/assets/upload|/api/references/' \
-            | tail -260 || true
-
-          echo '=== newest headshot uploads ==='
-          grep -a '/api/assets/upload' "$LOG" | grep 'referenceType=headshot' | tail -20 || true
-
-          echo '=== newest references reads ==='
-          grep -aE 'GET /api/creators/.+/references' "$LOG" | tail -30 || true
-
-          echo '=== newest creator writes ==='
-          grep -aE '(PATCH /api/creators/|PUT /api/creators/.+/identity)' "$LOG" | tail -40 || true
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee cast-mapper-trace.txt
+          set -euo pipefail
+          asset_rel=$(grep -oE 'assets/index-[^" ]+\.js' "$WEB/index.html" | head -1)
+          asset="$WEB/$asset_rel"
+          echo "ACTIVE_ASSET=$asset_rel"
+          test -r "$asset"
+          python3 - "$asset" <<'PY'
+          import sys
+          path=sys.argv[1]
+          text=open(path,'r',encoding='utf-8',errors='ignore').read()
+          keys=[
+            'function Ll',
+            'Ll=',
+            'listReferenceAssets',
+            'uploadReferenceAsset',
+            'reference_type',
+            'signed_url',
+            'public_url',
+            'preview_url',
+            'identityReferences.images',
+            'Uploading headshot',
+            'Headshot',
+            'primaryReference'
+          ]
+          seen=[]
+          for key in keys:
+              start=0
+              found=0
+              while True:
+                  pos=text.find(key,start)
+                  if pos<0 or found>=4:
+                      break
+                  found+=1
+                  lo=max(0,pos-900); hi=min(len(text),pos+1900)
+                  sig=(lo,hi)
+                  if sig not in seen:
+                      seen.append(sig)
+                      print(f'\n--- KEY {key!r} @ {pos} ---')
+                      print(text[lo:hi].replace('\n',' '))
+                  start=pos+len(key)
+          PY
           REMOTE
 
-      - name: Upload trace artifact
+      - name: Upload mapper trace
         uses: actions/upload-artifact@v4
         with:
-          name: cast-step2-current-trace
-          path: cast-step2-current-trace.txt
+          name: cast-mapper-trace
+          path: cast-mapper-trace.txt
           if-no-files-found: error
           retention-days: 1

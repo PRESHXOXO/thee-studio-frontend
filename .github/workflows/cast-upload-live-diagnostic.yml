@@ -1,4 +1,4 @@
-name: Temporary Owner Smoke Contract Diagnostic
+name: Temporary Genfix2 Verification
 
 on:
   push:
@@ -17,60 +17,41 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+      ASSET: assets/index-DhbQbUSO-genfix2-20260908.js
 
     steps:
       - name: Configure scoped SSH
         env:
-          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
         run: |
-          set -euo pipefail
           install -d -m 700 ~/.ssh
-          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_operator
-          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect prior successful owner smoke evidence read-only
-        shell: bash
+      - name: Verify disk bundle read-only
         run: |
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "WEB='$CPANEL_DEPLOY_PATH' ASSET='$ASSET' bash -s" <<'REMOTE'
           set -euo pipefail
-          ssh -o BatchMode=yes -o ConnectTimeout=10 \
-            -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "bash -s" <<'REMOTE' | tee owner-smoke-contract.txt
-          set -u
-          root=/tmp/thee-owner-credit-fix
-          echo "USER=$(id)"
-          echo "=== SMOKE DIRECTORY ==="
-          ls -la "$root" 2>&1 || true
-          echo "=== READABLE FILES ==="
-          find "$root" -maxdepth 2 -type f -printf '%M %u %g %s %p\n' 2>/dev/null || true
-          echo "=== RELEVANT CONTENT ==="
-          for f in "$root"/*; do
-            test -f "$f" || continue
-            test -r "$f" || { echo "UNREADABLE $f"; continue; }
-            case "$(basename "$f")" in
-              *.json|*.txt|*.log|*.sh|*.js|*.mjs|*.cjs)
-                echo "--- FILE $f ---"
-                python3 - "$f" <<'PY'
-          import sys,re
-          p=sys.argv[1]
-          text=open(p,'r',encoding='utf-8',errors='ignore').read()
-          # Redact likely credentials/secrets while retaining request-shape evidence.
-          text=re.sub(r'(?i)(password|authorization|cookie|csrf|token|secret)(["\'\s:=]+)([^,\n}\"]+|"[^"]*")', r'\1\2<REDACTED>', text)
-          needles=['/api/generation','generation','prompt','creator','creatorId','creator_id','providerRunId','stillGenerationId','projectId','shotId','idempotency']
-          if any(n in text for n in needles):
-              print(text[:40000])
-          PY
-                ;;
-            esac
-          done
+          test -s "$WEB/$ASSET"
+          grep -Fq "src=\"/$ASSET\"" "$WEB/index.html"
+          node --check "$WEB/$ASSET"
+          grep -Fq 'tsFastifyResolveCreatorId' "$WEB/$ASSET"
+          grep -Fq '"/compat/creators"' "$WEB/$ASSET"
+          echo "DISK_OK sha256=$(sha256sum "$WEB/$ASSET" | awk '{print $1}')"
           REMOTE
 
-      - name: Upload trace
-        uses: actions/upload-artifact@v4
-        with:
-          name: owner-smoke-contract
-          path: owner-smoke-contract.txt
-          if-no-files-found: error
-          retention-days: 1
+      - name: Verify public HTTPS as browser
+        run: |
+          set -euo pipefail
+          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36'
+          curl -fsS -A "$ua" --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/index.html https://studio.myvitaworld.online/
+          grep -Fq "src=\"/$ASSET\"" /tmp/index.html
+          curl -fsS -A "$ua" --resolve "studio.myvitaworld.online:443:$CPANEL_SSH_HOST" -o /tmp/genfix2.js "https://studio.myvitaworld.online/$ASSET"
+          node --check /tmp/genfix2.js
+          grep -Fq 'tsFastifyResolveCreatorId' /tmp/genfix2.js
+          grep -Fq '"/compat/creators"' /tmp/genfix2.js
+          echo "PUBLIC_OK sha256=$(sha256sum /tmp/genfix2.js | awk '{print $1}')"

@@ -31,7 +31,7 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Trace recent creator-reference preview requests read-only
+      - name: Trace creator-reference requests in current SSL logs
         shell: bash
         run: |
           set -euo pipefail
@@ -40,27 +40,39 @@ jobs:
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
             "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' | tee cast-preview-request-trace.txt
           set -euo pipefail
-          echo "HOME=$HOME"
           asset_rel=$(grep -oE 'assets/index-[^" ]+\.js' "$WEB/index.html" | head -1)
           echo "ACTIVE_ASSET=$asset_rel"
-          echo '=== candidate readable web logs ==='
-          find "$HOME" -maxdepth 4 \( -type f -o -type l \) \
-            \( -iname '*access*log*' -o -iname '*error*log*' -o -path '*/logs/*' \) \
-            -print 2>/dev/null | head -80
-          echo '=== recent private creator-reference requests ==='
+          echo '=== access-logs entry ==='
+          ls -ld "$HOME/access-logs" 2>/dev/null || true
+          if [ -d "$HOME/access-logs" ]; then
+            ls -la "$HOME/access-logs" 2>/dev/null | head -40 || true
+          fi
+          echo '=== matching private preview requests ==='
           found=0
-          while IFS= read -r log; do
+          for log in "$HOME"/logs/studio.myvitaworld.online-ssl_log-Sep-2026* "$HOME"/access-logs/*studio.myvitaworld.online*; do
+            [ -e "$log" ] || continue
             [ -r "$log" ] || continue
-            matches=$(grep -F '/api/assets/download/creator-references/' "$log" 2>/dev/null | tail -40 || true)
+            case "$log" in
+              *.gz) matches=$(zgrep -F '/api/assets/download/creator-references/' "$log" 2>/dev/null | tail -80 || true) ;;
+              *) matches=$(grep -F '/api/assets/download/creator-references/' "$log" 2>/dev/null | tail -80 || true) ;;
+            esac
             if [ -n "$matches" ]; then
               found=1
               echo "--- $log ---"
               printf '%s\n' "$matches"
             fi
-          done < <(find "$HOME" -maxdepth 4 \( -type f -o -type l \) \
-            \( -iname '*access*log*' -o -iname '*error*log*' -o -path '*/logs/*' \) -print 2>/dev/null)
+          done
           if [ "$found" = 0 ]; then
-            echo 'NO_MATCHING_REQUESTS_IN_READABLE_USER_LOGS'
+            echo 'NO_MATCHING_PRIVATE_PREVIEW_REQUESTS'
+            echo '=== recent API-ish requests for creator references ==='
+            for log in "$HOME"/logs/studio.myvitaworld.online-ssl_log-Sep-2026* "$HOME"/access-logs/*studio.myvitaworld.online*; do
+              [ -e "$log" ] || continue
+              [ -r "$log" ] || continue
+              case "$log" in
+                *.gz) zgrep -E '/api/(creators/.*/references|assets/download|assets/upload)' "$log" 2>/dev/null | tail -100 || true ;;
+                *) grep -E '/api/(creators/.*/references|assets/download|assets/upload)' "$log" 2>/dev/null | tail -100 || true ;;
+              esac
+            done
           fi
           REMOTE
 

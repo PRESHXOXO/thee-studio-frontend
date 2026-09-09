@@ -30,26 +30,23 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect migration log and cPanel DB inventory read-only
+      - name: Inspect readable source snapshots read-only
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          echo "=== APP MIGRATIONS LOG (REDACTED) ==="
-          if test -r "$HOME/app-migrations.log"; then
-            tail -n 120 "$HOME/app-migrations.log" | sed -E 's#(password|passwd|secret|token|key)=([^ ]+)#\1=[REDACTED]#Ig'
+          echo "=== THEE FUNCTIONS TREE ==="
+          find "$HOME/thee-functions-20260827" -maxdepth 3 -type f -printf '%P\n' 2>/dev/null | sort | head -n 160 || true
+          echo "=== RUNTIME HEALTH TREE ==="
+          find "$HOME/thee-runtime-health" -maxdepth 3 -type f -printf '%P\n' 2>/dev/null | sort | head -n 120 || true
+          echo "=== PRODUCTION ZIP MATCHES ==="
+          z="$HOME/.trash/thee-studio-production-fca172b-cpanel.zip"
+          if test -r "$z"; then
+            unzip -l "$z" 2>/dev/null | grep -E 'src/(generation|server|worker|worker-main)\.js|package\.json|migration|entitlement|billing' | head -n 200 || true
           else
-            echo "NO_READABLE_MIGRATION_LOG"
+            echo "NO_READABLE_PRODUCTION_ZIP"
           fi
-          echo "=== UAPI MYSQL DATABASES ==="
-          if command -v uapi >/dev/null 2>&1; then
-            uapi --output=json Mysql list_databases 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); rows=d.get("result",{}).get("data",[]) or []; print("DB",*[r.get("database") or r.get("name") for r in rows if isinstance(r,dict)],sep="\n")' || true
-            echo "=== UAPI MYSQL USERS ==="
-            uapi --output=json Mysql list_users 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); rows=d.get("result",{}).get("data",[]) or []; print("USER",*[r.get("user") or r.get("name") for r in rows if isinstance(r,dict)],sep="\n")' || true
-          else
-            echo "NO_UAPI"
-          fi
-          echo "=== HOME TOP LEVEL ==="
-          find "$HOME" -maxdepth 1 -mindepth 1 -printf '%f %y %m\n' 2>/dev/null | sort | head -n 160
+          echo "=== DEPLOY BACKUP NAMES ==="
+          find "$HOME/deploy-backups" -maxdepth 2 -type f -printf '%P\n' 2>/dev/null | sort | tail -n 100 || true
           REMOTE

@@ -1,0 +1,63 @@
+name: Fastify Safe History Diagnostic
+
+on:
+  push:
+    branches: [ops/cast-upload-debug-20260908]
+    paths: [.github/workflows/fastify-safe-history-diagnostic.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure scoped SSH
+        env:
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+      - name: Report only non-secret history structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' <<'PY'
+          import os,re,shlex
+          p=os.path.expanduser('~/.bash_history')
+          wanted={20,107,111,126}
+          sensitive=re.compile(r'(pass|password|token|secret|key|credential|auth|cookie)',re.I)
+          useful=re.compile(r'(thee|studio|generation|worker|service|systemctl|rsync|scp|ssh|deploy|migrat|opt|var|home|node|npm|git)',re.I)
+          def sanitize(tok):
+              if sensitive.search(tok): return '[REDACTED]'
+              if '=' in tok and not tok.startswith('--'):
+                  k=tok.split('=',1)[0]
+                  return k+'=[REDACTED]'
+              if tok.startswith(('http://','https://','mysql://','mariadb://','postgres://','postgresql://')):
+                  return '[URL_REDACTED]'
+              if tok.startswith('/') or tok.startswith('~/') or tok.startswith('$HOME/'):
+                  return tok if useful.search(tok) else '[PATH]'
+              if tok.startswith('-'): return tok
+              if useful.search(tok): return tok
+              return '[ARG]'
+          if not os.path.isfile(p):
+              print('NO_HISTORY'); raise SystemExit
+          with open(p,errors='ignore') as f:
+              for i,line in enumerate(f,1):
+                  if i not in wanted: continue
+                  try: toks=shlex.split(line,comments=False,posix=True)
+                  except Exception: toks=line.strip().split()
+                  print(f'{i}: '+' '.join(sanitize(t) for t in toks[:30]))
+          print('FASTIFY_SAFE_HISTORY_DIAGNOSTIC_OK')
+          PY

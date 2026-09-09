@@ -35,13 +35,13 @@ jobs:
           set -euo pipefail
           ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -u
-          redact(){ sed -E \
-            -e 's/([A-Za-z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|API_KEY|PRIVATE_KEY)[A-Za-z0-9_]*[=:][[:space:]]*)[^[:space:]"'"']+/\1[REDACTED]/Ig' \
-            -e 's#(mysql://|mariadb://|postgres(ql)?://)[^[:space:]"'"']+#\1[REDACTED]#Ig'; }
           for p in "$HOME/pull-managed-runtime.py" "$HOME/configure-runtime.sh" "$HOME/monitor-runtime.sh" "$HOME/backup.sh" "$HOME/thee-studio-backup.cron" "$HOME/thee-studio-runtime-monitor.cron"; do
             echo "=== FILE $p ==="
             if [ -r "$p" ]; then
-              sed -n '1,320p' "$p" | redact
+              grep -nEi 'thee-studio|/opt/|runtime|deploy|migrat|systemctl|service|sudo|install|copy|cp |rsync|subprocess|os\.system|mysql|mariadb|psql|node|npm|git|curl|tar|zip|backup|restore|source|target|def |class |function' "$p" 2>/dev/null \
+                | sed -E 's/^([0-9]+:)?([A-Z][A-Z0-9_]+)=.*/\1\2=[REDACTED]/' \
+                | sed -E 's#(mysql://|mariadb://|postgres(ql)?://)[^[:space:]]+#\1[REDACTED]#Ig' \
+                | sed -n '1,320p' || true
             else
               echo NOT_READABLE
             fi

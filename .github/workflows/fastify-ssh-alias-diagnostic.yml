@@ -1,0 +1,67 @@
+name: Fastify Existing SSH Alias Diagnostic
+
+on:
+  push:
+    branches: [ops/cast-upload-debug-20260908]
+    paths: [.github/workflows/fastify-ssh-alias-diagnostic.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure scoped SSH
+        env:
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+      - name: Inspect existing server-side SSH aliases safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' <<'PY'
+          import os,re
+          ssh=os.path.expanduser('~/.ssh')
+          print('=== SSH FILE METADATA ===')
+          if os.path.isdir(ssh):
+              for name in sorted(os.listdir(ssh)):
+                  p=os.path.join(ssh,name)
+                  try:
+                      st=os.stat(p)
+                      print(f'{name} mode={oct(st.st_mode & 0o777)} bytes={st.st_size}')
+                  except OSError: pass
+          print('=== CONFIG SAFE FIELDS ===')
+          cfg=os.path.join(ssh,'config')
+          if not os.path.isfile(cfg):
+              print('NO_SSH_CONFIG'); raise SystemExit
+          current=[]
+          with open(cfg,errors='ignore') as f:
+              for raw in f:
+                  line=raw.strip()
+                  if not line or line.startswith('#'): continue
+                  parts=line.split(None,1)
+                  key=parts[0].lower(); val=parts[1].strip() if len(parts)>1 else ''
+                  if key=='host':
+                      current=val.split()
+                      print('HOST '+' '.join(current))
+                  elif key in {'user','port','identityfile'}:
+                      if key=='identityfile': val=os.path.basename(os.path.expanduser(val))
+                      print(f'  {key.upper()} {val}')
+                  elif key=='hostname':
+                      print('  HOSTNAME [configured]')
+          print('FASTIFY_SSH_ALIAS_METADATA_OK')
+          PY

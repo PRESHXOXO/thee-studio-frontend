@@ -17,6 +17,7 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
 
     steps:
       - name: Configure scoped SSH
@@ -30,21 +31,29 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Find readable git working copies read-only
+      - name: Inspect live admin and entitlement API call sites read-only
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE'
           set -euo pipefail
-          echo "=== GIT WORKTREES ==="
-          find "$HOME" -maxdepth 7 -type d -name .git -print 2>/dev/null | while read -r g; do
-            w=${g%/.git}
-            echo "WORKTREE=$w"
-            git -C "$w" branch --show-current 2>/dev/null | sed 's/^/BRANCH=/' || true
-            git -C "$w" rev-parse --short HEAD 2>/dev/null | sed 's/^/HEAD=/' || true
-            git -C "$w" remote -v 2>/dev/null | sed -E 's#(https?://)[^/@]+@#\1[REDACTED]@#g' | head -n 4 || true
-            for p in src/generation.js src/server.js src/worker-main.js package.json; do
-              if test -r "$w/$p"; then echo "HAS $p"; fi
-            done
-          done
+          asset=$(python3 - "$WEB/index.html" <<'PY'
+          import re,sys
+          s=open(sys.argv[1],encoding='utf-8').read(); m=re.search(r'src="/([^"]+\.js)"',s); print(m.group(1) if m else '')
+          PY
+          )
+          echo "ACTIVE_ASSET=$asset"
+          node - "$WEB/$asset" <<'NODE'
+          const fs=require('fs'); const s=fs.readFileSync(process.argv[2],'utf8');
+          const terms=['billing_exempt','credit_deduction_enabled','admin_access_enabled','/admin','/access','entitlement','credits'];
+          for(const term of terms){
+            let from=0,hit=0;
+            while(true){const p=s.indexOf(term,from);if(p<0)break;hit++;console.log(`=== ${term} ${hit} ===`);console.log(s.slice(Math.max(0,p-1200),Math.min(s.length,p+2200)));from=p+term.length;if(hit>=8)break;}
+            console.log(`COUNT ${term} ${hit}`)
+          }
+          const re=/["'`]((?:\/api\/|\/compat\/)[A-Za-z0-9_?=&.\-\/${}:]+)["'`]/g;
+          const set=new Set(); let m; while((m=re.exec(s))) set.add(m[1]);
+          console.log('=== UNIQUE API LITERALS ==='); for(const x of [...set].sort()) if(/admin|access|credit|entitl|usage|billing/i.test(x)) console.log(x);
+          NODE
           REMOTE

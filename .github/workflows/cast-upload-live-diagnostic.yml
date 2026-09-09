@@ -30,36 +30,21 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect prior scoped operator command names only
+      - name: Find readable git working copies read-only
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' <<'PY'
-          import os, shlex, collections
-          p=os.path.expanduser('~/.bash_history')
-          print('=== RECENT COMMAND NAMES ONLY ===')
-          if not os.path.exists(p):
-              print('NO_HISTORY'); raise SystemExit
-          rows=[]
-          for raw in open(p,errors='ignore'):
-              raw=raw.strip()
-              if not raw or raw.startswith('#'): continue
-              try: toks=shlex.split(raw,posix=True)
-              except Exception: continue
-              if not toks: continue
-              i=0
-              while i < len(toks) and ('=' in toks[i] and not toks[i].startswith('-')):
-                  i+=1
-              if i>=len(toks): continue
-              cmd=os.path.basename(toks[i])
-              sub=''
-              if cmd in {'sudo','env','nohup','command','time'} and i+1<len(toks):
-                  cmd=os.path.basename(toks[i+1]); i+=1
-              if cmd in {'mysql','mariadb','psql','node','npm','npx','systemctl','git','curl','uapi','whmapi1','cpapi2','python','python3','bash','sh'} and i+1<len(toks):
-                  nxt=toks[i+1]
-                  if not nxt.startswith('-') and len(nxt)<80 and not any(x in nxt.lower() for x in ['pass','secret','token','key','=']): sub=nxt
-              rows.append((cmd,sub))
-          for cmd,sub in rows[-120:]: print(cmd,sub)
-          print('=== FREQUENT COMMANDS ===')
-          for (cmd,sub),n in collections.Counter(rows).most_common(50): print(n,cmd,sub)
-          PY
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          echo "=== GIT WORKTREES ==="
+          find "$HOME" -maxdepth 7 -type d -name .git -print 2>/dev/null | while read -r g; do
+            w=${g%/.git}
+            echo "WORKTREE=$w"
+            git -C "$w" branch --show-current 2>/dev/null | sed 's/^/BRANCH=/' || true
+            git -C "$w" rev-parse --short HEAD 2>/dev/null | sed 's/^/HEAD=/' || true
+            git -C "$w" remote -v 2>/dev/null | sed -E 's#(https?://)[^/@]+@#\1[REDACTED]@#g' | head -n 4 || true
+            for p in src/generation.js src/server.js src/worker-main.js package.json; do
+              if test -r "$w/$p"; then echo "HAS $p"; fi
+            done
+          done
+          REMOTE

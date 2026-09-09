@@ -1,0 +1,79 @@
+name: Fastify Non-Root Surface Diagnostic
+
+on:
+  push:
+    branches: [ops/cast-upload-debug-20260908]
+    paths: [.github/workflows/fastify-nonroot-surface-diagnostic.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+      CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure scoped SSH
+        env:
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+
+      - name: Inspect non-root application surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          echo '=== IDENTITY ==='
+          id
+          echo
+          echo '=== APP PATH PERMISSIONS ==='
+          for p in /opt/thee-studio-app /opt/thee-studio-app/src /opt/thee-studio-app/src/generation.js /opt/thee-studio-app/src/worker-main.js; do
+            ls -ld "$p" 2>&1 || true
+          done
+          echo
+          echo '=== READABLE APP ENTRYPOINTS ==='
+          for p in /opt/thee-studio-app/src/generation.js /opt/thee-studio-app/src/worker.js /opt/thee-studio-app/src/worker-main.js /opt/thee-studio-app/package.json; do
+            if [ -r "$p" ]; then echo "READABLE $p"; else echo "NOT_READABLE $p"; fi
+          done
+          echo
+          echo '=== HOME DEPLOY/MIGRATOR CANDIDATES ==='
+          find "$HOME" -maxdepth 5 -type f \( -iname '*thee*studio*' -o -iname '*migrat*' -o -iname '*deploy*' -o -iname '*generation*.js' -o -iname 'worker-main.js' \) -print 2>/dev/null | sed -n '1,250p'
+          echo
+          echo '=== HOME SYMLINK CANDIDATES ==='
+          find "$HOME" -maxdepth 5 -type l -print 2>/dev/null | while IFS= read -r p; do target=$(readlink "$p" 2>/dev/null || true); case "$target" in *thee-studio*|*/opt/thee-studio-app*) printf '%s -> %s\n' "$p" "$target";; esac; done | sed -n '1,150p'
+          echo
+          echo '=== COMMAND CANDIDATES ==='
+          for c in thee-studio thee-studio-migrate thee-studio-deploy studio-migrate studio-deploy migrate deploy; do
+            command -v "$c" 2>/dev/null && echo "FOUND_COMMAND $c" || true
+          done
+          echo
+          echo '=== PROCESS PATHS ==='
+          ps -eo user=,pid=,args= 2>/dev/null | grep -E 'thee-studio|worker-main|generation\.js' | grep -v grep | sed -E 's/(--?[A-Za-z0-9_-]*(key|token|secret|password)[= ]+)[^ ]+/\1[REDACTED]/Ig' | sed -n '1,100p' || true
+          echo
+          echo '=== CPANEL DEPLOY ROOT ==='
+          if [ -n "${CPANEL_DEPLOY_PATH:-}" ]; then
+            printf 'DEPLOY_PATH=%s\n' "$CPANEL_DEPLOY_PATH"
+            find "$CPANEL_DEPLOY_PATH" -maxdepth 3 -type f \( -name '*.js' -o -name '*.json' -o -name '*.sh' \) -print 2>/dev/null | sed -n '1,120p'
+          fi
+          echo
+          echo '=== NON-SECRET SHELL CONFIG REFERENCES ==='
+          grep -RIlE 'thee-studio-app|thee-studio-api|migrat|deploy' "$HOME"/.bashrc "$HOME"/.bash_profile "$HOME"/.profile "$HOME"/bin "$HOME"/.local/bin 2>/dev/null | sed -n '1,100p' || true
+          echo 'FASTIFY_NONROOT_DIAGNOSTIC_OK'
+          REMOTE

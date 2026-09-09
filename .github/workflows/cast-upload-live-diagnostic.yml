@@ -30,23 +30,36 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect readable source snapshots read-only
+      - name: Inspect prior scoped operator command names only
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          echo "=== THEE FUNCTIONS TREE ==="
-          find "$HOME/thee-functions-20260827" -maxdepth 3 -type f -printf '%P\n' 2>/dev/null | sort | head -n 160 || true
-          echo "=== RUNTIME HEALTH TREE ==="
-          find "$HOME/thee-runtime-health" -maxdepth 3 -type f -printf '%P\n' 2>/dev/null | sort | head -n 120 || true
-          echo "=== PRODUCTION ZIP MATCHES ==="
-          z="$HOME/.trash/thee-studio-production-fca172b-cpanel.zip"
-          if test -r "$z"; then
-            unzip -l "$z" 2>/dev/null | grep -E 'src/(generation|server|worker|worker-main)\.js|package\.json|migration|entitlement|billing' | head -n 200 || true
-          else
-            echo "NO_READABLE_PRODUCTION_ZIP"
-          fi
-          echo "=== DEPLOY BACKUP NAMES ==="
-          find "$HOME/deploy-backups" -maxdepth 2 -type f -printf '%P\n' 2>/dev/null | sort | tail -n 100 || true
-          REMOTE
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' <<'PY'
+          import os, shlex, collections
+          p=os.path.expanduser('~/.bash_history')
+          print('=== RECENT COMMAND NAMES ONLY ===')
+          if not os.path.exists(p):
+              print('NO_HISTORY'); raise SystemExit
+          rows=[]
+          for raw in open(p,errors='ignore'):
+              raw=raw.strip()
+              if not raw or raw.startswith('#'): continue
+              try: toks=shlex.split(raw,posix=True)
+              except Exception: continue
+              if not toks: continue
+              i=0
+              while i < len(toks) and ('=' in toks[i] and not toks[i].startswith('-')):
+                  i+=1
+              if i>=len(toks): continue
+              cmd=os.path.basename(toks[i])
+              sub=''
+              if cmd in {'sudo','env','nohup','command','time'} and i+1<len(toks):
+                  cmd=os.path.basename(toks[i+1]); i+=1
+              if cmd in {'mysql','mariadb','psql','node','npm','npx','systemctl','git','curl','uapi','whmapi1','cpapi2','python','python3','bash','sh'} and i+1<len(toks):
+                  nxt=toks[i+1]
+                  if not nxt.startswith('-') and len(nxt)<80 and not any(x in nxt.lower() for x in ['pass','secret','token','key','=']): sub=nxt
+              rows.append((cmd,sub))
+          for cmd,sub in rows[-120:]: print(cmd,sub)
+          print('=== FREQUENT COMMANDS ===')
+          for (cmd,sub),n in collections.Counter(rows).most_common(50): print(n,cmd,sub)
+          PY

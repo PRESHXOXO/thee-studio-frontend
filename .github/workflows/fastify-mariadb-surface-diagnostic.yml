@@ -1,0 +1,60 @@
+name: Fastify MariaDB Surface Diagnostic
+
+on:
+  push:
+    branches: [ops/cast-upload-debug-20260908]
+    paths: [.github/workflows/fastify-mariadb-surface-diagnostic.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure scoped SSH
+        env:
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+      - name: Probe MariaDB access without credentials output
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          echo '=== CLIENTS ==='
+          command -v mariadb || true
+          command -v mysql || true
+          echo '=== DEFAULT CONFIG PRESENT ==='
+          for p in "$HOME/.my.cnf" "$HOME/.config/my.cnf"; do
+            if [ -r "$p" ]; then echo "READABLE_CONFIG $p"; fi
+          done
+          echo '=== DATABASE CONNECTIVITY ==='
+          client=''
+          command -v mariadb >/dev/null 2>&1 && client=mariadb
+          if [ -z "$client" ] && command -v mysql >/dev/null 2>&1; then client=mysql; fi
+          if [ -z "$client" ]; then echo NO_DB_CLIENT; exit 0; fi
+          if "$client" --batch --skip-column-names -e 'SELECT 1' >/tmp/db_probe.$$ 2>/tmp/db_err.$$; then
+            echo DEFAULT_DB_AUTH_OK
+            echo '=== DATABASE NAMES (system schemas excluded) ==='
+            "$client" --batch --skip-column-names -e "SHOW DATABASES" 2>/dev/null | grep -Ev '^(information_schema|performance_schema|mysql|sys)$' | sed -n '1,100p'
+          else
+            echo DEFAULT_DB_AUTH_FAILED
+            sed -n '1,20p' /tmp/db_err.$$ | sed -E 's/(password:?).*/\1 [REDACTED]/Ig'
+          fi
+          rm -f /tmp/db_probe.$$ /tmp/db_err.$$
+          echo 'FASTIFY_MARIADB_SURFACE_DIAGNOSTIC_OK'
+          REMOTE

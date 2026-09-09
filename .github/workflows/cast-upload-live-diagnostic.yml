@@ -17,7 +17,6 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
 
     steps:
       - name: Configure scoped SSH
@@ -31,26 +30,30 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect entitlement client surface read-only
+      - name: Inspect scoped app repair surfaces read-only
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          asset=$(python3 - "$WEB/index.html" <<'PY'
-          import re,sys
-          s=open(sys.argv[1],encoding='utf-8').read(); m=re.search(r'src="/([^"]+\.js)"',s); print(m.group(1) if m else '')
-          PY
-          )
-          echo "ACTIVE_ASSET=$asset"
-          node - "$WEB/$asset" <<'NODE'
-          const fs=require('fs'); const s=fs.readFileSync(process.argv[2],'utf8');
-          const terms=['billing_exempt','account_entitlements','entitlement','credits','reserveLocalCredits'];
-          for(const term of terms){
-            let from=0,hit=0;
-            while(true){const p=s.indexOf(term,from);if(p<0)break;hit++;console.log(`=== ${term} ${hit} ===`);console.log(s.slice(Math.max(0,p-700),Math.min(s.length,p+1300)));from=p+term.length;if(hit>=5)break;}
-            console.log(`COUNT_${term.replace(/[^A-Za-z0-9]/g,'_')}=${hit}`)
-          }
-          NODE
+          echo "=== ID/GROUPS ==="
+          id
+          echo "=== DATABASE CLIENTS ==="
+          command -v mysql || true
+          command -v mariadb || true
+          mysql --version 2>/dev/null || true
+          mariadb --version 2>/dev/null || true
+          echo "=== HOME DB CONFIG PRESENCE ==="
+          for p in "$HOME/.my.cnf" "$HOME/.mylogin.cnf"; do
+            if test -e "$p"; then ls -l "$p"; else echo "ABSENT $p"; fi
+          done
+          echo "=== READABLE REPAIR/MIGRATION CANDIDATES ==="
+          find "$HOME" -maxdepth 6 -type f \( -iname '*migrat*' -o -iname '*maria*' -o -iname '*mysql*' -o -iname '*entitle*' -o -iname '*billing*' -o -iname '*thee*studio*' \) -print 2>/dev/null | head -n 120
+          echo "=== EXECUTABLE CANDIDATES ==="
+          for d in "$HOME/bin" /usr/local/bin /usr/bin; do
+            test -d "$d" || continue
+            find "$d" -maxdepth 1 -type f \( -iname '*migrat*' -o -iname '*thee*' \) -perm -u+x -print 2>/dev/null | head -n 80
+          done
+          echo "=== APP PROCESS VISIBILITY ==="
+          ps -eo user,pid,comm,args 2>/dev/null | grep -E 'thee-studio|node|fastify' | grep -v grep | head -n 40 || true
           REMOTE

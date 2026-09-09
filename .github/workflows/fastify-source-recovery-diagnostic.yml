@@ -1,0 +1,61 @@
+name: Fastify Source Recovery Diagnostic
+
+on:
+  push:
+    branches: [ops/cast-upload-debug-20260908]
+    paths: [.github/workflows/fastify-source-recovery-diagnostic.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure scoped SSH
+        env:
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+
+      - name: Inspect recovery artifacts without secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          echo '=== APP MIGRATIONS LOG (redacted) ==='
+          if [ -r "$HOME/app-migrations.log" ]; then
+            sed -E 's/([A-Za-z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|KEY)[A-Za-z0-9_]*[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig' "$HOME/app-migrations.log" | tail -n 250
+          else
+            echo 'NO_READABLE_APP_MIGRATIONS_LOG'
+          fi
+          echo
+          echo '=== BACKUP ARCHIVE METADATA ==='
+          archive="$HOME/.trash/thee-studio-production-fca172b-cpanel.zip"
+          if [ -r "$archive" ]; then
+            ls -lh "$archive"
+            echo
+            echo '=== BACKUP ARCHIVE RELEVANT PATHS ==='
+            unzip -Z1 "$archive" 2>/dev/null | grep -Ei '(^|/)(src/|generation\.js$|worker(-main)?\.js$|server\.js$|package\.json$|migrat|deploy|systemd|thee-studio)' | sed -n '1,350p'
+          else
+            echo 'NO_READABLE_BACKUP_ARCHIVE'
+          fi
+          echo
+          echo '=== HOME TOP-LEVEL FILES ==='
+          find "$HOME" -maxdepth 2 -type f -printf '%p\n' 2>/dev/null | grep -Ei 'thee|studio|app|migrat|deploy|backup|runtime' | sed -n '1,250p'
+          echo 'FASTIFY_SOURCE_RECOVERY_DIAGNOSTIC_OK'
+          REMOTE

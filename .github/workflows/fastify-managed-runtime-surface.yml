@@ -1,0 +1,53 @@
+name: Fastify Managed Runtime Surface
+
+on:
+  push:
+    branches: [ops/cast-upload-debug-20260908]
+    paths: [.github/workflows/fastify-managed-runtime-surface.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure scoped SSH
+        env:
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+      - name: Inspect runtime helper scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          redact(){ sed -E \
+            -e 's/([A-Za-z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|API_KEY|PRIVATE_KEY)[A-Za-z0-9_]*[=:][[:space:]]*)[^[:space:]"'"']+/\1[REDACTED]/Ig' \
+            -e 's#(mysql://|mariadb://|postgres(ql)?://)[^[:space:]"'"']+#\1[REDACTED]#Ig'; }
+          for p in "$HOME/pull-managed-runtime.py" "$HOME/configure-runtime.sh" "$HOME/monitor-runtime.sh" "$HOME/backup.sh" "$HOME/thee-studio-backup.cron" "$HOME/thee-studio-runtime-monitor.cron"; do
+            echo "=== FILE $p ==="
+            if [ -r "$p" ]; then
+              sed -n '1,320p' "$p" | redact
+            else
+              echo NOT_READABLE
+            fi
+            echo
+          done
+          echo '=== MANAGED FUNCTION TREE ==='
+          find "$HOME/thee-functions-20260827" -maxdepth 3 -type f -printf '%p\n' 2>/dev/null | sed -n '1,250p'
+          echo 'FASTIFY_MANAGED_RUNTIME_SURFACE_OK'
+          REMOTE

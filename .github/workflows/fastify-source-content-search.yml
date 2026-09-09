@@ -1,0 +1,77 @@
+name: Fastify Scoped Source Content Search
+
+on:
+  push:
+    branches: [ops/cast-upload-debug-20260908]
+    paths: [.github/workflows/fastify-source-content-search.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_BACKUP_ROOT: ${{ secrets.CPANEL_BACKUP_ROOT }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure scoped SSH
+        env:
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+      - name: Search readable scoped locations
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "BACKUP_ROOT='$CPANEL_BACKUP_ROOT' bash -s" <<'REMOTE'
+          set -u
+          echo '=== BACKUP ROOT RELEVANT FILENAMES ==='
+          if [ -n "${BACKUP_ROOT:-}" ] && [ -d "$BACKUP_ROOT" ]; then
+            find "$BACKUP_ROOT" -maxdepth 8 -type f \( \
+              -name 'generation.js' -o -name 'worker.js' -o -name 'worker-main.js' -o -name 'server.js' -o \
+              -name 'package.json' -o -iname '*owner*credit*' -o -iname '*generation*test*' \) -print 2>/dev/null | sed -n '1,300p'
+          else
+            echo BACKUP_ROOT_NOT_DIRECTORY
+          fi
+          echo
+          echo '=== HOME CURRENT-FASTIFY CONTENT MATCHES ==='
+          roots=("$HOME")
+          if [ -n "${BACKUP_ROOT:-}" ] && [ -d "$BACKUP_ROOT" ]; then roots+=("$BACKUP_ROOT"); fi
+          find "${roots[@]}" -maxdepth 8 -type f -size -5M \
+            ! -path '*/logs/*' ! -path '*/public_html/studio/assets/*' ! -path '*/node_modules/*' \
+            -print0 2>/dev/null | xargs -0 grep -IlE \
+            'registerGenerationRoutes|billing_exempt|owner-credit\.test|owner credit|Insufficient credits|credit_deduction_enabled|worker-main\.js' \
+            2>/dev/null | sed -n '1,300p' || true
+          echo
+          echo '=== SAFE HISTORY HINTS ==='
+          python3 - <<'PY'
+          import os,re
+          p=os.path.expanduser('~/.bash_history')
+          if not os.path.isfile(p):
+              print('NO_HISTORY')
+              raise SystemExit
+          pat=re.compile(r'(thee-studio-app|generation\.js|worker-main\.js|owner-credit|systemctl|rsync|scp|deploy|migrat)',re.I)
+          pathpat=re.compile(r'(?:/|\$HOME/|~/)[A-Za-z0-9_./-]*(?:thee-studio|generation\.js|worker-main\.js|migrat|deploy)[A-Za-z0-9_./-]*',re.I)
+          safe_cmds={'cd','cp','mv','rsync','scp','ssh','python','python3','node','npm','bash','sh','systemctl','sudo','git','find','grep','sed','cat','less','tail','head'}
+          with open(p,errors='ignore') as f:
+              for i,line in enumerate(f,1):
+                  if not pat.search(line): continue
+                  parts=line.strip().split()
+                  cmd=os.path.basename(parts[0]) if parts else ''
+                  paths=pathpat.findall(line)
+                  print(f'{i}: cmd={cmd if cmd in safe_cmds else "other"} paths={paths[:6]}')
+          PY
+          echo 'FASTIFY_SCOPED_SOURCE_SEARCH_OK'
+          REMOTE

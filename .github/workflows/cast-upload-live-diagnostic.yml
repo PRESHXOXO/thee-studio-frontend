@@ -1,4 +1,4 @@
-name: Temporary API Adapter Recovery
+name: Temporary Fastify Install Path Trace
 
 on:
   push:
@@ -17,7 +17,6 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
     steps:
       - name: Configure scoped SSH
         env:
@@ -29,23 +28,27 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: Recover API table adapter from deployed bundle
-        shell: bash
+      - name: Trace original install and helper commands read-only
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" "WEB='$CPANEL_DEPLOY_PATH' node -" > api-adapter.txt <<'NODE'
-          const fs=require('fs'),path=require('path');
-          const html=fs.readFileSync(path.join(process.env.WEB,'index.html'),'utf8');
-          const m=html.match(/src="\/([^\"]+\.js)"/); if(!m) process.exit(2);
-          const p=path.join(process.env.WEB,m[1]); const s=fs.readFileSync(p,'utf8');
-          const terms=['function ez(','const ez=','ez=r=>','=>ez(','/compat/','select(','upsert(','update(','insert(','delete()'];
-          for(const term of terms){
-            let i=s.indexOf(term); console.log('===== '+term+' @ '+i+' =====');
-            if(i>=0) console.log(s.slice(Math.max(0,i-7000),Math.min(s.length,i+14000)));
-          }
-          NODE
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > install-path.txt <<'REMOTE'
+          set -u
+          echo '=== HISTORY HINTS ==='
+          for f in "$HOME/.bash_history" "$HOME/.zsh_history"; do
+            [ -r "$f" ] || continue
+            grep -Ei 'thee-studio|fastify|mariadb|mysql|systemctl|/opt/thee|migration|bootstrap|runtime' "$f" 2>/dev/null | sed -E 's/([A-Z][A-Z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|KEY)[A-Z0-9_]*=)[^ ]+/\1[REDACTED]/Ig' | tail -300 || true
+          done
+          echo '=== SYSTEM HELPERS ==='
+          find /usr/local/bin /usr/local/sbin /usr/bin /usr/sbin -maxdepth 1 -type f 2>/dev/null | grep -Ei 'thee|studio|migrat|runtime|deploy' | sort | head -200 || true
+          echo '=== USER EXECUTABLES ==='
+          find "$HOME" -maxdepth 4 -type f -perm -u+x 2>/dev/null | grep -Ei 'thee|studio|migrat|runtime|deploy|backup' | sort | head -250 || true
+          echo '=== ROOT-MANAGED PUBLIC METADATA ==='
+          for p in /opt/thee-studio-migration /opt/thee-studio-app /etc/thee-studio; do
+            namei -l "$p" 2>/dev/null || true
+          done
+          REMOTE
       - uses: actions/upload-artifact@v4
         with:
-          name: api-adapter
-          path: api-adapter.txt
+          name: install-path
+          path: install-path.txt
           retention-days: 1

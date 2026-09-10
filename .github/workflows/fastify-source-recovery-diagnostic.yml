@@ -31,31 +31,41 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inspect recovery artifacts without secrets
+      - name: Capture recovery artifacts without secrets
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > fastify-source-recovery.txt <<'REMOTE'
           set -u
           echo '=== APP MIGRATIONS LOG (redacted) ==='
           if [ -r "$HOME/app-migrations.log" ]; then
-            sed -E 's/([A-Za-z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|KEY)[A-Za-z0-9_]*[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig' "$HOME/app-migrations.log" | tail -n 250
+            sed -E 's/([A-Za-z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|KEY)[A-Za-z0-9_]*[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig' "$HOME/app-migrations.log" | tail -n 400
           else
             echo 'NO_READABLE_APP_MIGRATIONS_LOG'
           fi
           echo
-          echo '=== BACKUP ARCHIVE METADATA ==='
-          archive="$HOME/.trash/thee-studio-production-fca172b-cpanel.zip"
-          if [ -r "$archive" ]; then
-            ls -lh "$archive"
-            echo
-            echo '=== BACKUP ARCHIVE RELEVANT PATHS ==='
-            unzip -Z1 "$archive" 2>/dev/null | grep -Ei '(^|/)(src/|generation\.js$|worker(-main)?\.js$|server\.js$|package\.json$|migrat|deploy|systemd|thee-studio)' | sed -n '1,350p'
-          else
-            echo 'NO_READABLE_BACKUP_ARCHIVE'
-          fi
+          echo '=== RUNTIME HELPERS (selected non-secret lines) ==='
+          for p in "$HOME/pull-managed-runtime.py" "$HOME/configure-runtime.sh" "$HOME/monitor-runtime.sh" "$HOME/backup.sh" "$HOME/thee-studio-backup.cron" "$HOME/thee-studio-runtime-monitor.cron"; do
+            echo "--- $p ---"
+            if [ -r "$p" ]; then
+              grep -nEi 'thee-studio|/opt/|runtime|deploy|migrat|systemctl|service|sudo|install|copy|cp |rsync|subprocess|node|npm|git|curl|tar|zip|backup|restore|source|target|def |class ' "$p" 2>/dev/null | sed -E 's/([A-Z][A-Z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|KEY)[A-Z0-9_]*=).*/\1[REDACTED]/Ig' | sed -n '1,300p' || true
+            else
+              echo NOT_READABLE
+            fi
+          done
           echo
-          echo '=== HOME TOP-LEVEL FILES ==='
-          find "$HOME" -maxdepth 2 -type f -printf '%p\n' 2>/dev/null | grep -Ei 'thee|studio|app|migrat|deploy|backup|runtime' | sed -n '1,250p'
+          echo '=== MANAGED FUNCTION TREE ==='
+          find "$HOME/thee-functions-20260827" -maxdepth 4 -type f -printf '%p\n' 2>/dev/null | sed -n '1,300p'
+          echo
+          echo '=== HOME DEPLOY FILES ==='
+          find "$HOME" -maxdepth 3 -type f -printf '%p\n' 2>/dev/null | grep -Ei 'thee|studio|app|migrat|deploy|backup|runtime|fastify' | sed -n '1,400p'
           echo 'FASTIFY_SOURCE_RECOVERY_DIAGNOSTIC_OK'
           REMOTE
+
+      - name: Upload recovery trace
+        uses: actions/upload-artifact@v4
+        with:
+          name: fastify-source-recovery-trace
+          path: fastify-source-recovery.txt
+          if-no-files-found: error
+          retention-days: 1

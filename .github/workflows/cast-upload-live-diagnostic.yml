@@ -1,4 +1,4 @@
-name: Temporary Fastify Cutover Control Trace
+name: Temporary Fastify Archive Recovery
 
 on:
   push:
@@ -28,24 +28,20 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: Capture control path without secret values
+      - name: Inspect archived production source
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > cutover-control.txt <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > archive-recovery.txt <<'REMOTE'
           set -u
-          echo '=== pull-managed-runtime.py ==='
-          sed -n '1,180p' "$HOME/pull-managed-runtime.py" 2>/dev/null | sed -E 's/(TOKEN|SECRET|PASSWORD|PASS|KEY)[A-Za-z0-9_]*[[:space:]]*=[[:space:]]*.*/\1=[REDACTED]/Ig' || true
-          echo '=== crons ==='
-          for f in "$HOME/thee-studio-backup.cron" "$HOME/thee-studio-runtime-monitor.cron"; do
-            echo "--- $f ---"; sed -n '1,160p' "$f" 2>/dev/null || true
-          done
-          echo '=== shell startup references ==='
-          grep -nEi 'migration|runtime|thee-studio|export|token|stack' "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" 2>/dev/null | sed -E 's/([A-Z][A-Z0-9_]*(TOKEN|SECRET|PASSWORD|PASS|KEY)[A-Z0-9_]*=).*/\1[REDACTED]/Ig' || true
-          echo '=== cron table filtered ==='
-          crontab -l 2>/dev/null | grep -Ei 'thee|studio|migration|runtime|backup' | sed -E 's/([A-Z][A-Z0-9_]*(TOKEN|SECRET|PASSWORD|PASS|KEY)[A-Z0-9_]*=)[^ ]+/\1[REDACTED]/Ig' || true
+          z="$HOME/.trash/thee-studio-production-fca172b-cpanel.zip"
+          echo '=== MATCHING ARCHIVE PATHS ==='
+          if [ ! -r "$z" ]; then echo ARCHIVE_NOT_READABLE; exit 0; fi
+          unzip -Z1 "$z" 2>/dev/null | grep -Ei '(^|/)(src/.*\.(js|ts)|server\.js|generation\.js|auth.*\.(js|ts)|schema.*\.(sql|js|ts)|migrations?/|package\.json)$' | head -500 || true
+          echo '=== CREDIT/AUTH FILE CANDIDATES ==='
+          unzip -Z1 "$z" 2>/dev/null | grep -Ei '(generation|credit|entitle|access|auth|user|schema|migrat|server)' | head -500 || true
           REMOTE
       - uses: actions/upload-artifact@v4
         with:
-          name: cutover-control
-          path: cutover-control.txt
+          name: archive-recovery
+          path: archive-recovery.txt
           retention-days: 1

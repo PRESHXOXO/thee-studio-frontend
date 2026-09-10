@@ -1,4 +1,4 @@
-name: Temporary Scoped Backend Source Discovery
+name: Temporary Scoped Database Credential Discovery
 
 on:
   push:
@@ -31,56 +31,41 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Locate readable or writable application source without privilege escalation
+      - name: Discover existing app-owned DB credential path without printing secrets
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          echo 'IDENTITY'
-          id
-          echo 'HOME='
-          printf '%s\n' "$HOME"
-
-          echo 'KNOWN_APP_PATHS'
-          for p in \
-            /opt/thee-studio-app \
-            /opt/thee-studio-app/src \
-            /var/lib/thee-studio \
-            "$HOME/thee-studio-app" \
-            "$HOME/thee-studio" \
-            "$HOME/apps/thee-studio" \
-            "$HOME/applications/thee-studio" \
-            "$HOME/public_html/studio"; do
-            if [ -e "$p" ]; then
-              readable=no; writable=no; searchable=no
-              [ -r "$p" ] && readable=yes
-              [ -w "$p" ] && writable=yes
-              [ -x "$p" ] && searchable=yes
-              stat -c 'PATH=%n mode=%a owner=%U group=%G type=%F' "$p" 2>/dev/null || true
-              echo "ACCESS path=$p read=$readable write=$writable exec=$searchable"
+          echo 'MYSQL_CLIENT_CONFIGS'
+          for f in "$HOME/.my.cnf" "$HOME/.mylogin.cnf" "$HOME/.config/my.cnf"; do
+            if [ -e "$f" ]; then
+              stat -c 'CONFIG=%n mode=%a owner=%U group=%G readable=yes' "$f" 2>/dev/null || true
             fi
           done
 
-          echo 'GENERATION_SOURCE_CANDIDATES'
-          for root in "$HOME" /opt /var/lib/thee-studio /srv /var/www; do
-            [ -d "$root" ] || continue
-            find "$root" -maxdepth 7 -type f \( -name 'generation.js' -o -name 'worker.js' -o -name 'worker-main.js' -o -name 'server.js' -o -name 'app.js' \) -readable -printf '%p mode=%m owner=%u group=%g\n' 2>/dev/null | grep -Ei 'thee|studio|generation|worker' | head -200 || true
-          done
+          echo 'DEFAULT_CLIENT_AUTH'
+          if mariadb --batch --skip-column-names -e 'SELECT DATABASE(),CURRENT_USER()' >/tmp/db-default.$$ 2>/dev/null; then
+            echo 'DEFAULT_AUTH=success'
+            awk -F'\t' '{print "DATABASE=" ($1=="NULL"?"none":"selected"); print "PRINCIPAL_PRESENT=" ($2!="")}' /tmp/db-default.$$
+          else
+            echo 'DEFAULT_AUTH=denied'
+          fi
+          rm -f /tmp/db-default.$$
 
-          echo 'FASTIFY_PACKAGE_CANDIDATES'
-          for root in "$HOME" /opt /var/lib/thee-studio /srv /var/www; do
-            [ -d "$root" ] || continue
-            find "$root" -maxdepth 6 -type f -name package.json -readable -print0 2>/dev/null | while IFS= read -r -d '' f; do
-              if grep -q '"fastify"' "$f" 2>/dev/null; then
-                stat -c 'FASTIFY_PACKAGE=%n mode=%a owner=%U group=%G' "$f" 2>/dev/null || true
+          echo 'READABLE_CONFIG_MATCHES'
+          find "$HOME" -maxdepth 7 -type f -readable \
+            \( -name '.env' -o -name '.env.*' -o -name '*.env' -o -name '*.cnf' -o -name 'config.js' -o -name 'config.json' -o -name 'database.js' -o -name 'database.json' \) \
+            -size -2M -print0 2>/dev/null | while IFS= read -r -d '' f; do
+              if grep -Eq 'thee_studio_prod|THEE_STUDIO_DB|DATABASE_URL|DB_HOST|DB_NAME|DB_USER|DB_PASSWORD' "$f" 2>/dev/null; then
+                keys=$(grep -Eo '(^|[^A-Za-z0-9_])(THEE_STUDIO_DB_[A-Z_]+|DATABASE_URL|DB_(HOST|PORT|NAME|USER|PASSWORD))' "$f" 2>/dev/null | sed -E 's/^[^A-Za-z_]*//' | sort -u | paste -sd, -)
+                stat -c 'MATCH=%n mode=%a owner=%U group=%G' "$f" 2>/dev/null || true
+                echo "KEY_NAMES=${keys:-none}"
               fi
-            done | head -100 || true
-          done
+            done | head -120
 
-          echo 'DEPLOY_OPERATOR_CANDIDATES'
-          for root in "$HOME" /usr/local/bin /usr/local/sbin /opt /var/lib/thee-studio; do
-            [ -d "$root" ] || continue
-            find "$root" -maxdepth 5 -type f -readable \( -iname '*deploy*' -o -iname '*release*' -o -iname '*operator*' -o -iname '*restart*' \) -printf '%p mode=%m owner=%u group=%g\n' 2>/dev/null | grep -Ei 'thee|studio' | head -150 || true
+          echo 'DATABASE_NAME_MATCH_PATHS'
+          grep -RIl --exclude='*.log' --exclude='*.js.map' --exclude-dir=node_modules --exclude-dir=.git 'thee_studio_prod' "$HOME" 2>/dev/null | head -100 | while read -r f; do
+            stat -c 'DBNAME_MATCH=%n mode=%a owner=%U group=%G' "$f" 2>/dev/null || true
           done
           REMOTE

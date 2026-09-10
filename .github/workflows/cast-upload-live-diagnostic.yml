@@ -1,4 +1,4 @@
-name: Temporary Fastify Credit Gate Runtime Trace
+name: Temporary Owner Bootstrap Source Recovery
 
 on:
   push:
@@ -30,57 +30,54 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Trace live credit gate without mutation
+      - name: Recover owner/bootstrap source and runtime surface
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > owner-bootstrap-source.txt <<'REMOTE'
           set -u
-          scrub() {
-            sed -E \
-              -e 's/([A-Za-z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|API_KEY|PRIVATE_KEY|ACCESS_KEY|AUTH)[A-Za-z0-9_]*[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig' \
-              -e 's#(mysql://|mariadb://|postgres(ql)?://)[^[:space:]]+#\1[REDACTED]#Ig' \
-              -e 's#https://[^/@[:space:]]+:[^/@[:space:]]+@#https://[REDACTED]@#g';
-          }
+          root="$HOME/thee-functions-20260827"
+          for f in \
+            "$root/thee-bootstrap-owner/index.ts" \
+            "$root/thee-access/index.ts" \
+            "$root/thee-admin-access/index.ts" \
+            "$root/_shared/cast_credits.ts"; do
+            echo "===== FILE: $f ====="
+            if [ -r "$f" ]; then
+              # Source files reference secret names but should never contain values. Redact obvious literal assignments defensively.
+              sed -E \
+                -e 's#(sk-[A-Za-z0-9_-]{16,})#[REDACTED_KEY]#g' \
+                -e 's#(Bearer )[A-Za-z0-9._-]{20,}#\1[REDACTED]#g' \
+                -e 's#(https?://)[^/@[:space:]"'"']+:[^/@[:space:]"'"']+@#\1[REDACTED]@#g' \
+                "$f"
+            else
+              echo NOT_READABLE
+            fi
+          done
 
-          echo '=== IDENTITY ==='
-          id
-
-          echo '=== SERVICE UNIT ==='
-          systemctl cat thee-studio-api.service 2>&1 | scrub | sed -n '1,220p' || true
-          systemctl show thee-studio-api.service -p ActiveState -p SubState -p MainPID -p User -p Group -p WorkingDirectory -p ExecStart -p FragmentPath 2>&1 | scrub || true
-
-          echo '=== PROCESS ==='
-          pid=$(systemctl show thee-studio-api.service -p MainPID --value 2>/dev/null || true)
-          if [ -n "$pid" ] && [ "$pid" != 0 ]; then
-            ps -o pid,ppid,user,group,lstart,args -p "$pid" 2>&1 | scrub || true
-            for p in "/proc/$pid/cwd" "/proc/$pid/root" "/proc/$pid/exe"; do readlink "$p" 2>&1 | scrub || true; done
-            if [ -r "/proc/$pid/cmdline" ]; then tr '\0' ' ' < "/proc/$pid/cmdline" | scrub; echo; fi
-          fi
-
-          echo '=== JOURNAL CREDIT/AUTH/GATE LINES ==='
-          journalctl -u thee-studio-api.service --no-pager -n 1200 2>&1 \
-            | grep -Ei 'credit|entitl|billing|owner|account|usage|generation|402|insufficient|subscription|role|access|migrat|database|sql' \
-            | tail -n 350 | scrub || true
-
-          echo '=== APP MIGRATIONS ==='
-          if [ -r "$HOME/app-migrations.log" ]; then
-            tail -n 1200 "$HOME/app-migrations.log" \
-              | grep -Ei 'credit|entitl|billing|owner|account|usage|subscription|role|access|migrat|database|table|column|alter|insert|update|create' \
-              | tail -n 500 | scrub || true
+          echo '===== LOCAL RUNTIME SURFACE ====='
+          for url in \
+            http://127.0.0.1:18000/functions/v1/thee-runtime-health \
+            http://127.0.0.1:18000/functions/v1/thee-access \
+            http://127.0.0.1:18000/functions/v1/thee-bootstrap-owner; do
+            code=$(curl -sS -o /tmp/body.$$ -w '%{http_code}' -X OPTIONS "$url" 2>/dev/null || true)
+            echo "OPTIONS $(basename "$url") HTTP=$code"
+            rm -f /tmp/body.$$
+          done
+          echo '===== DOCKER ACCESS ====='
+          if docker ps --format '{{.Names}}' >/tmp/docker.$$ 2>/dev/null; then
+            echo DOCKER_PS=allowed
+            sed -n '1,80p' /tmp/docker.$$
           else
-            echo NO_READABLE_APP_MIGRATIONS_LOG
+            echo DOCKER_PS=denied
           fi
-
-          echo '=== HOME SCHEMA/MIGRATION REFERENCES ==='
-          grep -RniE --exclude='*.gz' --exclude='*.map' --exclude-dir=node_modules --exclude-dir=.git \
-            'account_entitlements|billing_exempt|credit_deduction_enabled|included_credits|used_credits|generation credits|user_usage_monthly|thee_studio_prod|bootstrap.?owner' \
-            "$HOME" 2>/dev/null | head -n 500 | scrub || true
-
-          echo '=== READABLE MIGRATION-LIKE FILES ==='
-          find "$HOME" -maxdepth 8 -type f -readable \
-            \( -iname '*.sql' -o -iname '*migrat*' -o -iname '*schema*' -o -iname '*bootstrap*' \) \
-            -printf '%p\n' 2>/dev/null | head -n 300
-
-          echo FASTIFY_CREDIT_GATE_RUNTIME_TRACE_OK
+          rm -f /tmp/docker.$$
           REMOTE
+
+      - name: Upload recovered source
+        uses: actions/upload-artifact@v4
+        with:
+          name: owner-bootstrap-source
+          path: owner-bootstrap-source.txt
+          if-no-files-found: error
+          retention-days: 1

@@ -1,4 +1,4 @@
-name: Temporary Replacement Backend Source Snapshot
+name: Temporary Replacement Backend Recovery Surface Snapshot
 
 on:
   push:
@@ -30,57 +30,61 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Capture sanitized read-only source snapshot
+      - name: Capture sanitized read-only recovery surface
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > replacement-backend-snapshot.txt <<'REMOTE'
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > replacement-backend-recovery-surface.txt <<'REMOTE'
           set -u
           echo "USER=$(id -un)"
           echo "UID=$(id -u)"
           echo "GROUPS=$(id -Gn)"
-          for p in /opt/thee-studio-app /opt/thee-studio-app/src /opt/thee-studio-app/package.json; do
-            if [ -e "$p" ]; then
-              r=no; x=no; w=no
-              [ -r "$p" ] && r=yes
-              [ -x "$p" ] && x=yes
-              [ -w "$p" ] && w=yes
-              printf 'PATH=%s EXISTS=yes READ=%s EXEC=%s WRITE=%s\n' "$p" "$r" "$x" "$w"
-              stat -c 'STAT=%A %U:%G %n' "$p" 2>/dev/null || true
-            else
-              printf 'PATH=%s EXISTS=no\n' "$p"
-            fi
-          done
+          echo "HOME=$HOME"
 
-          if cd /opt/thee-studio-app 2>/dev/null; then
-            echo 'APP_CD=yes'
-            if [ -r package.json ]; then
-              node -e "const p=require('./package.json'); console.log('PACKAGE_NAME='+(p.name||'')); console.log('PACKAGE_VERSION='+(p.version||'')); console.log('PACKAGE_TYPE='+(p.type||'')); console.log('PACKAGE_START='+(p.scripts&&p.scripts.start||''));" 2>/dev/null || true
-            fi
-            if [ -d .git ]; then
-              echo 'GIT_REPO=yes'
-              printf 'GIT_BRANCH='; git branch --show-current 2>/dev/null || true
-              printf 'GIT_HEAD='; git rev-parse HEAD 2>/dev/null || true
-              origin=$(git remote get-url origin 2>/dev/null || true)
-              origin=$(printf '%s' "$origin" | sed -E 's#(https?://)[^/@]+@#\1***@#')
-              echo "GIT_ORIGIN=$origin"
-              git status --short --branch 2>/dev/null | sed 's/^/GIT_STATUS=/' || true
-            else
-              echo 'GIT_REPO=no'
-            fi
-            echo 'SRC_FILES_BEGIN'
-            find src -maxdepth 2 -type f -printf '%p\n' 2>/dev/null | sort | head -200
-            echo 'SRC_FILES_END'
+          echo 'SUDO_BEGIN'
+          sudo -n -l 2>&1 | sed -E 's#(PASSWD|password|token|secret|key)[^,; ]*#REDACTED#Ig' | head -120 || true
+          echo 'SUDO_END'
+
+          echo 'SERVICE_BEGIN'
+          systemctl show thee-studio-api.service -p FragmentPath -p User -p Group -p WorkingDirectory -p ExecStart -p ActiveState -p SubState 2>&1 | head -80 || true
+          echo 'SERVICE_END'
+
+          echo 'OPT_PATH_BEGIN'
+          namei -l /opt/thee-studio-app 2>&1 | head -80 || true
+          getfacl -p /opt/thee-studio-app 2>&1 | head -80 || true
+          echo 'OPT_PATH_END'
+
+          echo 'HOME_CANDIDATES_BEGIN'
+          find "$HOME" -maxdepth 7 -type f \
+            \( -name package.json -o -name generation.js -o -name worker.js -o -name worker-main.js -o -iname '*fastify*' -o -iname '*studio*deploy*' -o -iname '*deploy*studio*' -o -iname '*thee*studio*' \) \
+            -print 2>/dev/null | sort | head -300
+          echo 'HOME_CANDIDATES_END'
+
+          echo 'HOME_DIRS_BEGIN'
+          find "$HOME" -maxdepth 5 -type d \( -iname '*thee*studio*' -o -iname '*fastify*' -o -iname '*backend*' \) -print 2>/dev/null | sort | head -200
+          echo 'HOME_DIRS_END'
+
+          echo 'BIN_CANDIDATES_BEGIN'
+          for d in "$HOME/bin" /usr/local/bin /usr/bin; do
+            [ -d "$d" ] || continue
+            find "$d" -maxdepth 1 -type f \( -iname '*studio*' -o -iname '*deploy*' -o -iname '*fastify*' \) -printf '%p\n' 2>/dev/null | sort | head -100
+          done
+          echo 'BIN_CANDIDATES_END'
+
+          echo 'SSH_ALIASES_BEGIN'
+          if [ -r "$HOME/.ssh/config" ]; then
+            awk '/^[[:space:]]*Host[[:space:]]+/ {print $0} /^[[:space:]]*User[[:space:]]+/ {print $0} /^[[:space:]]*Port[[:space:]]+/ {print $0}' "$HOME/.ssh/config" | head -100
           else
-            echo 'APP_CD=no'
+            echo 'NO_READABLE_SSH_CONFIG'
           fi
+          echo 'SSH_ALIASES_END'
           REMOTE
 
       - name: Upload sanitized snapshot
         uses: actions/upload-artifact@v4
         with:
-          name: replacement-backend-snapshot
-          path: replacement-backend-snapshot.txt
+          name: replacement-backend-recovery-surface
+          path: replacement-backend-recovery-surface.txt
           if-no-files-found: error
           retention-days: 1

@@ -1,4 +1,4 @@
-name: Temporary Replacement Backend Backup Inventory
+name: Temporary Fastify Migration and Runtime Helper Trace
 
 on:
   push:
@@ -30,51 +30,58 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Inventory accessible Studio recovery copies
+      - name: Capture sanitized migration and helper trace
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > replacement-backend-backup-inventory.txt <<'REMOTE'
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > fastify-migration-runtime-trace.txt <<'REMOTE'
           set -u
-          backup="$HOME/deploy-backups/studio/cast-fastify-auth-hydration-20260908T231908Z"
-          trashzip="$HOME/.trash/thee-studio-production-fca172b-cpanel.zip"
 
-          echo 'BACKUP_META_BEGIN'
-          if [ -d "$backup" ]; then
-            stat -c 'BACKUP_STAT=%A %U:%G %s %y %n' "$backup" 2>/dev/null || true
-            echo "BACKUP_READ=$([ -r "$backup" ] && echo yes || echo no)"
-            echo "BACKUP_EXEC=$([ -x "$backup" ] && echo yes || echo no)"
-            echo "BACKUP_WRITE=$([ -w "$backup" ] && echo yes || echo no)"
+          scrub() {
+            sed -E \
+              -e 's/([A-Za-z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|API_KEY|PRIVATE_KEY|ACCESS_KEY|AUTH)[A-Za-z0-9_]*[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig' \
+              -e 's#(mysql://|mariadb://|postgres(ql)?://)[^[:space:]]+#\1[REDACTED]#Ig' \
+              -e 's#https://[^/@[:space:]]+:[^/@[:space:]]+@#https://[REDACTED]@#g';
+          }
+
+          echo 'APP_MIGRATIONS_BEGIN'
+          if [ -r "$HOME/app-migrations.log" ]; then
+            stat -c 'APP_MIGRATIONS_STAT=%A %U:%G %s %y %n' "$HOME/app-migrations.log" 2>/dev/null || true
+            tail -n 500 "$HOME/app-migrations.log" | scrub
           else
-            echo 'BACKUP_MISSING=yes'
+            echo 'NO_READABLE_APP_MIGRATIONS_LOG'
           fi
-          echo 'BACKUP_META_END'
+          echo 'APP_MIGRATIONS_END'
 
-          echo 'BACKUP_TREE_BEGIN'
-          find "$backup" -maxdepth 4 -printf '%y %s %p\n' 2>/dev/null | sort | head -500
-          echo 'BACKUP_TREE_END'
+          echo 'HELPERS_BEGIN'
+          for p in "$HOME/pull-managed-runtime.py" "$HOME/configure-runtime.sh" "$HOME/monitor-runtime.sh" "$HOME/backup.sh" "$HOME/thee-studio-backup.cron" "$HOME/thee-studio-runtime-monitor.cron"; do
+            echo "FILE=$p"
+            if [ -r "$p" ]; then
+              stat -c 'STAT=%A %U:%G %s %y %n' "$p" 2>/dev/null || true
+              grep -nEi 'thee-studio|/opt/|runtime|deploy|migrat|systemctl|service|sudo|install|copy|cp[[:space:]]|rsync|subprocess|os\.system|mysql|mariadb|psql|node|npm|git|curl|tar|zip|backup|restore|source|target|request|url|endpoint|function|def[[:space:]]|class[[:space:]]' "$p" 2>/dev/null \
+                | scrub | sed -n '1,400p' || true
+            else
+              echo 'NOT_READABLE'
+            fi
+          done
+          echo 'HELPERS_END'
 
-          echo 'ZIP_META_BEGIN'
-          if [ -f "$trashzip" ]; then
-            stat -c 'ZIP_STAT=%A %U:%G %s %y %n' "$trashzip" 2>/dev/null || true
-            echo "ZIP_READ=$([ -r "$trashzip" ] && echo yes || echo no)"
-          else
-            echo 'ZIP_MISSING=yes'
-          fi
-          echo 'ZIP_META_END'
+          echo 'MANAGED_FUNCTION_TREE_BEGIN'
+          find "$HOME/thee-functions-20260827" -maxdepth 4 -type f -printf '%s %y %p\n' 2>/dev/null | sort | head -400
+          echo 'MANAGED_FUNCTION_TREE_END'
 
-          echo 'ZIP_LIST_BEGIN'
-          if [ -r "$trashzip" ]; then
-            unzip -l "$trashzip" 2>/dev/null | head -400 || true
-          fi
-          echo 'ZIP_LIST_END'
+          echo 'HOME_DEPLOY_FILES_BEGIN'
+          find "$HOME" -maxdepth 3 -type f \
+            \( -iname '*studio*' -o -iname '*runtime*' -o -iname '*migrat*' -o -iname '*deploy*' -o -iname '*fastify*' \) \
+            -printf '%s %y %p\n' 2>/dev/null | sort | head -500
+          echo 'HOME_DEPLOY_FILES_END'
           REMOTE
 
-      - name: Upload sanitized inventory
+      - name: Upload sanitized trace
         uses: actions/upload-artifact@v4
         with:
-          name: replacement-backend-backup-inventory
-          path: replacement-backend-backup-inventory.txt
+          name: fastify-migration-runtime-trace
+          path: fastify-migration-runtime-trace.txt
           if-no-files-found: error
           retention-days: 1

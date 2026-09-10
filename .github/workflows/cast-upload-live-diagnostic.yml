@@ -1,4 +1,4 @@
-name: Temporary cPanel Database Ownership Check
+name: Temporary Fastify Historical Control Route Trace
 
 on:
   push:
@@ -28,16 +28,36 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: List account-owned databases
+      - name: Trace historical control routes
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > cpanel-databases.txt <<'REMOTE'
-          set -u
-          command -v uapi || true
-          uapi --output=json Mysql list_databases 2>/dev/null || true
-          REMOTE
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' > historical-control-routes.txt <<'PY'
+          import glob,gzip,re,os
+          terms=re.compile(r'bootstrap|migrat|import|admin|entitl|access|credit|owner|sync',re.I)
+          seen=set(); rows=[]
+          files=[]
+          for pat in [os.path.expanduser('~/access-logs/*'),os.path.expanduser('~/logs/*')]: files.extend(glob.glob(pat))
+          for path in files:
+              if not os.path.isfile(path): continue
+              try:
+                  op=gzip.open if path.endswith('.gz') else open
+                  mode='rt'
+                  with op(path,mode,errors='ignore') as f:
+                      for line in f:
+                          m=re.search(r'\[(\d{2}/[A-Za-z]{3}/2026):[^\]]*\]\s+"(GET|POST|PUT|PATCH|DELETE|OPTIONS)\s+([^ ]+)\s+HTTP/[^\"]+"\s+(\d{3})',line)
+                          if not m: continue
+                          date,method,target,status=m.groups()
+                          if not terms.search(target): continue
+                          pathonly=target.split('?',1)[0]
+                          key=(date,method,pathonly,status)
+                          if key in seen: continue
+                          seen.add(key); rows.append(key)
+              except Exception: pass
+          for r in sorted(rows): print(' | '.join(r))
+          print('MATCH_COUNT=%d'%len(rows))
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: cpanel-databases
-          path: cpanel-databases.txt
+          name: historical-control-routes
+          path: historical-control-routes.txt
           retention-days: 1

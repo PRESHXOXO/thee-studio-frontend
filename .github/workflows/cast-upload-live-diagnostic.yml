@@ -1,4 +1,4 @@
-name: Temporary Fastify Install Path Trace
+name: Temporary Managed Runtime Helper Contract Trace
 
 on:
   push:
@@ -28,27 +28,39 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: Trace original install and helper commands read-only
+      - name: Inspect managed runtime helper contracts read-only
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > install-path.txt <<'REMOTE'
-          set -u
-          echo '=== HISTORY HINTS ==='
-          for f in "$HOME/.bash_history" "$HOME/.zsh_history"; do
-            [ -r "$f" ] || continue
-            grep -Ei 'thee-studio|fastify|mariadb|mysql|systemctl|/opt/thee|migration|bootstrap|runtime' "$f" 2>/dev/null | sed -E 's/([A-Z][A-Z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|KEY)[A-Z0-9_]*=)[^ ]+/\1[REDACTED]/Ig' | tail -300 || true
-          done
-          echo '=== SYSTEM HELPERS ==='
-          find /usr/local/bin /usr/local/sbin /usr/bin /usr/sbin -maxdepth 1 -type f 2>/dev/null | grep -Ei 'thee|studio|migrat|runtime|deploy' | sort | head -200 || true
-          echo '=== USER EXECUTABLES ==='
-          find "$HOME" -maxdepth 4 -type f -perm -u+x 2>/dev/null | grep -Ei 'thee|studio|migrat|runtime|deploy|backup' | sort | head -250 || true
-          echo '=== ROOT-MANAGED PUBLIC METADATA ==='
-          for p in /opt/thee-studio-migration /opt/thee-studio-app /etc/thee-studio; do
-            namei -l "$p" 2>/dev/null || true
-          done
-          REMOTE
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' > helper-contracts.txt <<'PY'
+          import os,re,glob
+          home=os.path.expanduser('~')
+          names=['pull-managed-runtime.py','configure-runtime.sh','monitor-runtime.sh','backup.sh','thee-studio-backup.cron','thee-studio-runtime-monitor.cron','app-migrations.log']
+          secret=re.compile(r'(password|passwd|token|secret|private[_-]?key|api[_-]?key|authorization|cookie)',re.I)
+          urlcred=re.compile(r'([a-z]+://[^:/\s]+:)[^@\s]+(@)',re.I)
+          for name in names:
+              p=os.path.join(home,name)
+              print('\n=== FILE',name,'EXISTS='+str(os.path.isfile(p)),'===')
+              if not os.path.isfile(p): continue
+              try:
+                  lines=open(p,encoding='utf-8',errors='replace').read().splitlines()
+              except Exception as e:
+                  print('READ_ERROR',type(e).__name__); continue
+              for line in lines[-800:]:
+                  if secret.search(line):
+                      # retain command/variable names but redact RHS and obvious credential-bearing text
+                      line=re.sub(r'([A-Za-z_][A-Za-z0-9_]*(?:PASSWORD|PASSWD|TOKEN|SECRET|PRIVATE_KEY|API_KEY)[A-Za-z0-9_]*\s*[=:]\s*).*',r'\1[REDACTED]',line,flags=re.I)
+                      if secret.search(line) and ('=' not in line and ':' not in line):
+                          line='[REDACTED SECRET-BEARING LINE]'
+                  line=urlcred.sub(r'\1[REDACTED]\2',line)
+                  print(line[:2000])
+          print('\n=== THEE FUNCTIONS TREE ===')
+          root=os.path.join(home,'thee-functions-20260827')
+          if os.path.isdir(root):
+              for p in sorted(glob.glob(root+'/**',recursive=True))[:1000]:
+                  if os.path.isfile(p): print(os.path.relpath(p,home))
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: install-path
-          path: install-path.txt
+          name: helper-contracts
+          path: helper-contracts.txt
           retention-days: 1

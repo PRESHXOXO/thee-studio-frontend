@@ -1,4 +1,4 @@
-name: Temporary Fastify Archive Recovery
+name: Temporary Fastify Service Wiring Trace
 
 on:
   push:
@@ -28,20 +28,24 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: Inspect archived production source
+      - name: Inspect service wiring safely
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > archive-recovery.txt <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > service-wiring.txt <<'REMOTE'
           set -u
-          z="$HOME/.trash/thee-studio-production-fca172b-cpanel.zip"
-          echo '=== MATCHING ARCHIVE PATHS ==='
-          if [ ! -r "$z" ]; then echo ARCHIVE_NOT_READABLE; exit 0; fi
-          unzip -Z1 "$z" 2>/dev/null | grep -Ei '(^|/)(src/.*\.(js|ts)|server\.js|generation\.js|auth.*\.(js|ts)|schema.*\.(sql|js|ts)|migrations?/|package\.json)$' | head -500 || true
-          echo '=== CREDIT/AUTH FILE CANDIDATES ==='
-          unzip -Z1 "$z" 2>/dev/null | grep -Ei '(generation|credit|entitle|access|auth|user|schema|migrat|server)' | head -500 || true
+          echo '=== UNIT ==='
+          systemctl cat thee-studio-api.service 2>&1 | sed -E 's/([A-Z][A-Z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|KEY)[A-Z0-9_]*=).*/\1[REDACTED]/Ig' | head -200 || true
+          echo '=== ENVIRONMENT FILES ==='
+          systemctl show thee-studio-api.service -p EnvironmentFiles -p Environment -p ExecStartPre -p ExecStartPost -p RuntimeDirectory -p StateDirectory -p ConfigurationDirectory 2>&1 | sed -E 's/([A-Z][A-Z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|KEY)[A-Z0-9_]*=)[^ ]+/\1[REDACTED]/Ig' | head -200 || true
+          echo '=== UNIT PATH PERMS ==='
+          for p in /etc/systemd/system/thee-studio-api.service /etc/thee-studio* /opt/thee-studio-migration/stack/.env /opt/thee-studio-app/.env; do
+            for x in $p; do [ -e "$x" ] && stat -c '%A %U:%G %n' "$x" 2>/dev/null || true; done
+          done
+          echo '=== LOCAL DB SOCKETS ==='
+          ss -ltn 2>/dev/null | grep -E ':(3306|3307|5432|18000|18001|3000|3001|8080|8081) ' || true
           REMOTE
       - uses: actions/upload-artifact@v4
         with:
-          name: archive-recovery
-          path: archive-recovery.txt
+          name: service-wiring
+          path: service-wiring.txt
           retention-days: 1

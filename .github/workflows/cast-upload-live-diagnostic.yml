@@ -34,45 +34,40 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > owner-bootstrap-source.txt <<'REMOTE'
-          set -u
-          root="$HOME/thee-functions-20260827"
-          for f in \
-            "$root/thee-bootstrap-owner/index.ts" \
-            "$root/thee-access/index.ts" \
-            "$root/thee-admin-access/index.ts" \
-            "$root/_shared/cast_credits.ts"; do
-            echo "===== FILE: $f ====="
-            if [ -r "$f" ]; then
-              # Source files reference secret names but should never contain values. Redact obvious literal assignments defensively.
-              sed -E \
-                -e 's#(sk-[A-Za-z0-9_-]{16,})#[REDACTED_KEY]#g' \
-                -e 's#(Bearer )[A-Za-z0-9._-]{20,}#\1[REDACTED]#g' \
-                -e 's#(https?://)[^/@[:space:]"'"']+:[^/@[:space:]"'"']+@#\1[REDACTED]@#g' \
-                "$f"
-            else
-              echo NOT_READABLE
-            fi
-          done
-
-          echo '===== LOCAL RUNTIME SURFACE ====='
-          for url in \
-            http://127.0.0.1:18000/functions/v1/thee-runtime-health \
-            http://127.0.0.1:18000/functions/v1/thee-access \
-            http://127.0.0.1:18000/functions/v1/thee-bootstrap-owner; do
-            code=$(curl -sS -o /tmp/body.$$ -w '%{http_code}' -X OPTIONS "$url" 2>/dev/null || true)
-            echo "OPTIONS $(basename "$url") HTTP=$code"
-            rm -f /tmp/body.$$
-          done
-          echo '===== DOCKER ACCESS ====='
-          if docker ps --format '{{.Names}}' >/tmp/docker.$$ 2>/dev/null; then
-            echo DOCKER_PS=allowed
-            sed -n '1,80p' /tmp/docker.$$
-          else
-            echo DOCKER_PS=denied
-          fi
-          rm -f /tmp/docker.$$
-          REMOTE
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' > owner-bootstrap-source.txt <<'PY'
+          import os,re,subprocess,urllib.request
+          root=os.path.expanduser('~/thee-functions-20260827')
+          paths=[
+            f'{root}/thee-bootstrap-owner/index.ts',
+            f'{root}/thee-access/index.ts',
+            f'{root}/thee-admin-access/index.ts',
+            f'{root}/_shared/cast_credits.ts',
+          ]
+          def clean(s):
+              s=re.sub(r'sk-[A-Za-z0-9_-]{16,}', '[REDACTED_KEY]', s)
+              s=re.sub(r'Bearer [A-Za-z0-9._-]{20,}', 'Bearer [REDACTED]', s)
+              s=re.sub(r'(https?://)[^/@\s"\']+:[^/@\s"\']+@', r'\1[REDACTED]@', s)
+              return s
+          for p in paths:
+              print(f'===== FILE: {p} =====')
+              try:
+                  with open(p,errors='replace') as fh: print(clean(fh.read()))
+              except Exception as e:
+                  print('NOT_READABLE', type(e).__name__)
+          print('===== LOCAL RUNTIME SURFACE =====')
+          for name in ['thee-runtime-health','thee-access','thee-bootstrap-owner']:
+              url=f'http://127.0.0.1:18000/functions/v1/{name}'
+              try:
+                  req=urllib.request.Request(url,method='OPTIONS')
+                  with urllib.request.urlopen(req,timeout=4) as r: code=r.status
+              except urllib.error.HTTPError as e: code=e.code
+              except Exception: code='ERR'
+              print(f'OPTIONS {name} HTTP={code}')
+          print('===== DOCKER ACCESS =====')
+          p=subprocess.run(['docker','ps','--format','{{.Names}}'],text=True,capture_output=True)
+          print('DOCKER_PS='+('allowed' if p.returncode==0 else 'denied'))
+          if p.returncode==0: print('\n'.join(p.stdout.splitlines()[:80]))
+          PY
 
       - name: Upload recovered source
         uses: actions/upload-artifact@v4

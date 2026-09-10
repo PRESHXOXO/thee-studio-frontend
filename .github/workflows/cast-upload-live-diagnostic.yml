@@ -1,4 +1,4 @@
-name: Temporary Fastify Service Wiring Trace
+name: Temporary cPanel Database Ownership Check
 
 on:
   push:
@@ -28,24 +28,16 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: Inspect service wiring safely
+      - name: List account-owned databases
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > service-wiring.txt <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > cpanel-databases.txt <<'REMOTE'
           set -u
-          echo '=== UNIT ==='
-          systemctl cat thee-studio-api.service 2>&1 | sed -E 's/([A-Z][A-Z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|KEY)[A-Z0-9_]*=).*/\1[REDACTED]/Ig' | head -200 || true
-          echo '=== ENVIRONMENT FILES ==='
-          systemctl show thee-studio-api.service -p EnvironmentFiles -p Environment -p ExecStartPre -p ExecStartPost -p RuntimeDirectory -p StateDirectory -p ConfigurationDirectory 2>&1 | sed -E 's/([A-Z][A-Z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|KEY)[A-Z0-9_]*=)[^ ]+/\1[REDACTED]/Ig' | head -200 || true
-          echo '=== UNIT PATH PERMS ==='
-          for p in /etc/systemd/system/thee-studio-api.service /etc/thee-studio* /opt/thee-studio-migration/stack/.env /opt/thee-studio-app/.env; do
-            for x in $p; do [ -e "$x" ] && stat -c '%A %U:%G %n' "$x" 2>/dev/null || true; done
-          done
-          echo '=== LOCAL DB SOCKETS ==='
-          ss -ltn 2>/dev/null | grep -E ':(3306|3307|5432|18000|18001|3000|3001|8080|8081) ' || true
+          command -v uapi || true
+          uapi --output=json Mysql list_databases 2>/dev/null || true
           REMOTE
       - uses: actions/upload-artifact@v4
         with:
-          name: service-wiring
-          path: service-wiring.txt
+          name: cpanel-databases
+          path: cpanel-databases.txt
           retention-days: 1

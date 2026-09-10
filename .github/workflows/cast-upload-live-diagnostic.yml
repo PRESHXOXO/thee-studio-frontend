@@ -1,4 +1,4 @@
-name: Temporary Replacement Backend Recovery Surface Snapshot
+name: Temporary Replacement Backend Backup Inventory
 
 on:
   push:
@@ -30,61 +30,51 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Capture sanitized read-only recovery surface
+      - name: Inventory accessible Studio recovery copies
         shell: bash
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > replacement-backend-recovery-surface.txt <<'REMOTE'
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > replacement-backend-backup-inventory.txt <<'REMOTE'
           set -u
-          echo "USER=$(id -un)"
-          echo "UID=$(id -u)"
-          echo "GROUPS=$(id -Gn)"
-          echo "HOME=$HOME"
+          backup="$HOME/deploy-backups/studio/cast-fastify-auth-hydration-20260908T231908Z"
+          trashzip="$HOME/.trash/thee-studio-production-fca172b-cpanel.zip"
 
-          echo 'SUDO_BEGIN'
-          sudo -n -l 2>&1 | sed -E 's#(PASSWD|password|token|secret|key)[^,; ]*#REDACTED#Ig' | head -120 || true
-          echo 'SUDO_END'
-
-          echo 'SERVICE_BEGIN'
-          systemctl show thee-studio-api.service -p FragmentPath -p User -p Group -p WorkingDirectory -p ExecStart -p ActiveState -p SubState 2>&1 | head -80 || true
-          echo 'SERVICE_END'
-
-          echo 'OPT_PATH_BEGIN'
-          namei -l /opt/thee-studio-app 2>&1 | head -80 || true
-          getfacl -p /opt/thee-studio-app 2>&1 | head -80 || true
-          echo 'OPT_PATH_END'
-
-          echo 'HOME_CANDIDATES_BEGIN'
-          find "$HOME" -maxdepth 7 -type f \
-            \( -name package.json -o -name generation.js -o -name worker.js -o -name worker-main.js -o -iname '*fastify*' -o -iname '*studio*deploy*' -o -iname '*deploy*studio*' -o -iname '*thee*studio*' \) \
-            -print 2>/dev/null | sort | head -300
-          echo 'HOME_CANDIDATES_END'
-
-          echo 'HOME_DIRS_BEGIN'
-          find "$HOME" -maxdepth 5 -type d \( -iname '*thee*studio*' -o -iname '*fastify*' -o -iname '*backend*' \) -print 2>/dev/null | sort | head -200
-          echo 'HOME_DIRS_END'
-
-          echo 'BIN_CANDIDATES_BEGIN'
-          for d in "$HOME/bin" /usr/local/bin /usr/bin; do
-            [ -d "$d" ] || continue
-            find "$d" -maxdepth 1 -type f \( -iname '*studio*' -o -iname '*deploy*' -o -iname '*fastify*' \) -printf '%p\n' 2>/dev/null | sort | head -100
-          done
-          echo 'BIN_CANDIDATES_END'
-
-          echo 'SSH_ALIASES_BEGIN'
-          if [ -r "$HOME/.ssh/config" ]; then
-            awk '/^[[:space:]]*Host[[:space:]]+/ {print $0} /^[[:space:]]*User[[:space:]]+/ {print $0} /^[[:space:]]*Port[[:space:]]+/ {print $0}' "$HOME/.ssh/config" | head -100
+          echo 'BACKUP_META_BEGIN'
+          if [ -d "$backup" ]; then
+            stat -c 'BACKUP_STAT=%A %U:%G %s %y %n' "$backup" 2>/dev/null || true
+            echo "BACKUP_READ=$([ -r "$backup" ] && echo yes || echo no)"
+            echo "BACKUP_EXEC=$([ -x "$backup" ] && echo yes || echo no)"
+            echo "BACKUP_WRITE=$([ -w "$backup" ] && echo yes || echo no)"
           else
-            echo 'NO_READABLE_SSH_CONFIG'
+            echo 'BACKUP_MISSING=yes'
           fi
-          echo 'SSH_ALIASES_END'
+          echo 'BACKUP_META_END'
+
+          echo 'BACKUP_TREE_BEGIN'
+          find "$backup" -maxdepth 4 -printf '%y %s %p\n' 2>/dev/null | sort | head -500
+          echo 'BACKUP_TREE_END'
+
+          echo 'ZIP_META_BEGIN'
+          if [ -f "$trashzip" ]; then
+            stat -c 'ZIP_STAT=%A %U:%G %s %y %n' "$trashzip" 2>/dev/null || true
+            echo "ZIP_READ=$([ -r "$trashzip" ] && echo yes || echo no)"
+          else
+            echo 'ZIP_MISSING=yes'
+          fi
+          echo 'ZIP_META_END'
+
+          echo 'ZIP_LIST_BEGIN'
+          if [ -r "$trashzip" ]; then
+            unzip -l "$trashzip" 2>/dev/null | head -400 || true
+          fi
+          echo 'ZIP_LIST_END'
           REMOTE
 
-      - name: Upload sanitized snapshot
+      - name: Upload sanitized inventory
         uses: actions/upload-artifact@v4
         with:
-          name: replacement-backend-recovery-surface
-          path: replacement-backend-recovery-surface.txt
+          name: replacement-backend-backup-inventory
+          path: replacement-backend-backup-inventory.txt
           if-no-files-found: error
           retention-days: 1

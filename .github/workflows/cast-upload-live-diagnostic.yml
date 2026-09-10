@@ -30,41 +30,29 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Capture sanitized cutover helpers
+      - name: Capture cutover helper structure
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' > fastify-cutover-trace.txt <<'PY'
-          import os,re
-          files=[
-            os.path.expanduser('~/pull-managed-runtime.py'),
-            os.path.expanduser('~/configure-runtime.sh'),
-            os.path.expanduser('~/app-migrations.log'),
-          ]
-          def scrub(s):
-              s=re.sub(r'(?i)(password|passwd|token|secret|api[_-]?key|private[_-]?key)(\s*[=:]\s*)[^\s\"\']+', r'\1\2[REDACTED]', s)
-              s=re.sub(r'(?i)(mysql|mariadb|postgres(?:ql)?):\/\/[^\s\"\']+', r'\1://[REDACTED]', s)
-              s=re.sub(r'Bearer\s+[A-Za-z0-9._-]{12,}', 'Bearer [REDACTED]', s)
-              return s
-          for p in files:
-              print('===== FILE: %s =====' % p)
-              try:
-                  with open(p,errors='replace') as fh:
-                      data=fh.read()
-                  print(scrub(data[-30000:] if p.endswith('.log') else data))
-              except Exception as e:
-                  print('NOT_READABLE', type(e).__name__)
-          print('===== RELEVANT HOME PATHS =====')
-          home=os.path.expanduser('~')
-          for root,dirs,names in os.walk(home):
-              depth=root[len(home):].count(os.sep)
-              if depth>5:
-                  dirs[:]=[]; continue
-              for n in names:
-                  low=n.lower()
-                  if any(k in low for k in ['migrat','runtime','fastify','studio','deploy']) and not low.endswith(('.log','.map')):
-                      print(os.path.join(root,n))
-          PY
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > fastify-cutover-trace.txt <<'REMOTE'
+          set -u
+          for f in "$HOME/pull-managed-runtime.py" "$HOME/configure-runtime.sh"; do
+            echo "===== $f ====="
+            if [ -r "$f" ]; then
+              grep -nE 'def |function|runtime|migrat|deploy|source|target|download|request|urllib|curl|rsync|cp |install|systemctl|/opt/|thee-studio|18000|database|mariadb|mysql' "$f" 2>/dev/null | head -300 || true
+            else
+              echo NOT_READABLE
+            fi
+          done
+          echo '===== MIGRATION LOG EVENTS ====='
+          if [ -r "$HOME/app-migrations.log" ]; then
+            grep -Ei 'thee-studio|fastify|migrat|deploy|runtime|owner|entitlement|access|credit|mariadb|mysql|/opt/' "$HOME/app-migrations.log" 2>/dev/null | tail -300 || true
+          else
+            echo NO_READABLE_LOG
+          fi
+          echo '===== RELEVANT PATHS ====='
+          find "$HOME" -maxdepth 5 -type f 2>/dev/null | grep -Ei 'migrat|runtime|fastify|thee-studio|deploy' | head -400 || true
+          REMOTE
 
       - name: Upload trace
         uses: actions/upload-artifact@v4

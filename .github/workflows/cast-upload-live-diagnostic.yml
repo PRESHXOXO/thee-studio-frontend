@@ -1,4 +1,4 @@
-name: Temporary Live Admin Surface Trace
+name: Temporary Fastify Owner Route Discovery
 
 on:
   push:
@@ -13,35 +13,71 @@ jobs:
   inspect:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    environment: production
+    env:
+      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
+      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
+
     steps:
-      - name: Trace admin and entitlement routes from live bundle
+      - name: Probe candidate owner/access routes without mutation
         shell: bash
         run: |
           set -euo pipefail
-          node <<'NODE'
-          const origin='https://studio.myvitaworld.online';
-          const ua={'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'};
-          const html=await (await fetch(origin+'/',{headers:ua})).text();
-          const scripts=[...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m=>new URL(m[1],origin).href);
-          console.log('SCRIPT_COUNT='+scripts.length);
-          const clean=s=>String(s||'').replace(/\s+/g,' ').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL]');
-          for(const url of scripts){
-            const r=await fetch(url,{headers:ua}); if(!r.ok) continue;
-            const text=await r.text();
-            console.log('BUNDLE='+url.split('/').pop());
-            const literals=new Set();
-            for(const m of text.matchAll(/(["'`])([^"'`]{2,160})\1/g)){
-              const v=m[2];
-              if(v.startsWith('/') && /(admin|access|entitl|billing|credit|usage|user|role|account|plan|subscription)/i.test(v)) literals.add(v);
-            }
-            console.log('ROUTE_LITERALS='+[...literals].sort().join(','));
-            for(const term of ['admin','billing_exempt','credit_deduction_enabled','account_type','internal','thee-access','support_readonly','acknowledge_alert','user_profitability','plan_profitability','entitlement','role']){
-              let idx=text.indexOf(term), n=0;
-              while(idx>=0&&n<8){
-                console.log(`CTX_${term.replace(/[^a-z0-9]+/gi,'_')}_${n}=`+clean(text.slice(Math.max(0,idx-1200),Math.min(text.length,idx+2200))));
-                idx=text.indexOf(term,idx+term.length);n++;
-              }
-              console.log(`COUNT_${term.replace(/[^a-z0-9]+/gi,'_')}=${n}`);
-            }
-          }
-          NODE
+          node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||!password)process.exit(2);fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});"
+          trap 'rm -f /tmp/login.json /tmp/jar /tmp/body /tmp/uid' EXIT
+          base='https://studio.myvitaworld.online/api'
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /tmp/body -w '%{http_code}' "$base/auth/login")
+          test "$code" = 200
+          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/auth/me" -o /tmp/body
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/body','utf8'));const u=x.user||x;if(!u?.id)process.exit(3);fs.writeFileSync('/tmp/uid',String(u.id));"
+          uid=$(cat /tmp/uid)
+
+          cat > /tmp/routes <<EOF
+          auth/bootstrap-owner
+          auth/owner/bootstrap
+          auth/me/access
+          auth/me/role
+          auth/me/entitlements
+          bootstrap-owner
+          owner/bootstrap
+          internal/bootstrap-owner
+          internal/owner/bootstrap
+          admin/bootstrap-owner
+          admin/access
+          admin/entitlements
+          admin/users/me
+          admin/users/$uid
+          admin/users/$uid/access
+          admin/users/$uid/role
+          admin/users/$uid/entitlements
+          admin/accounts/$uid
+          admin/accounts/$uid/access
+          account
+          account/access
+          account/entitlements
+          users/me
+          users/$uid
+          users/$uid/access
+          users/$uid/role
+          users/$uid/entitlements
+          access
+          entitlements
+          billing/entitlements
+          EOF
+
+          while read -r path; do
+            [ -n "$path" ] || continue
+            label=$(printf '%s' "$path" | sed "s#$uid#SELF#g")
+            g=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base/$path" || true)
+            gmsg=$(node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};process.stdout.write(String(x.error||x.message||'').slice(0,100).replace(/[\\r\\n]/g,' '));")
+            # Malformed JSON cannot produce a valid mutation; non-404 tells us a route exists.
+            p=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary '{' -o /tmp/body -w '%{http_code}' "$base/$path" || true)
+            pmsg=$(node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};process.stdout.write(String(x.error||x.message||'').slice(0,100).replace(/[\\r\\n]/g,' '));")
+            q=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X PATCH --data-binary '{' -o /tmp/body -w '%{http_code}' "$base/$path" || true)
+            qmsg=$(node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};process.stdout.write(String(x.error||x.message||'').slice(0,100).replace(/[\\r\\n]/g,' '));")
+            if [ "$g" != 404 ] || [ "$p" != 404 ] || [ "$q" != 404 ]; then
+              echo "ROUTE=$label GET=$g:$gmsg POST_BADJSON=$p:$pmsg PATCH_BADJSON=$q:$qmsg"
+            fi
+          done < /tmp/routes
+          rm -f /tmp/routes

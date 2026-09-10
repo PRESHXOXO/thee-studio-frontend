@@ -1,4 +1,4 @@
-name: Temporary Credit Regression Diagnostic
+name: Temporary Singular Generation Caller Trace
 
 on:
   push:
@@ -17,6 +17,7 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
 
     steps:
       - name: Configure scoped SSH
@@ -30,33 +31,37 @@ jobs:
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Probe narrow entitlement route candidates read-only
+      - name: Trace generation route callsites read-only
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE'
           set -euo pipefail
-          base='https://studio.myvitaworld.online'
-          paths=(
-            /api/auth/session
-            /api/access
-            /api/entitlements
-            /api/account/entitlements
-            /api/account/access
-            /api/usage
-            /api/credits
-            /api/admin
-            /api/admin/users
-            /api/admin/entitlements
-            /api/admin/credits
-            /compat/access
-            /compat/entitlements
+          asset=$(python3 - "$WEB/index.html" <<'PY'
+          import re,sys
+          s=open(sys.argv[1],encoding='utf-8').read(); m=re.search(r'src="/([^"]+\.js)"',s); print(m.group(1) if m else '')
+          PY
           )
-          for p in "${paths[@]}"; do
-            code=$(curl -sS -o /tmp/body.$$ -w '%{http_code}' -X GET "$base$p" || true)
-            ct=$(curl -sSI -X GET "$base$p" 2>/dev/null | awk -F': ' 'tolower($1)=="content-type"{print $2}' | tr -d '\r' | tail -1)
-            bytes=$(wc -c < /tmp/body.$$ 2>/dev/null || echo 0)
-            printf 'GET %s -> %s bytes=%s ct=%s\n' "$p" "$code" "$bytes" "$ct"
-          done
-          rm -f /tmp/body.$$
+          test -n "$asset"
+          echo "ACTIVE_ASSET=$asset"
+          echo "ACTIVE_SHA256=$(sha256sum "$WEB/$asset" | awk '{print $1}')"
+          node --check "$WEB/$asset"
+          node - "$WEB/$asset" <<'NODE'
+          const fs=require('fs');
+          const s=fs.readFileSync(process.argv[2],'utf8');
+          const needles=['/generation','/generations','Generation credit limit reached.','reserveLocalCredits'];
+          for(const needle of needles){
+            let from=0,hit=0;
+            while(true){
+              const p=s.indexOf(needle,from); if(p<0) break;
+              hit++;
+              console.log(`\n=== ${needle} HIT ${hit} POS ${p} ===`);
+              console.log(s.slice(Math.max(0,p-1600),Math.min(s.length,p+2600)));
+              from=p+needle.length;
+              if(hit>=12) break;
+            }
+            console.log(`COUNT ${needle} ${hit}`);
+          }
+          NODE
           REMOTE

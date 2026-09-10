@@ -1,4 +1,4 @@
-name: Temporary Fastify Migration and Runtime Helper Trace
+name: Temporary Fastify Credit Gate Runtime Trace
 
 on:
   push:
@@ -21,23 +21,21 @@ jobs:
     steps:
       - name: Configure scoped SSH
         env:
-          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           install -d -m 700 ~/.ssh
-          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_operator
-          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
 
-      - name: Capture sanitized migration and helper trace
+      - name: Trace live credit gate without mutation
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > fastify-migration-runtime-trace.txt <<'REMOTE'
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -u
-
           scrub() {
             sed -E \
               -e 's/([A-Za-z0-9_]*(PASSWORD|PASS|TOKEN|SECRET|API_KEY|PRIVATE_KEY|ACCESS_KEY|AUTH)[A-Za-z0-9_]*[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig' \
@@ -45,43 +43,44 @@ jobs:
               -e 's#https://[^/@[:space:]]+:[^/@[:space:]]+@#https://[REDACTED]@#g';
           }
 
-          echo 'APP_MIGRATIONS_BEGIN'
-          if [ -r "$HOME/app-migrations.log" ]; then
-            stat -c 'APP_MIGRATIONS_STAT=%A %U:%G %s %y %n' "$HOME/app-migrations.log" 2>/dev/null || true
-            tail -n 500 "$HOME/app-migrations.log" | scrub
-          else
-            echo 'NO_READABLE_APP_MIGRATIONS_LOG'
+          echo '=== IDENTITY ==='
+          id
+
+          echo '=== SERVICE UNIT ==='
+          systemctl cat thee-studio-api.service 2>&1 | scrub | sed -n '1,220p' || true
+          systemctl show thee-studio-api.service -p ActiveState -p SubState -p MainPID -p User -p Group -p WorkingDirectory -p ExecStart -p FragmentPath 2>&1 | scrub || true
+
+          echo '=== PROCESS ==='
+          pid=$(systemctl show thee-studio-api.service -p MainPID --value 2>/dev/null || true)
+          if [ -n "$pid" ] && [ "$pid" != 0 ]; then
+            ps -o pid,ppid,user,group,lstart,args -p "$pid" 2>&1 | scrub || true
+            for p in "/proc/$pid/cwd" "/proc/$pid/root" "/proc/$pid/exe"; do readlink "$p" 2>&1 | scrub || true; done
+            if [ -r "/proc/$pid/cmdline" ]; then tr '\0' ' ' < "/proc/$pid/cmdline" | scrub; echo; fi
           fi
-          echo 'APP_MIGRATIONS_END'
 
-          echo 'HELPERS_BEGIN'
-          for p in "$HOME/pull-managed-runtime.py" "$HOME/configure-runtime.sh" "$HOME/monitor-runtime.sh" "$HOME/backup.sh" "$HOME/thee-studio-backup.cron" "$HOME/thee-studio-runtime-monitor.cron"; do
-            echo "FILE=$p"
-            if [ -r "$p" ]; then
-              stat -c 'STAT=%A %U:%G %s %y %n' "$p" 2>/dev/null || true
-              grep -nEi 'thee-studio|/opt/|runtime|deploy|migrat|systemctl|service|sudo|install|copy|cp[[:space:]]|rsync|subprocess|os\.system|mysql|mariadb|psql|node|npm|git|curl|tar|zip|backup|restore|source|target|request|url|endpoint|function|def[[:space:]]|class[[:space:]]' "$p" 2>/dev/null \
-                | scrub | sed -n '1,400p' || true
-            else
-              echo 'NOT_READABLE'
-            fi
-          done
-          echo 'HELPERS_END'
+          echo '=== JOURNAL CREDIT/AUTH/GATE LINES ==='
+          journalctl -u thee-studio-api.service --no-pager -n 1200 2>&1 \
+            | grep -Ei 'credit|entitl|billing|owner|account|usage|generation|402|insufficient|subscription|role|access|migrat|database|sql' \
+            | tail -n 350 | scrub || true
 
-          echo 'MANAGED_FUNCTION_TREE_BEGIN'
-          find "$HOME/thee-functions-20260827" -maxdepth 4 -type f -printf '%s %y %p\n' 2>/dev/null | sort | head -400
-          echo 'MANAGED_FUNCTION_TREE_END'
+          echo '=== APP MIGRATIONS ==='
+          if [ -r "$HOME/app-migrations.log" ]; then
+            tail -n 1200 "$HOME/app-migrations.log" \
+              | grep -Ei 'credit|entitl|billing|owner|account|usage|subscription|role|access|migrat|database|table|column|alter|insert|update|create' \
+              | tail -n 500 | scrub || true
+          else
+            echo NO_READABLE_APP_MIGRATIONS_LOG
+          fi
 
-          echo 'HOME_DEPLOY_FILES_BEGIN'
-          find "$HOME" -maxdepth 3 -type f \
-            \( -iname '*studio*' -o -iname '*runtime*' -o -iname '*migrat*' -o -iname '*deploy*' -o -iname '*fastify*' \) \
-            -printf '%s %y %p\n' 2>/dev/null | sort | head -500
-          echo 'HOME_DEPLOY_FILES_END'
+          echo '=== HOME SCHEMA/MIGRATION REFERENCES ==='
+          grep -RniE --exclude='*.gz' --exclude='*.map' --exclude-dir=node_modules --exclude-dir=.git \
+            'account_entitlements|billing_exempt|credit_deduction_enabled|included_credits|used_credits|generation credits|user_usage_monthly|thee_studio_prod|bootstrap.?owner' \
+            "$HOME" 2>/dev/null | head -n 500 | scrub || true
+
+          echo '=== READABLE MIGRATION-LIKE FILES ==='
+          find "$HOME" -maxdepth 8 -type f -readable \
+            \( -iname '*.sql' -o -iname '*migrat*' -o -iname '*schema*' -o -iname '*bootstrap*' \) \
+            -printf '%p\n' 2>/dev/null | head -n 300
+
+          echo FASTIFY_CREDIT_GATE_RUNTIME_TRACE_OK
           REMOTE
-
-      - name: Upload sanitized trace
-        uses: actions/upload-artifact@v4
-        with:
-          name: fastify-migration-runtime-trace
-          path: fastify-migration-runtime-trace.txt
-          if-no-files-found: error
-          retention-days: 1

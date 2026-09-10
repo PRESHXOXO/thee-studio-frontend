@@ -1,4 +1,4 @@
-name: Temporary Live API Adapter Recovery
+name: Temporary Fastify Migration Handoff Recovery
 
 on:
   push:
@@ -13,45 +13,60 @@ jobs:
   inspect:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
     steps:
-      - name: Recover live API adapter contract
+      - name: Configure scoped SSH
+        env:
+          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+      - name: Recover sanitized migration and deployment handoff metadata
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p recovered
-          node <<'NODE'
-          const fs=require('fs');
-          (async()=>{
-            const origin='https://studio.myvitaworld.online';
-            const headers={'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'};
-            const html=await (await fetch(origin+'/',{headers})).text();
-            const src=[...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m=>new URL(m[1],origin).href).find(x=>/\.js(?:\?|$)/.test(x));
-            if(!src) throw new Error('bundle not found');
-            const text=await (await fetch(src,{headers})).text();
-            fs.writeFileSync('recovered/bundle-name.txt',src.split('/').pop());
-            const needles=['function ez','const ez=','function lB','const lB=','/auth/session','/auth/me','/generation','user_usage_monthly','included_credits','reserveLocalCredits','credits'];
-            const out=[];
-            for(const needle of needles){
-              let pos=0,count=0;
-              while((pos=text.indexOf(needle,pos))>=0 && count<12){
-                out.push(`\n===== ${needle} #${count} @${pos} =====\n`+text.slice(Math.max(0,pos-5000),Math.min(text.length,pos+12000)));
-                pos+=needle.length;count++;
-              }
-            }
-            fs.writeFileSync('recovered/adapter-context.txt',out.join('\n'));
-            const routes=new Set();
-            for(const m of text.matchAll(/(["'`])(\/[^"'`\\]{1,180})\1/g)){
-              const v=m[2];
-              if(/^\/(?:auth|generation|creators|creator|library|assets|plans|usage|credits|billing|account|admin|api|compat|subscriptions|profile|users|sessions|health)/i.test(v)) routes.add(v);
-            }
-            fs.writeFileSync('recovered/route-literals.txt',[...routes].sort().join('\n'));
-            console.log('BUNDLE='+src.split('/').pop());
-            console.log('ROUTE_COUNT='+routes.size);
-            console.log([...routes].sort().join('\n'));
-          })().catch(err=>{console.error(err);process.exit(1)});
-          NODE
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' > recovered/migration-handoff.txt <<'PY'
+          import os,re
+          home=os.path.expanduser('~')
+          paths=[os.path.join(home,'app-migrations.log')]
+          safe=re.compile(r'(thee-studio|fastify|mariadb|mysql|systemctl|service|server\.js|worker-main|/opt/|deploy|migrat|node|npm|git|rsync|scp|cp |mv |install|chown|chmod|sudo|cron)',re.I)
+          redact=re.compile(r'(?i)(password|passwd|token|secret|api[_-]?key|private[_-]?key|credential|authorization)(\s*[=:]\s*|\s+)[^\s,;]+')
+          urlcred=re.compile(r'([a-z]+://)[^\s/@:]+:[^\s/@]+@',re.I)
+          def clean(line):
+              line=redact.sub(lambda m:m.group(1)+m.group(2)+'[REDACTED]',line)
+              line=urlcred.sub(r'\1[REDACTED]@',line)
+              line=re.sub(r'(?i)(DB_PASSWORD|DATABASE_URL|MYSQL_PWD|MARIADB_PASSWORD)=\S+',r'\1=[REDACTED]',line)
+              return line
+          for p in paths:
+              print('===',os.path.basename(p),'===')
+              if not os.path.isfile(p): print('MISSING'); continue
+              with open(p,errors='ignore') as f:
+                  for i,line in enumerate(f,1):
+                      if safe.search(line): print(f'{i}: '+clean(line.rstrip())[:2000])
+          print('=== HOME EXECUTABLE/HELPER NAMES ===')
+          for root,dirs,files in os.walk(home):
+              rel=os.path.relpath(root,home)
+              if rel.count(os.sep)>4:
+                  dirs[:] = []
+                  continue
+              dirs[:]=[d for d in dirs if d not in {'.git','node_modules','.cache','.npm'}]
+              for name in files:
+                  p=os.path.join(root,name)
+                  if re.search(r'(fastify|maria|mysql|studio|deploy|migrat|bootstrap|owner|entitl|credit)',name,re.I):
+                      try: st=os.stat(p)
+                      except OSError: continue
+                      print(f'FILE {os.path.relpath(p,home)} mode={st.st_mode & 0o777:o} bytes={st.st_size}')
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: live-api-adapter-contract
+          name: fastify-migration-handoff
           path: recovered
           retention-days: 1

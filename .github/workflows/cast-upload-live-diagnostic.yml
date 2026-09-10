@@ -1,4 +1,4 @@
-name: Temporary Plural Generation Contract Trace
+name: Temporary Owner Session Generation Trace
 
 on:
   push:
@@ -19,46 +19,60 @@ jobs:
       CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
 
     steps:
-      - name: Map authenticated generation contract safely
+      - name: Inspect owner session and prior jobs read-only
         shell: bash
         run: |
           set -euo pipefail
           node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||!password)process.exit(2);fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});"
-          trap 'rm -f /tmp/login.json /tmp/jar /tmp/body /tmp/firstid' EXIT
+          trap 'rm -f /tmp/login.json /tmp/jar /tmp/body /tmp/gid' EXIT
           base='https://studio.myvitaworld.online/api'
           ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          login=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")
+          login=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /tmp/body -w '%{http_code}' "$base/auth/login")
           echo "OWNER_LOGIN=$login"
           test "$login" = 200
 
-          for path in /generations '/generations?limit=3' /generation; do
-            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base$path" || true)
+          for path in auth/session auth/me creators library; do
+            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base/$path" || true)
             PATH_NAME="$path" STATUS="$code" node <<'NODE'
           const fs=require('fs');
-          let x=null; try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{}
-          console.log(`GET ${process.env.PATH_NAME} STATUS=${process.env.STATUS}`);
-          if(x&&typeof x==='object'){
-            console.log('TOP_KEYS='+Object.keys(x).sort().join(','));
-            const arr=Array.isArray(x)?x:(Array.isArray(x.generations)?x.generations:(Array.isArray(x.items)?x.items:(Array.isArray(x.data)?x.data:[])));
-            console.log('ROW_COUNT='+arr.length);
-            if(arr.length) console.log('ROW_KEYS='+Object.keys(arr[0]||{}).sort().join(','));
+          let x=null;try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{}
+          const redactKey=k=>/(email|password|token|secret|cookie|authorization|csrf)/i.test(k);
+          function safe(o,depth=0){
+            if(depth>3) return '[depth]';
+            if(Array.isArray(o)) return o.slice(0,3).map(v=>safe(v,depth+1));
+            if(!o||typeof o!=='object') return o;
+            const z={};
+            for(const [k,v] of Object.entries(o)){
+              if(redactKey(k)) continue;
+              if(k==='id'||k.endsWith('_id')||k.endsWith('Id')) z[k]=v?'<ID>':v;
+              else z[k]=safe(v,depth+1);
+            }
+            return z;
           }
+          console.log(`PATH=${process.env.PATH_NAME} STATUS=${process.env.STATUS}`);
+          if(x) console.log(JSON.stringify(safe(x)).slice(0,12000));
           NODE
           done
 
-          invalid='00000000-0000-4000-8000-000000000000'
-          printf '{"creator_id":"%s","mode":"image","prompt":"Contract probe only.","aspect_ratio":"1:1","resolution":"1K"}' "$invalid" > /tmp/body.req
-          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/body.req -o /tmp/body -w '%{http_code}' "$base/generations" || true)
-          echo "POST_PLURAL_SNAKE_STATUS=$code"
-          node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};console.log('POST_PLURAL_SNAKE_KEYS='+Object.keys(x).sort().join(','));console.log('POST_PLURAL_SNAKE_ERROR='+(x.error||x.message||''));"
-
-          printf '{"creatorId":"%s","prompt":"Contract probe only.","idempotencyKey":"contract-probe"}' "$invalid" > /tmp/body.req
-          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/body.req -o /tmp/body -w '%{http_code}' "$base/generations" || true)
-          echo "POST_PLURAL_CAMEL_STATUS=$code"
-          node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};console.log('POST_PLURAL_CAMEL_KEYS='+Object.keys(x).sort().join(','));console.log('POST_PLURAL_CAMEL_ERROR='+(x.error||x.message||''));"
-
-          printf '{"creatorId":"%s","prompt":"Contract probe only.","idempotencyKey":"contract-probe"}' "$invalid" > /tmp/body.req
-          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/body.req -o /tmp/body -w '%{http_code}' "$base/generation" || true)
-          echo "POST_SINGULAR_STATUS=$code"
-          node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};console.log('POST_SINGULAR_KEYS='+Object.keys(x).sort().join(','));console.log('POST_SINGULAR_ERROR='+(x.error||x.message||''));"
-          rm -f /tmp/body.req
+          # Get one existing Library job id, then inspect the read-only generation status object.
+          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/library" -o /tmp/body
+          node <<'NODE'
+          const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{}
+          const a=Array.isArray(x.items)?x.items:Array.isArray(x)?x:[];
+          const hit=a.find(v=>v&&v.job_id);
+          if(hit?.job_id) fs.writeFileSync('/tmp/gid',String(hit.job_id));
+          console.log('LIBRARY_HAS_JOB_ID='+Boolean(hit?.job_id));
+          NODE
+          if test -s /tmp/gid; then
+            gid=$(cat /tmp/gid)
+            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base/generation/$gid" || true)
+            STATUS="$code" node <<'NODE'
+          const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{}
+          const g=x.generation||x;
+          const allow=['state','status','last_error','created_at','updated_at','completed_at','attempt','provider','provider_key','idempotency_key','prompt','creator_id','project_id','shot_id'];
+          const z={}; for(const k of allow) if(g?.[k]!==undefined) z[k]=/(id$|_id$|idempotency)/.test(k)&&g[k]?'<PRESENT>':g[k];
+          console.log('GENERATION_STATUS_HTTP='+process.env.STATUS);
+          console.log('GENERATION_SAFE='+JSON.stringify(z));
+          console.log('GENERATION_KEYS='+Object.keys(g||{}).sort().join(','));
+          NODE
+          fi

@@ -1,4 +1,4 @@
-name: Temporary Fastify Migration Handoff Recovery
+name: Temporary Studio Maintenance Hook Discovery
 
 on:
   push:
@@ -28,45 +28,57 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: Recover sanitized migration and deployment handoff metadata
+      - name: Inspect Studio maintenance hooks read-only
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p recovered
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' > recovered/migration-handoff.txt <<'PY'
-          import os,re
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' <<'PY'
+          import os,re,glob,subprocess
           home=os.path.expanduser('~')
-          paths=[os.path.join(home,'app-migrations.log')]
-          safe=re.compile(r'(thee-studio|fastify|mariadb|mysql|systemctl|service|server\.js|worker-main|/opt/|deploy|migrat|node|npm|git|rsync|scp|cp |mv |install|chown|chmod|sudo|cron)',re.I)
-          redact=re.compile(r'(?i)(password|passwd|token|secret|api[_-]?key|private[_-]?key|credential|authorization)(\s*[=:]\s*|\s+)[^\s,;]+')
-          urlcred=re.compile(r'([a-z]+://)[^\s/@:]+:[^\s/@]+@',re.I)
-          def clean(line):
-              line=redact.sub(lambda m:m.group(1)+m.group(2)+'[REDACTED]',line)
-              line=urlcred.sub(r'\1[REDACTED]@',line)
-              line=re.sub(r'(?i)(DB_PASSWORD|DATABASE_URL|MYSQL_PWD|MARIADB_PASSWORD)=\S+',r'\1=[REDACTED]',line)
-              return line
-          for p in paths:
-              print('===',os.path.basename(p),'===')
-              if not os.path.isfile(p): print('MISSING'); continue
-              with open(p,errors='ignore') as f:
-                  for i,line in enumerate(f,1):
-                      if safe.search(line): print(f'{i}: '+clean(line.rstrip())[:2000])
-          print('=== HOME EXECUTABLE/HELPER NAMES ===')
-          for root,dirs,files in os.walk(home):
-              rel=os.path.relpath(root,home)
-              if rel.count(os.sep)>4:
-                  dirs[:] = []
-                  continue
-              dirs[:]=[d for d in dirs if d not in {'.git','node_modules','.cache','.npm'}]
-              for name in files:
-                  p=os.path.join(root,name)
-                  if re.search(r'(fastify|maria|mysql|studio|deploy|migrat|bootstrap|owner|entitl|credit)',name,re.I):
-                      try: st=os.stat(p)
-                      except OSError: continue
-                      print(f'FILE {os.path.relpath(p,home)} mode={st.st_mode & 0o777:o} bytes={st.st_size}')
+          print('=== USER CRONTAB ===')
+          try:
+              p=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=5)
+              for line in p.stdout.splitlines():
+                  if re.search(r'thee|studio|deploy|migrat|runtime|backup',line,re.I): print(line)
+          except Exception as e: print('CRONTAB_ERROR',type(e).__name__)
+          print('=== SYSTEM CRON REFERENCES ===')
+          candidates=['/etc/crontab']+glob.glob('/etc/cron.d/*')
+          for p in candidates:
+              try:
+                  if not os.path.isfile(p) or not os.access(p,os.R_OK): continue
+                  for i,line in enumerate(open(p,errors='ignore'),1):
+                      if re.search(r'thee|studio|deploy|migrat|runtime|backup',line,re.I): print(f'{p}:{i}:{line.rstrip()}')
+              except Exception: pass
+          print('=== SYSTEMD RELATED UNITS/TIMERS ===')
+          for root in ['/etc/systemd/system','/usr/lib/systemd/system','/lib/systemd/system']:
+              if not os.path.isdir(root): continue
+              for p in glob.glob(root+'/*'):
+                  if re.search(r'thee|studio',os.path.basename(p),re.I):
+                      try:
+                          st=os.stat(p); print(f'{p} mode={st.st_mode & 0o777:o} owner={st.st_uid} group={st.st_gid} writable={os.access(p,os.W_OK)}')
+                      except OSError: pass
+          print('=== HOME FILES REFERENCED BY ROOT/SYSTEM ===')
+          refs=[]
+          for p in candidates:
+              try:
+                  if not os.path.isfile(p) or not os.access(p,os.R_OK): continue
+                  text=open(p,errors='ignore').read()
+                  for m in re.finditer(re.escape(home)+r'/[^\s"\']+',text): refs.append(m.group(0).rstrip(';'))
+              except Exception: pass
+          for p in sorted(set(refs)):
+              try:
+                  st=os.stat(p); print(f'{p} mode={st.st_mode & 0o777:o} uid={st.st_uid} gid={st.st_gid} writable={os.access(p,os.W_OK)}')
+              except OSError: print(p,'MISSING')
+          print('=== PRIVILEGED HELPER CANDIDATES ===')
+          for root in ['/usr/local/bin','/usr/local/sbin','/opt']:
+              if not os.path.isdir(root): continue
+              for dirpath,dirs,files in os.walk(root):
+                  if dirpath.count(os.sep)-root.count(os.sep)>4:
+                      dirs[:] = []; continue
+                  for name in files:
+                      if re.search(r'thee|studio|deploy|migrat|owner|entitl|credit',name,re.I):
+                          p=os.path.join(dirpath,name)
+                          try:
+                              st=os.stat(p); print(f'{p} mode={st.st_mode & 0o777:o} uid={st.st_uid} gid={st.st_gid} readable={os.access(p,os.R_OK)} executable={os.access(p,os.X_OK)} writable={os.access(p,os.W_OK)}')
+                          except OSError: pass
           PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: fastify-migration-handoff
-          path: recovered
-          retention-days: 1

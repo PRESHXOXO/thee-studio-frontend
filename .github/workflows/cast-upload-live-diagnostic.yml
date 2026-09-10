@@ -1,4 +1,4 @@
-name: Temporary Owner Credit Source Recovery
+name: Temporary Credit RPC Contract Recovery
 
 on:
   push:
@@ -28,18 +28,40 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: Copy selected function sources read-only
+      - name: Recover provider and matching migration sources read-only
         run: |
           set -euo pipefail
-          mkdir -p recovered/_shared recovered/thee-bootstrap-owner recovered/thee-admin-access recovered/thee-access recovered/crisp-generate-stills
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/_shared/cast_credits.ts"' > recovered/_shared/cast_credits.ts
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/thee-bootstrap-owner/index.ts"' > recovered/thee-bootstrap-owner/index.ts
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/thee-admin-access/index.ts"' > recovered/thee-admin-access/index.ts
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/thee-access/index.ts"' > recovered/thee-access/index.ts
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/crisp-generate-stills/index.ts"' > recovered/crisp-generate-stills/index.ts
-          grep -RniE 'Insufficient generation credits|billing_exempt|credit_deduction_enabled|bootstrap_internal_owner|user_usage_monthly|included_credits|used_credits' recovered > recovered/matches.txt || true
+          mkdir -p recovered/_shared recovered/matches
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/_shared/provider.ts"' > recovered/_shared/provider.ts
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' > recovered/match-paths.txt <<'PY'
+          import os
+          home=os.path.expanduser('~')
+          needles=('bootstrap_internal_owner','reserve_generation_credits','manage_account_access','account_entitlements','credit_deduction_enabled')
+          skip={'node_modules','.git','.cache'}
+          found=[]
+          for root,dirs,files in os.walk(home):
+              dirs[:]=[d for d in dirs if d not in skip]
+              for name in files:
+                  p=os.path.join(root,name)
+                  try:
+                      if os.path.getsize(p)>3_000_000: continue
+                      with open(p,'r',encoding='utf-8',errors='ignore') as f: text=f.read()
+                  except Exception: continue
+                  hits=[n for n in needles if n in text]
+                  if hits:
+                      print(os.path.relpath(p,home)+' | '+','.join(hits))
+          PY
+          while IFS='|' read -r rel hits; do
+            rel="${rel% }"; [ -n "$rel" ] || continue
+            case "$rel" in
+              *thee-functions-20260827/_shared/provider.ts) continue ;;
+            esac
+            safe=$(printf '%s' "$rel" | tr '/ ' '__')
+            ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" "cat \"\$HOME/$rel\"" > "recovered/matches/$safe" 2>/dev/null || true
+          done < recovered/match-paths.txt
+          grep -n -C 12 -E 'reserveCredits|reserve_generation_credits|productAccess|requireProductAccess|billing_exempt|credit_deduction_enabled|account_access|account_entitlements' recovered/_shared/provider.ts > recovered/provider-credit-excerpts.txt || true
       - uses: actions/upload-artifact@v4
         with:
-          name: owner-credit-sources
+          name: credit-rpc-contracts
           path: recovered
           retention-days: 1

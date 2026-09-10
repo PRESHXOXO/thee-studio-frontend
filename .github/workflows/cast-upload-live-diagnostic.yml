@@ -1,4 +1,4 @@
-name: Temporary Owner Entitlement Surface Trace
+name: Temporary Live Admin Surface Trace
 
 on:
   push:
@@ -13,48 +13,35 @@ jobs:
   inspect:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    environment: production
-    env:
-      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
-      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
-
     steps:
-      - name: Inspect owner entitlement resources read-only
+      - name: Trace admin and entitlement routes from live bundle
         shell: bash
         run: |
           set -euo pipefail
-          node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||!password)process.exit(2);fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});"
-          trap 'rm -f /tmp/login.json /tmp/jar /tmp/body /tmp/uid' EXIT
-          base='https://studio.myvitaworld.online/api'
-          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-
-          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /tmp/body -w '%{http_code}' "$base/auth/login")
-          echo "LOGIN_HTTP=$code"
-          test "$code" = 200
-
-          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/auth/me" -o /tmp/body
           node <<'NODE'
-          const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/body','utf8'));const u=x.user||x;if(!u?.id)process.exit(3);fs.writeFileSync('/tmp/uid',String(u.id));const m=u.appMetadata||u.app_metadata||{};console.log('AUTH_ME_KEYS='+Object.keys(u).filter(k=>!['id','email'].includes(k)).sort().join(','));console.log('APP_METADATA_KEYS='+Object.keys(m).sort().join(','));console.log('ROLE='+String(m.role||u.role||'none'));console.log('ACCOUNT_TYPE='+String(m.accountType||m.account_type||u.accountType||u.account_type||'none'));
+          const origin='https://studio.myvitaworld.online';
+          const ua={'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'};
+          const html=await (await fetch(origin+'/',{headers:ua})).text();
+          const scripts=[...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m=>new URL(m[1],origin).href);
+          console.log('SCRIPT_COUNT='+scripts.length);
+          const clean=s=>String(s||'').replace(/\s+/g,' ').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL]');
+          for(const url of scripts){
+            const r=await fetch(url,{headers:ua}); if(!r.ok) continue;
+            const text=await r.text();
+            console.log('BUNDLE='+url.split('/').pop());
+            const literals=new Set();
+            for(const m of text.matchAll(/(["'`])([^"'`]{2,160})\1/g)){
+              const v=m[2];
+              if(v.startsWith('/') && /(admin|access|entitl|billing|credit|usage|user|role|account|plan|subscription)/i.test(v)) literals.add(v);
+            }
+            console.log('ROUTE_LITERALS='+[...literals].sort().join(','));
+            for(const term of ['admin','billing_exempt','credit_deduction_enabled','account_type','internal','thee-access','support_readonly','acknowledge_alert','user_profitability','plan_profitability','entitlement','role']){
+              let idx=text.indexOf(term), n=0;
+              while(idx>=0&&n<8){
+                console.log(`CTX_${term.replace(/[^a-z0-9]+/gi,'_')}_${n}=`+clean(text.slice(Math.max(0,idx-1200),Math.min(text.length,idx+2200))));
+                idx=text.indexOf(term,idx+term.length);n++;
+              }
+              console.log(`COUNT_${term.replace(/[^a-z0-9]+/gi,'_')}=${n}`);
+            }
+          }
           NODE
-          uid=$(cat /tmp/uid)
-
-          for table in account_entitlements user_usage_monthly subscriptions profiles users; do
-            for suffix in '' "?user_id=$uid"; do
-              code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base/compat/$table$suffix" || true)
-              TABLE="$table" SUFFIX="$suffix" STATUS="$code" node <<'NODE'
-          const fs=require('fs');let x=null;try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{}
-          console.log(`RESOURCE=${process.env.TABLE}${process.env.SUFFIX?'?user_id=self':''} HTTP=${process.env.STATUS}`);
-          if(!x||typeof x!=='object') process.exit(0);
-          const rows=Array.isArray(x)?x:(Array.isArray(x.rows)?x.rows:(Array.isArray(x.items)?x.items:[]));
-          console.log('TOP_KEYS='+Object.keys(x).sort().join(','));
-          console.log('ROW_COUNT='+rows.length);
-          if(rows.length){
-            const r=rows[0]||{};
-            console.log('ROW_KEYS='+Object.keys(r).sort().join(','));
-            const allowed=['billing_exempt','credit_deduction_enabled','account_type','role','included_credits','used_credits','period_start','status','plan_key','active','internal_only','all_features','admin_access_enabled','usage_tracking_enabled','enforcement_enabled'];
-            const safe={}; for(const k of allowed) if(r[k]!==undefined) safe[k]=r[k];
-            console.log('ROW_SAFE='+JSON.stringify(safe));
-          } else if(x.error||x.message) console.log('ERROR='+String(x.error||x.message).slice(0,300));
-          NODE
-            done
-          done

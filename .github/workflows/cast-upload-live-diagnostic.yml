@@ -1,4 +1,4 @@
-name: Temporary Service Management Surface Check
+name: Temporary Live API Adapter Recovery
 
 on:
   push:
@@ -13,42 +13,43 @@ jobs:
   inspect:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
     steps:
-      - name: Configure scoped SSH
-        env:
-          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+      - name: Recover live API adapter contract
+        shell: bash
         run: |
           set -euo pipefail
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
-          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: Inspect sudo and service wiring read-only
-        run: |
-          set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > service-management.txt <<'REMOTE'
-          set +e
-          echo '=== SUDO NONINTERACTIVE POLICY ==='
-          sudo -n -l 2>&1 | sed -E 's/(password|passwd|token|secret|key)[^ ,;)]*/\1=[REDACTED]/Ig'
-          echo '=== SERVICE SAFE PROPERTIES ==='
-          systemctl show thee-studio-api.service -p User -p Group -p ExecStart -p ExecStartPre -p ExecStartPost -p ExecReload -p EnvironmentFiles -p FragmentPath -p DropInPaths -p ReadWritePaths -p RuntimeDirectory -p StateDirectory -p CacheDirectory -p LogsDirectory --no-pager 2>/dev/null
-          echo '=== UNIT FILE NONSECRET DIRECTIVES ==='
-          systemctl cat thee-studio-api.service 2>/dev/null | grep -Ev '^[[:space:]]*Environment=' | sed -E 's#(EnvironmentFile=).*#\1[REDACTED-PATH]#'
-          echo '=== STUDIO COMMAND NAMES ==='
-          for d in /usr/local/bin /usr/local/sbin /usr/bin /usr/sbin; do
-            [ -d "$d" ] || continue
-            find "$d" -maxdepth 1 -type f -o -type l 2>/dev/null | grep -Ei '/(thee|studio|deploy|migrat|app)' | sed -n '1,150p'
-          done
-          echo '=== SERVICE USER SWITCH TEST ==='
-          if sudo -n -u thee-studio true >/dev/null 2>&1; then echo SERVICE_USER_SWITCH_ALLOWED; else echo SERVICE_USER_SWITCH_DENIED; fi
-          REMOTE
+          mkdir -p recovered
+          node <<'NODE'
+          const fs=require('fs');
+          const origin='https://studio.myvitaworld.online';
+          const headers={'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'};
+          const html=await (await fetch(origin+'/',{headers})).text();
+          const src=[...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m=>new URL(m[1],origin).href).find(x=>/\.js(?:\?|$)/.test(x));
+          if(!src) throw new Error('bundle not found');
+          const text=await (await fetch(src,{headers})).text();
+          fs.writeFileSync('recovered/bundle-name.txt',src.split('/').pop());
+          const needles=['function ez','const ez=','function lB','const lB=','/auth/session','/auth/me','/generation','user_usage_monthly','included_credits','reserveLocalCredits','credits'];
+          const out=[];
+          for(const needle of needles){
+            let pos=0,count=0;
+            while((pos=text.indexOf(needle,pos))>=0 && count<12){
+              out.push(`\n===== ${needle} #${count} @${pos} =====\n`+text.slice(Math.max(0,pos-5000),Math.min(text.length,pos+12000)));
+              pos+=needle.length;count++;
+            }
+          }
+          fs.writeFileSync('recovered/adapter-context.txt',out.join('\n'));
+          const routes=new Set();
+          for(const m of text.matchAll(/(["'`])(\/[^"'`\\]{1,180})\1/g)){
+            const v=m[2];
+            if(/^\/(?:auth|generation|creators|creator|library|assets|plans|usage|credits|billing|account|admin|api|compat|subscriptions|profile|users|sessions|health)/i.test(v)) routes.add(v);
+          }
+          fs.writeFileSync('recovered/route-literals.txt',[...routes].sort().join('\n'));
+          console.log('BUNDLE='+src.split('/').pop());
+          console.log('ROUTE_COUNT='+routes.size);
+          console.log([...routes].sort().join('\n'));
+          NODE
       - uses: actions/upload-artifact@v4
         with:
-          name: service-management
-          path: service-management.txt
+          name: live-api-adapter-contract
+          path: recovered
           retention-days: 1

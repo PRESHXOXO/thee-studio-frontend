@@ -21,32 +21,34 @@ jobs:
           mkdir -p recovered
           node <<'NODE'
           const fs=require('fs');
-          const origin='https://studio.myvitaworld.online';
-          const headers={'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'};
-          const html=await (await fetch(origin+'/',{headers})).text();
-          const src=[...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m=>new URL(m[1],origin).href).find(x=>/\.js(?:\?|$)/.test(x));
-          if(!src) throw new Error('bundle not found');
-          const text=await (await fetch(src,{headers})).text();
-          fs.writeFileSync('recovered/bundle-name.txt',src.split('/').pop());
-          const needles=['function ez','const ez=','function lB','const lB=','/auth/session','/auth/me','/generation','user_usage_monthly','included_credits','reserveLocalCredits','credits'];
-          const out=[];
-          for(const needle of needles){
-            let pos=0,count=0;
-            while((pos=text.indexOf(needle,pos))>=0 && count<12){
-              out.push(`\n===== ${needle} #${count} @${pos} =====\n`+text.slice(Math.max(0,pos-5000),Math.min(text.length,pos+12000)));
-              pos+=needle.length;count++;
+          (async()=>{
+            const origin='https://studio.myvitaworld.online';
+            const headers={'user-agent':'Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'};
+            const html=await (await fetch(origin+'/',{headers})).text();
+            const src=[...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m=>new URL(m[1],origin).href).find(x=>/\.js(?:\?|$)/.test(x));
+            if(!src) throw new Error('bundle not found');
+            const text=await (await fetch(src,{headers})).text();
+            fs.writeFileSync('recovered/bundle-name.txt',src.split('/').pop());
+            const needles=['function ez','const ez=','function lB','const lB=','/auth/session','/auth/me','/generation','user_usage_monthly','included_credits','reserveLocalCredits','credits'];
+            const out=[];
+            for(const needle of needles){
+              let pos=0,count=0;
+              while((pos=text.indexOf(needle,pos))>=0 && count<12){
+                out.push(`\n===== ${needle} #${count} @${pos} =====\n`+text.slice(Math.max(0,pos-5000),Math.min(text.length,pos+12000)));
+                pos+=needle.length;count++;
+              }
             }
-          }
-          fs.writeFileSync('recovered/adapter-context.txt',out.join('\n'));
-          const routes=new Set();
-          for(const m of text.matchAll(/(["'`])(\/[^"'`\\]{1,180})\1/g)){
-            const v=m[2];
-            if(/^\/(?:auth|generation|creators|creator|library|assets|plans|usage|credits|billing|account|admin|api|compat|subscriptions|profile|users|sessions|health)/i.test(v)) routes.add(v);
-          }
-          fs.writeFileSync('recovered/route-literals.txt',[...routes].sort().join('\n'));
-          console.log('BUNDLE='+src.split('/').pop());
-          console.log('ROUTE_COUNT='+routes.size);
-          console.log([...routes].sort().join('\n'));
+            fs.writeFileSync('recovered/adapter-context.txt',out.join('\n'));
+            const routes=new Set();
+            for(const m of text.matchAll(/(["'`])(\/[^"'`\\]{1,180})\1/g)){
+              const v=m[2];
+              if(/^\/(?:auth|generation|creators|creator|library|assets|plans|usage|credits|billing|account|admin|api|compat|subscriptions|profile|users|sessions|health)/i.test(v)) routes.add(v);
+            }
+            fs.writeFileSync('recovered/route-literals.txt',[...routes].sort().join('\n'));
+            console.log('BUNDLE='+src.split('/').pop());
+            console.log('ROUTE_COUNT='+routes.size);
+            console.log([...routes].sort().join('\n'));
+          })().catch(err=>{console.error(err);process.exit(1)});
           NODE
       - uses: actions/upload-artifact@v4
         with:

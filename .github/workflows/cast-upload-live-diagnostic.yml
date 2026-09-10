@@ -1,4 +1,4 @@
-name: Temporary Credit RPC Contract Recovery
+name: Temporary Service Management Surface Check
 
 on:
   push:
@@ -28,40 +28,27 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: Recover provider and matching migration sources read-only
+      - name: Inspect sudo and service wiring read-only
         run: |
           set -euo pipefail
-          mkdir -p recovered/_shared recovered/matches
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/_shared/provider.ts"' > recovered/_shared/provider.ts
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' > recovered/match-paths.txt <<'PY'
-          import os
-          home=os.path.expanduser('~')
-          needles=('bootstrap_internal_owner','reserve_generation_credits','manage_account_access','account_entitlements','credit_deduction_enabled')
-          skip={'node_modules','.git','.cache'}
-          found=[]
-          for root,dirs,files in os.walk(home):
-              dirs[:]=[d for d in dirs if d not in skip]
-              for name in files:
-                  p=os.path.join(root,name)
-                  try:
-                      if os.path.getsize(p)>3_000_000: continue
-                      with open(p,'r',encoding='utf-8',errors='ignore') as f: text=f.read()
-                  except Exception: continue
-                  hits=[n for n in needles if n in text]
-                  if hits:
-                      print(os.path.relpath(p,home)+' | '+','.join(hits))
-          PY
-          while IFS='|' read -r rel hits; do
-            rel="${rel% }"; [ -n "$rel" ] || continue
-            case "$rel" in
-              *thee-functions-20260827/_shared/provider.ts) continue ;;
-            esac
-            safe=$(printf '%s' "$rel" | tr '/ ' '__')
-            ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" "cat \"\$HOME/$rel\"" > "recovered/matches/$safe" 2>/dev/null || true
-          done < recovered/match-paths.txt
-          grep -n -C 12 -E 'reserveCredits|reserve_generation_credits|productAccess|requireProductAccess|billing_exempt|credit_deduction_enabled|account_access|account_entitlements' recovered/_shared/provider.ts > recovered/provider-credit-excerpts.txt || true
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > service-management.txt <<'REMOTE'
+          set +e
+          echo '=== SUDO NONINTERACTIVE POLICY ==='
+          sudo -n -l 2>&1 | sed -E 's/(password|passwd|token|secret|key)[^ ,;)]*/\1=[REDACTED]/Ig'
+          echo '=== SERVICE SAFE PROPERTIES ==='
+          systemctl show thee-studio-api.service -p User -p Group -p ExecStart -p ExecStartPre -p ExecStartPost -p ExecReload -p EnvironmentFiles -p FragmentPath -p DropInPaths -p ReadWritePaths -p RuntimeDirectory -p StateDirectory -p CacheDirectory -p LogsDirectory --no-pager 2>/dev/null
+          echo '=== UNIT FILE NONSECRET DIRECTIVES ==='
+          systemctl cat thee-studio-api.service 2>/dev/null | grep -Ev '^[[:space:]]*Environment=' | sed -E 's#(EnvironmentFile=).*#\1[REDACTED-PATH]#'
+          echo '=== STUDIO COMMAND NAMES ==='
+          for d in /usr/local/bin /usr/local/sbin /usr/bin /usr/sbin; do
+            [ -d "$d" ] || continue
+            find "$d" -maxdepth 1 -type f -o -type l 2>/dev/null | grep -Ei '/(thee|studio|deploy|migrat|app)' | sed -n '1,150p'
+          done
+          echo '=== SERVICE USER SWITCH TEST ==='
+          if sudo -n -u thee-studio true >/dev/null 2>&1; then echo SERVICE_USER_SWITCH_ALLOWED; else echo SERVICE_USER_SWITCH_DENIED; fi
+          REMOTE
       - uses: actions/upload-artifact@v4
         with:
-          name: credit-rpc-contracts
-          path: recovered
+          name: service-management
+          path: service-management.txt
           retention-days: 1

@@ -1,4 +1,4 @@
-name: Temporary Managed Runtime Helper Contract Trace
+name: Temporary Owner Credit Source Recovery
 
 on:
   push:
@@ -28,39 +28,18 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: Inspect managed runtime helper contracts read-only
+      - name: Copy selected function sources read-only
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'python3 -' > helper-contracts.txt <<'PY'
-          import os,re,glob
-          home=os.path.expanduser('~')
-          names=['pull-managed-runtime.py','configure-runtime.sh','monitor-runtime.sh','backup.sh','thee-studio-backup.cron','thee-studio-runtime-monitor.cron','app-migrations.log']
-          secret=re.compile(r'(password|passwd|token|secret|private[_-]?key|api[_-]?key|authorization|cookie)',re.I)
-          urlcred=re.compile(r'([a-z]+://[^:/\s]+:)[^@\s]+(@)',re.I)
-          for name in names:
-              p=os.path.join(home,name)
-              print('\n=== FILE',name,'EXISTS='+str(os.path.isfile(p)),'===')
-              if not os.path.isfile(p): continue
-              try:
-                  lines=open(p,encoding='utf-8',errors='replace').read().splitlines()
-              except Exception as e:
-                  print('READ_ERROR',type(e).__name__); continue
-              for line in lines[-800:]:
-                  if secret.search(line):
-                      # retain command/variable names but redact RHS and obvious credential-bearing text
-                      line=re.sub(r'([A-Za-z_][A-Za-z0-9_]*(?:PASSWORD|PASSWD|TOKEN|SECRET|PRIVATE_KEY|API_KEY)[A-Za-z0-9_]*\s*[=:]\s*).*',r'\1[REDACTED]',line,flags=re.I)
-                      if secret.search(line) and ('=' not in line and ':' not in line):
-                          line='[REDACTED SECRET-BEARING LINE]'
-                  line=urlcred.sub(r'\1[REDACTED]\2',line)
-                  print(line[:2000])
-          print('\n=== THEE FUNCTIONS TREE ===')
-          root=os.path.join(home,'thee-functions-20260827')
-          if os.path.isdir(root):
-              for p in sorted(glob.glob(root+'/**',recursive=True))[:1000]:
-                  if os.path.isfile(p): print(os.path.relpath(p,home))
-          PY
+          mkdir -p recovered/_shared recovered/thee-bootstrap-owner recovered/thee-admin-access recovered/thee-access recovered/crisp-generate-stills
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/_shared/cast_credits.ts"' > recovered/_shared/cast_credits.ts
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/thee-bootstrap-owner/index.ts"' > recovered/thee-bootstrap-owner/index.ts
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/thee-admin-access/index.ts"' > recovered/thee-admin-access/index.ts
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/thee-access/index.ts"' > recovered/thee-access/index.ts
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'cat "$HOME/thee-functions-20260827/crisp-generate-stills/index.ts"' > recovered/crisp-generate-stills/index.ts
+          grep -RniE 'Insufficient generation credits|billing_exempt|credit_deduction_enabled|bootstrap_internal_owner|user_usage_monthly|included_credits|used_credits' recovered > recovered/matches.txt || true
       - uses: actions/upload-artifact@v4
         with:
-          name: helper-contracts
-          path: helper-contracts.txt
+          name: owner-credit-sources
+          path: recovered
           retention-days: 1

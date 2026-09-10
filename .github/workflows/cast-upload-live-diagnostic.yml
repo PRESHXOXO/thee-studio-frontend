@@ -1,4 +1,4 @@
-name: Temporary Singular Generation Caller Trace
+name: Temporary Plural Generation Contract Trace
 
 on:
   push:
@@ -13,55 +13,52 @@ jobs:
   inspect:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    environment: production
     env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
+      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
 
     steps:
-      - name: Configure scoped SSH
-        env:
-          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
-        run: |
-          set -euo pipefail
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
-          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-
-      - name: Trace generation route callsites read-only
+      - name: Map authenticated generation contract safely
         shell: bash
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "WEB='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE'
-          set -euo pipefail
-          asset=$(python3 - "$WEB/index.html" <<'PY'
-          import re,sys
-          s=open(sys.argv[1],encoding='utf-8').read(); m=re.search(r'src="/([^"]+\.js)"',s); print(m.group(1) if m else '')
-          PY
-          )
-          test -n "$asset"
-          echo "ACTIVE_ASSET=$asset"
-          echo "ACTIVE_SHA256=$(sha256sum "$WEB/$asset" | awk '{print $1}')"
-          node --check "$WEB/$asset"
-          node - "$WEB/$asset" <<'NODE'
+          node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||!password)process.exit(2);fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});"
+          trap 'rm -f /tmp/login.json /tmp/jar /tmp/body /tmp/firstid' EXIT
+          base='https://studio.myvitaworld.online/api'
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          login=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /dev/null -w '%{http_code}' "$base/auth/login")
+          echo "OWNER_LOGIN=$login"
+          test "$login" = 200
+
+          for path in /generations '/generations?limit=3' /generation; do
+            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base$path" || true)
+            PATH_NAME="$path" STATUS="$code" node <<'NODE'
           const fs=require('fs');
-          const s=fs.readFileSync(process.argv[2],'utf8');
-          const needles=['/generation','/generations','Generation credit limit reached.','reserveLocalCredits'];
-          for(const needle of needles){
-            let from=0,hit=0;
-            while(true){
-              const p=s.indexOf(needle,from); if(p<0) break;
-              hit++;
-              console.log(`\n=== ${needle} HIT ${hit} POS ${p} ===`);
-              console.log(s.slice(Math.max(0,p-1600),Math.min(s.length,p+2600)));
-              from=p+needle.length;
-              if(hit>=12) break;
-            }
-            console.log(`COUNT ${needle} ${hit}`);
+          let x=null; try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{}
+          console.log(`GET ${process.env.PATH_NAME} STATUS=${process.env.STATUS}`);
+          if(x&&typeof x==='object'){
+            console.log('TOP_KEYS='+Object.keys(x).sort().join(','));
+            const arr=Array.isArray(x)?x:(Array.isArray(x.generations)?x.generations:(Array.isArray(x.items)?x.items:(Array.isArray(x.data)?x.data:[])));
+            console.log('ROW_COUNT='+arr.length);
+            if(arr.length) console.log('ROW_KEYS='+Object.keys(arr[0]||{}).sort().join(','));
           }
           NODE
-          REMOTE
+          done
+
+          invalid='00000000-0000-4000-8000-000000000000'
+          printf '{"creator_id":"%s","mode":"image","prompt":"Contract probe only.","aspect_ratio":"1:1","resolution":"1K"}' "$invalid" > /tmp/body.req
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/body.req -o /tmp/body -w '%{http_code}' "$base/generations" || true)
+          echo "POST_PLURAL_SNAKE_STATUS=$code"
+          node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};console.log('POST_PLURAL_SNAKE_KEYS='+Object.keys(x).sort().join(','));console.log('POST_PLURAL_SNAKE_ERROR='+(x.error||x.message||''));"
+
+          printf '{"creatorId":"%s","prompt":"Contract probe only.","idempotencyKey":"contract-probe"}' "$invalid" > /tmp/body.req
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/body.req -o /tmp/body -w '%{http_code}' "$base/generations" || true)
+          echo "POST_PLURAL_CAMEL_STATUS=$code"
+          node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};console.log('POST_PLURAL_CAMEL_KEYS='+Object.keys(x).sort().join(','));console.log('POST_PLURAL_CAMEL_ERROR='+(x.error||x.message||''));"
+
+          printf '{"creatorId":"%s","prompt":"Contract probe only.","idempotencyKey":"contract-probe"}' "$invalid" > /tmp/body.req
+          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/body.req -o /tmp/body -w '%{http_code}' "$base/generation" || true)
+          echo "POST_SINGULAR_STATUS=$code"
+          node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};console.log('POST_SINGULAR_KEYS='+Object.keys(x).sort().join(','));console.log('POST_SINGULAR_ERROR='+(x.error||x.message||''));"
+          rm -f /tmp/body.req

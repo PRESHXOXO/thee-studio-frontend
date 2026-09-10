@@ -1,4 +1,4 @@
-name: Temporary Fastify Owner Route Discovery
+name: Temporary Replacement Backend Source Access Diagnostic
 
 on:
   push:
@@ -13,71 +13,48 @@ jobs:
   inspect:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    environment: production
     env:
-      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
-      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
 
     steps:
-      - name: Probe candidate owner/access routes without mutation
+      - name: Configure scoped SSH
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/thee_operator
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
+
+      - name: Inspect scoped source access without mutation
         shell: bash
         run: |
           set -euo pipefail
-          node -e "const fs=require('fs');const email=String(process.env.CUTOVER_OWNER_EMAIL||'').normalize('NFKC').replace(/[\\u200B-\\u200D\\u2060\\uFEFF]/g,'').trim().toLowerCase();const password=process.env.CUTOVER_OWNER_PASSWORD||'';if(!email||!password)process.exit(2);fs.writeFileSync('/tmp/login.json',JSON.stringify({email,password}),{mode:0o600});"
-          trap 'rm -f /tmp/login.json /tmp/jar /tmp/body /tmp/uid' EXIT
-          base='https://studio.myvitaworld.online/api'
-          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /tmp/body -w '%{http_code}' "$base/auth/login")
-          test "$code" = 200
-          curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar "$base/auth/me" -o /tmp/body
-          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/body','utf8'));const u=x.user||x;if(!u?.id)process.exit(3);fs.writeFileSync('/tmp/uid',String(u.id));"
-          uid=$(cat /tmp/uid)
-
-          cat > /tmp/routes <<EOF
-          auth/bootstrap-owner
-          auth/owner/bootstrap
-          auth/me/access
-          auth/me/role
-          auth/me/entitlements
-          bootstrap-owner
-          owner/bootstrap
-          internal/bootstrap-owner
-          internal/owner/bootstrap
-          admin/bootstrap-owner
-          admin/access
-          admin/entitlements
-          admin/users/me
-          admin/users/$uid
-          admin/users/$uid/access
-          admin/users/$uid/role
-          admin/users/$uid/entitlements
-          admin/accounts/$uid
-          admin/accounts/$uid/access
-          account
-          account/access
-          account/entitlements
-          users/me
-          users/$uid
-          users/$uid/access
-          users/$uid/role
-          users/$uid/entitlements
-          access
-          entitlements
-          billing/entitlements
-          EOF
-
-          while read -r path; do
-            [ -n "$path" ] || continue
-            label=$(printf '%s' "$path" | sed "s#$uid#SELF#g")
-            g=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base/$path" || true)
-            gmsg=$(node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};process.stdout.write(String(x.error||x.message||'').slice(0,100).replace(/[\\r\\n]/g,' '));")
-            # Malformed JSON cannot produce a valid mutation; non-404 tells us a route exists.
-            p=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary '{' -o /tmp/body -w '%{http_code}' "$base/$path" || true)
-            pmsg=$(node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};process.stdout.write(String(x.error||x.message||'').slice(0,100).replace(/[\\r\\n]/g,' '));")
-            q=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X PATCH --data-binary '{' -o /tmp/body -w '%{http_code}' "$base/$path" || true)
-            qmsg=$(node -e "const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/body','utf8'))}catch{};process.stdout.write(String(x.error||x.message||'').slice(0,100).replace(/[\\r\\n]/g,' '));")
-            if [ "$g" != 404 ] || [ "$p" != 404 ] || [ "$q" != 404 ]; then
-              echo "ROUTE=$label GET=$g:$gmsg POST_BADJSON=$p:$pmsg PATCH_BADJSON=$q:$qmsg"
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          echo "USER=$(id -un)"
+          echo "UID=$(id -u)"
+          echo "GROUPS=$(id -Gn)"
+          for p in /opt/thee-studio-app /opt/thee-studio-app/src /opt/thee-studio-app/src/generation.js /opt/thee-studio-app/src/worker.js /opt/thee-studio-app/src/worker-main.js /opt/thee-studio-app/package.json; do
+            if [ -e "$p" ]; then
+              r=no; x=no; w=no
+              [ -r "$p" ] && r=yes
+              [ -x "$p" ] && x=yes
+              [ -w "$p" ] && w=yes
+              printf 'PATH=%s EXISTS=yes READ=%s EXEC=%s WRITE=%s\n' "$p" "$r" "$x" "$w"
+            else
+              printf 'PATH=%s EXISTS=no\n' "$p"
             fi
-          done < /tmp/routes
-          rm -f /tmp/routes
+          done
+          echo 'HOME_CANDIDATES_BEGIN'
+          find "$HOME" -maxdepth 5 -type f \( -name generation.js -o -name worker.js -o -name worker-main.js -o -name package.json \) -print 2>/dev/null | head -200
+          echo 'HOME_CANDIDATES_END'
+          echo 'OPT_STAT_BEGIN'
+          stat -c '%A %U:%G %n' /opt/thee-studio-app /opt/thee-studio-app/src 2>&1 || true
+          echo 'OPT_STAT_END'
+          REMOTE

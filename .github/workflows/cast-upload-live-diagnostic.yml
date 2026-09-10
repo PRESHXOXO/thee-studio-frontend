@@ -1,4 +1,4 @@
-name: Temporary Fastify Cutover Trace
+name: Temporary Fastify Cutover Control Trace
 
 on:
   push:
@@ -17,7 +17,6 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-
     steps:
       - name: Configure scoped SSH
         env:
@@ -29,35 +28,24 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/thee_operator
           printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-
-      - name: Capture cutover helper structure
-        shell: bash
+      - name: Capture control path without secret values
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > fastify-cutover-trace.txt <<'REMOTE'
+          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > cutover-control.txt <<'REMOTE'
           set -u
-          for f in "$HOME/pull-managed-runtime.py" "$HOME/configure-runtime.sh"; do
-            echo "===== $f ====="
-            if [ -r "$f" ]; then
-              grep -nE 'def |function|runtime|migrat|deploy|source|target|download|request|urllib|curl|rsync|cp |install|systemctl|/opt/|thee-studio|18000|database|mariadb|mysql' "$f" 2>/dev/null | head -300 || true
-            else
-              echo NOT_READABLE
-            fi
+          echo '=== pull-managed-runtime.py ==='
+          sed -n '1,180p' "$HOME/pull-managed-runtime.py" 2>/dev/null | sed -E 's/(TOKEN|SECRET|PASSWORD|PASS|KEY)[A-Za-z0-9_]*[[:space:]]*=[[:space:]]*.*/\1=[REDACTED]/Ig' || true
+          echo '=== crons ==='
+          for f in "$HOME/thee-studio-backup.cron" "$HOME/thee-studio-runtime-monitor.cron"; do
+            echo "--- $f ---"; sed -n '1,160p' "$f" 2>/dev/null || true
           done
-          echo '===== MIGRATION LOG EVENTS ====='
-          if [ -r "$HOME/app-migrations.log" ]; then
-            grep -Ei 'thee-studio|fastify|migrat|deploy|runtime|owner|entitlement|access|credit|mariadb|mysql|/opt/' "$HOME/app-migrations.log" 2>/dev/null | tail -300 || true
-          else
-            echo NO_READABLE_LOG
-          fi
-          echo '===== RELEVANT PATHS ====='
-          find "$HOME" -maxdepth 5 -type f 2>/dev/null | grep -Ei 'migrat|runtime|fastify|thee-studio|deploy' | head -400 || true
+          echo '=== shell startup references ==='
+          grep -nEi 'migration|runtime|thee-studio|export|token|stack' "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" 2>/dev/null | sed -E 's/([A-Z][A-Z0-9_]*(TOKEN|SECRET|PASSWORD|PASS|KEY)[A-Z0-9_]*=).*/\1[REDACTED]/Ig' || true
+          echo '=== cron table filtered ==='
+          crontab -l 2>/dev/null | grep -Ei 'thee|studio|migration|runtime|backup' | sed -E 's/([A-Z][A-Z0-9_]*(TOKEN|SECRET|PASSWORD|PASS|KEY)[A-Z0-9_]*=)[^ ]+/\1[REDACTED]/Ig' || true
           REMOTE
-
-      - name: Upload trace
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: fastify-cutover-trace
-          path: fastify-cutover-trace.txt
-          if-no-files-found: error
+          name: cutover-control
+          path: cutover-control.txt
           retention-days: 1

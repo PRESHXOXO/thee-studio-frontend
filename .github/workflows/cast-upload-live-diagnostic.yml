@@ -1,4 +1,4 @@
-name: Temporary Fastify Journal Trace
+name: Temporary Fastify Public Metadata Check
 
 on:
   push:
@@ -13,36 +13,33 @@ jobs:
   inspect:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
     steps:
-      - name: Configure scoped SSH
-        env:
-          KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+      - name: Check published API metadata read-only
+        shell: bash
         run: |
           set -euo pipefail
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/thee_operator
-          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/thee_operator ~/.ssh/known_hosts
-      - name: Inspect service journal read-only
-        run: |
-          set -euo pipefail
-          ssh -o BatchMode=yes -i ~/.ssh/thee_operator -p "$CPANEL_SSH_PORT" "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' > fastify-journal.txt <<'REMOTE'
-          set -u
-          journalctl -u thee-studio-api.service --since '2026-09-08 00:00:00' --no-pager 2>/dev/null | grep -Ei 'route|credit|entitl|billing|owner|internal|402|generation|migrat|bootstrap|listen|server' | tail -400 || true
-          echo '=== PROCESS ==='
-          pid=$(systemctl show thee-studio-api.service -p MainPID --value 2>/dev/null || true)
-          echo "PID_PRESENT=$([ -n "$pid" ] && [ "$pid" != 0 ] && echo yes || echo no)"
-          if [ -n "$pid" ] && [ "$pid" != 0 ]; then
-            echo "ENV_READABLE=$([ -r /proc/$pid/environ ] && echo yes || echo no)"
-          fi
-          REMOTE
+          base='https://studio.myvitaworld.online'
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          : > api-metadata.txt
+          for p in /api/openapi.json /api/swagger.json /api/documentation/json /api/docs/json /api/docs /api/routes /api/health /api/status /openapi.json /swagger.json /docs/json; do
+            tmp=$(mktemp)
+            code=$(curl -sS --compressed -A "$ua" -o "$tmp" -w '%{http_code}' "$base$p" || true)
+            bytes=$(wc -c <"$tmp" | tr -d ' ')
+            printf 'GET %s HTTP=%s BYTES=%s\n' "$p" "$code" "$bytes" >> api-metadata.txt
+            if [ "$code" = 200 ] && [ "$bytes" -gt 0 ] && [ "$bytes" -lt 200000 ]; then
+              P="$p" node - "$tmp" >> api-metadata.txt <<'NODE'
+          const fs=require('fs');const s=fs.readFileSync(process.argv[2],'utf8');
+          let x=null;try{x=JSON.parse(s)}catch{}
+          if(x&&typeof x==='object'){
+            if(x.paths&&typeof x.paths==='object') console.log('PATHS='+Object.keys(x.paths).slice(0,400).join(','));
+            else console.log('JSON_KEYS='+Object.keys(x).slice(0,100).join(','));
+          } else console.log('BODY_PREFIX='+s.replace(/\s+/g,' ').slice(0,300));
+          NODE
+            fi
+            rm -f "$tmp"
+          done
       - uses: actions/upload-artifact@v4
         with:
-          name: fastify-journal
-          path: fastify-journal.txt
+          name: api-metadata
+          path: api-metadata.txt
           retention-days: 1

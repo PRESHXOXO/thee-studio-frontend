@@ -1,4 +1,4 @@
-name: Recover Live Replacement Auth Adapter
+name: Recover Live Replacement API Entitlements
 
 on:
   push:
@@ -13,30 +13,67 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: production
+    env:
+      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
+      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+
     steps:
-      - name: Probe replacement document persistence routes without credentials
+      - name: Configure SSH
+        env:
+          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
+          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
         run: |
           set -eu
-          base='https://studio.myvitaworld.online/api'
-          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
-          for spec in \
-            'GET /documents' \
-            'POST /documents' \
-            'PATCH /documents' \
-            'PUT /documents' \
-            'GET /documents/test' \
-            'POST /documents/test' \
-            'PATCH /documents/test' \
-            'PUT /documents/test' \
-            'DELETE /documents/test'; do
-            method=${spec%% *}; path=${spec#* }
-            body=$(mktemp)
-            case "$method" in
-              POST|PATCH|PUT) code=$(curl -sS --compressed -A "$ua" -H 'Content-Type: application/json' -X "$method" --data '{}' -o "$body" -w '%{http_code}' "$base$path" || true) ;;
-              *) code=$(curl -sS --compressed -A "$ua" -X "$method" -o "$body" -w '%{http_code}' "$base$path" || true) ;;
-            esac
-            printf 'method=%s path=%s status=%s body=' "$method" "$path" "$code"
-            head -c 220 "$body" | tr '\n' ' '
-            echo
-            rm -f "$body"
-          done
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/cpanel_recovery
+          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/cpanel_recovery ~/.ssh/known_hosts
+
+      - name: Inventory replacement Fastify API read-only
+        run: |
+          set -eu
+          test -n "$CPANEL_SSH_HOST"
+          test -n "$CPANEL_SSH_PORT"
+          test -n "$CPANEL_SSH_USER"
+          test -n "$CPANEL_DEPLOY_PATH"
+          ssh -i ~/.ssh/cpanel_recovery -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          echo '=== runtime_processes ==='
+          ps -u "$USER" -o pid=,args= 2>/dev/null | grep -E '[n]ode|[p]assenger|[f]astify' || true
+
+          echo '=== fastify_package_roots ==='
+          find "$HOME" -maxdepth 7 -type f -name package.json \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | while read -r pkg; do
+              if grep -qi '"fastify"' "$pkg" 2>/dev/null; then
+                echo "$pkg"
+                grep -E '"name"|"version"|"fastify"|"mariadb"|"mysql2"' "$pkg" 2>/dev/null | head -20 || true
+              fi
+            done
+
+          echo '=== credit_guard_matches ==='
+          matches=$(grep -RIl --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=cache \
+            --exclude='*.map' --exclude='*.log' 'Insufficient generation credits' "$HOME" 2>/dev/null | head -20 || true)
+          if [ -z "$matches" ]; then
+            echo 'NO_EXACT_MATCH'
+          else
+            printf '%s\n' "$matches"
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              echo "--- $file ---"
+              grep -n -C 12 'Insufficient generation credits' "$file" 2>/dev/null | head -120 || true
+            done <<EOF
+          $matches
+          EOF
+          fi
+
+          echo '=== candidate_entitlement_schema_files ==='
+          find "$HOME" -maxdepth 8 -type f \
+            \( -iname '*migration*' -o -iname '*.sql' -o -iname '*schema*' -o -iname '*entitlement*' -o -iname '*credit*' \) \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null \
+            | grep -E 'thee|studio|api|server|backend|app|migration|schema|entitlement|credit' \
+            | head -120 || true
+          REMOTE

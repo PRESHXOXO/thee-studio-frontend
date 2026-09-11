@@ -32,7 +32,7 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/cpanel_recovery ~/.ssh/known_hosts
 
-      - name: Inventory replacement Fastify API read-only
+      - name: Trace live API mount and credit guard read-only
         run: |
           set -eu
           test -n "$CPANEL_SSH_HOST"
@@ -40,40 +40,38 @@ jobs:
           test -n "$CPANEL_SSH_USER"
           test -n "$CPANEL_DEPLOY_PATH"
           ssh -i ~/.ssh/cpanel_recovery -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "CPANEL_DEPLOY_PATH='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE'
           set -u
-          echo '=== runtime_processes ==='
-          ps -u "$USER" -o pid=,args= 2>/dev/null | grep -E '[n]ode|[p]assenger|[f]astify' || true
+          echo '=== api_mount ==='
+          for candidate in "$CPANEL_DEPLOY_PATH/api" "$(dirname "$CPANEL_DEPLOY_PATH")/api"; do
+            echo "candidate=$candidate"
+            if [ -e "$candidate" ]; then
+              ls -ld "$candidate" || true
+              readlink -f "$candidate" 2>/dev/null || true
+              find "$candidate" -maxdepth 3 -type f \
+                -not -name '.env' -not -name '.env.*' -not -path '*/node_modules/*' \
+                -printf '%p\n' 2>/dev/null | head -120 || true
+            else
+              echo 'MISSING'
+            fi
+          done
 
-          echo '=== fastify_package_roots ==='
-          find "$HOME" -maxdepth 7 -type f -name package.json \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | while read -r pkg; do
-              if grep -qi '"fastify"' "$pkg" 2>/dev/null; then
-                echo "$pkg"
-                grep -E '"name"|"version"|"fastify"|"mariadb"|"mysql2"' "$pkg" 2>/dev/null | head -20 || true
-              fi
-            done
+          echo '=== all_generation_credit_matches ==='
+          grep -RIn --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=cache \
+            --exclude='*.map' --exclude='*.log' -E 'generation credits|credit.*generation|status\(?402|code\(?402|402.*credit' \
+            "$HOME" 2>/dev/null | head -220 || true
 
-          echo '=== credit_guard_matches ==='
-          matches=$(grep -RIl --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=cache \
-            --exclude='*.map' --exclude='*.log' 'Insufficient generation credits' "$HOME" 2>/dev/null | head -20 || true)
-          if [ -z "$matches" ]; then
-            echo 'NO_EXACT_MATCH'
+          echo '=== cast_credit_helper ==='
+          helper="$HOME/thee-functions-20260827/_shared/cast_credits.ts"
+          if [ -f "$helper" ]; then
+            sed -n '1,260p' "$helper"
           else
-            printf '%s\n' "$matches"
-            while IFS= read -r file; do
-              [ -n "$file" ] || continue
-              echo "--- $file ---"
-              grep -n -C 12 'Insufficient generation credits' "$file" 2>/dev/null | head -120 || true
-            done <<EOF
-          $matches
-          EOF
+            echo 'MISSING_CAST_CREDIT_HELPER'
           fi
 
-          echo '=== candidate_entitlement_schema_files ==='
-          find "$HOME" -maxdepth 8 -type f \
-            \( -iname '*migration*' -o -iname '*.sql' -o -iname '*schema*' -o -iname '*entitlement*' -o -iname '*credit*' \) \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null \
-            | grep -E 'thee|studio|api|server|backend|app|migration|schema|entitlement|credit' \
-            | head -120 || true
+          echo '=== api_related_top_level_dirs ==='
+          find "$HOME" -maxdepth 3 -type d \
+            \( -iname '*api*' -o -iname '*backend*' -o -iname '*server*' -o -iname '*studio*' -o -iname '*node*' \) \
+            -not -path '*/node_modules*' -not -path '*/.git*' 2>/dev/null | head -160 || true
           REMOTE

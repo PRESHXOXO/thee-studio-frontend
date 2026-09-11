@@ -18,7 +18,6 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
-      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
 
     steps:
       - name: Configure SSH
@@ -32,46 +31,91 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/cpanel_recovery ~/.ssh/known_hosts
 
-      - name: Trace live API mount and credit guard read-only
+      - name: Inspect Fastify credit and entitlement path read-only
         run: |
           set -eu
           test -n "$CPANEL_SSH_HOST"
           test -n "$CPANEL_SSH_PORT"
           test -n "$CPANEL_SSH_USER"
-          test -n "$CPANEL_DEPLOY_PATH"
           ssh -i ~/.ssh/cpanel_recovery -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
-            "CPANEL_DEPLOY_PATH='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE'
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -u
-          echo '=== api_mount ==='
-          for candidate in "$CPANEL_DEPLOY_PATH/api" "$(dirname "$CPANEL_DEPLOY_PATH")/api"; do
-            echo "candidate=$candidate"
-            if [ -e "$candidate" ]; then
-              ls -ld "$candidate" || true
-              readlink -f "$candidate" 2>/dev/null || true
-              find "$candidate" -maxdepth 3 -type f \
-                -not -name '.env' -not -name '.env.*' -not -path '*/node_modules/*' \
-                -printf '%p\n' 2>/dev/null | head -120 || true
-            else
-              echo 'MISSING'
-            fi
-          done
+          app="$HOME/thee-studio-fastify"
+          adapter="$HOME/public_html/studio/api"
 
-          echo '=== all_generation_credit_matches ==='
-          grep -RIn --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=cache \
-            --exclude='*.map' --exclude='*.log' -E 'generation credits|credit.*generation|status\(?402|code\(?402|402.*credit' \
-            "$HOME" 2>/dev/null | head -220 || true
+          echo '=== backend_identity ==='
+          if [ ! -d "$app" ]; then
+            echo 'MISSING_FASTIFY_APP'
+            exit 2
+          fi
+          printf 'app=%s\n' "$app"
+          git -C "$app" branch --show-current 2>/dev/null || true
+          git -C "$app" rev-parse HEAD 2>/dev/null || true
+          git -C "$app" status --short 2>/dev/null || true
 
-          echo '=== cast_credit_helper ==='
-          helper="$HOME/thee-functions-20260827/_shared/cast_credits.ts"
-          if [ -f "$helper" ]; then
-            sed -n '1,260p' "$helper"
+          echo '=== backend_root_files ==='
+          find "$app" -maxdepth 3 -type f \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' \
+            -not -name '.env' -not -name '.env.*' \
+            -printf '%p\n' 2>/dev/null | sort | head -220 || true
+
+          echo '=== package_json ==='
+          if [ -f "$app/package.json" ]; then
+            cat "$app/package.json"
           else
-            echo 'MISSING_CAST_CREDIT_HELPER'
+            echo 'NO_PACKAGE_JSON'
           fi
 
-          echo '=== api_related_top_level_dirs ==='
-          find "$HOME" -maxdepth 3 -type d \
-            \( -iname '*api*' -o -iname '*backend*' -o -iname '*server*' -o -iname '*studio*' -o -iname '*node*' \) \
-            -not -path '*/node_modules*' -not -path '*/.git*' 2>/dev/null | head -160 || true
+          echo '=== exact_402_guard ==='
+          guard_files=$(grep -RIl --exclude-dir=node_modules --exclude-dir=.git \
+            --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
+            'Insufficient generation credits' "$app" 2>/dev/null | head -20 || true)
+          if [ -z "$guard_files" ]; then
+            echo 'NO_EXACT_GUARD_MATCH'
+          else
+            printf '%s\n' "$guard_files"
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              echo "--- $file ---"
+              grep -n -C 35 'Insufficient generation credits' "$file" 2>/dev/null | head -180 || true
+            done <<EOF
+          $guard_files
+          EOF
+          fi
+
+          echo '=== entitlement_credit_symbols ==='
+          grep -RIn --exclude-dir=node_modules --exclude-dir=.git \
+            --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
+            -E 'entitlement|internal_owner|billing_exempt|credit_deduction|generation_credits|generationCredits|credits_remaining|creditsRemaining|credit_balance|creditBalance|402' \
+            "$app" 2>/dev/null | head -320 || true
+
+          echo '=== migration_schema_files ==='
+          find "$app" -maxdepth 6 -type f \
+            \( -iname '*.sql' -o -iname '*migration*' -o -iname '*schema*' -o -iname '*seed*' -o -iname '*install*' \) \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' \
+            -not -name '.env' -not -name '.env.*' -printf '%p\n' 2>/dev/null | sort | head -160 || true
+
+          echo '=== likely_schema_contents ==='
+          find "$app" -maxdepth 6 -type f \( -iname '*.sql' -o -iname '*migration*.js' -o -iname '*migration*.mjs' -o -iname '*migration*.cjs' -o -iname '*schema*.js' -o -iname '*schema*.mjs' \) \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | head -30 | while read -r file; do
+              echo "--- $file ---"
+              sed -n '1,320p' "$file" | sed -E 's/(password|secret|token|api[_-]?key)[[:space:]]*[:=][[:space:]]*[^,;[:space:]]+/\1=[REDACTED]/Ig' | head -340
+            done
+
+          echo '=== public_api_adapter ==='
+          if [ -e "$adapter" ]; then
+            ls -ld "$adapter" || true
+            readlink -f "$adapter" 2>/dev/null || true
+            find "$adapter" -maxdepth 3 -type f \
+              -not -path '*/node_modules/*' -not -name '.env' -not -name '.env.*' \
+              -printf '%p\n' 2>/dev/null | sort | head -120 || true
+            for f in "$adapter/.htaccess" "$adapter/app.js" "$adapter/server.js" "$adapter/index.js"; do
+              if [ -f "$f" ]; then
+                echo "--- $f ---"
+                sed -n '1,260p' "$f" | sed -E 's/(password|secret|token|api[_-]?key)[[:space:]]*[:=][[:space:]]*[^,;[:space:]]+/\1=[REDACTED]/Ig'
+              fi
+            done
+          else
+            echo 'MISSING_PUBLIC_ADAPTER'
+          fi
           REMOTE

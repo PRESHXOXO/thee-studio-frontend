@@ -1,4 +1,4 @@
-name: Inspect Live Fastify Entitlement Implementation
+name: Test Dedicated Service User Recovery Access
 
 on:
   push:
@@ -12,12 +12,11 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     environment: production
     env:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
 
     steps:
       - name: Configure SSH
@@ -31,84 +30,57 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/cpanel_recovery ~/.ssh/known_hosts
 
-      - name: Inspect live app read-only
+      - name: Test service user key and inspect app if authorized
         run: |
-          set -eu
-          ssh -i ~/.ssh/cpanel_recovery -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' \
+          set -u
+          set +e
+          ssh -o BatchMode=yes -o ConnectTimeout=10 \
+            -i ~/.ssh/cpanel_recovery -p "$CPANEL_SSH_PORT" \
+            "thee-studio@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' \
             | sed -E \
                 -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[REDACTED_EMAIL]/g' \
                 -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/[REDACTED_UUID]/g' \
                 -e 's/(password|secret|token|api[_-]?key)([[:space:]]*[:=][[:space:]]*)[^,;[:space:]]+/\1\2[REDACTED]/Ig' \
-            | tee live-fastify-entitlement-summary.txt
+            | tee service-user-access-summary.txt
           set -u
+          echo 'SERVICE_USER_LOGIN=AUTHORIZED'
+          id
           app=/opt/thee-studio-app
-          echo '--- APP_ACCESS ---'
-          ls -ld /opt "$app" "$app/src" 2>&1 || true
-          test -r "$app/src/server.js" || { echo 'SERVER_JS_READABLE=false'; sudo -n -l 2>&1 | head -80 || true; exit 0; }
-          echo 'SERVER_JS_READABLE=true'
-
           echo '--- APP_FILES ---'
           find "$app" -maxdepth 4 -type f \
             -not -path '*/node_modules/*' -not -path '*/.git/*' \
-            -not -name '.env' -not -name '.env.*' \
-            -printf '%P\n' 2>/dev/null | sort | head -260 || true
-
-          echo '--- PACKAGE ---'
-          if [ -r "$app/package.json" ]; then
-            grep -n -E '"name"|"version"|"scripts"|"start"|"migrate"|"seed"|"install"|"hydrate"|"repair"|"fastify"|"mariadb"|"mysql2"|"knex"|"sequelize"|"prisma"' "$app/package.json" | head -120 || true
-          fi
-
+            -not -name '.env' -not -name '.env.*' -printf '%P\n' 2>/dev/null | sort | head -220 || true
           echo '--- EXACT_402_GUARD ---'
-          files=$(grep -RIl --exclude-dir=node_modules --exclude-dir=.git \
-            --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
-            'Insufficient generation credits' "$app" 2>/dev/null | head -12 || true)
-          if [ -z "$files" ]; then
-            echo 'GUARD_LITERAL=NOT_FOUND'
-          else
-            while IFS= read -r file; do
-              [ -n "$file" ] || continue
-              echo "FILE=${file#$app/}"
-              grep -n -C 32 'Insufficient generation credits' "$file" 2>/dev/null | head -180 || true
-            done <<EOF
+          files=$(grep -RIl --exclude-dir=node_modules --exclude-dir=.git --exclude='.env' --exclude='.env.*' \
+            'Insufficient generation credits' "$app" 2>/dev/null | head -10 || true)
+          [ -n "$files" ] || echo 'GUARD_LITERAL=NOT_FOUND'
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            echo "FILE=${file#$app/}"
+            grep -n -C 30 'Insufficient generation credits' "$file" 2>/dev/null | head -160 || true
+          done <<EOF
           $files
           EOF
-          fi
-
-          echo '--- ENTITLEMENT_AND_CREDIT_IMPLEMENTATION ---'
-          grep -RIn --exclude-dir=node_modules --exclude-dir=.git \
-            --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
-            -E 'internal_owner|billing_exempt|billingExempt|credit_deduction_enabled|creditDeductionEnabled|usage_tracking_enabled|usageTrackingEnabled|all_features|allFeatures|admin_access_enabled|adminAccessEnabled|generation_credits|generationCredits|credit_balance|creditBalance|entitlement|Insufficient generation credits|reply\.code\(402\)|status\(402\)' \
-            "$app/src" "$app/scripts" "$app/migrations" "$app/db" 2>/dev/null | head -420 || true
-
-          echo '--- SCHEMA_AND_REPAIR_FILES ---'
+          echo '--- ENTITLEMENT_SYMBOLS ---'
+          grep -RIn --exclude-dir=node_modules --exclude-dir=.git --exclude='.env' --exclude='.env.*' \
+            -E 'internal_owner|billing_exempt|credit_deduction_enabled|usage_tracking_enabled|all_features|admin_access_enabled|generation_credits|credit_balance|entitlement|reply\.code\(402\)' \
+            "$app/src" "$app/scripts" "$app/migrations" "$app/db" 2>/dev/null | head -360 || true
+          echo '--- REPAIR_FILES ---'
           find "$app" -maxdepth 7 -type f \
-            \( -iname '*.sql' -o -iname '*migration*' -o -iname '*schema*' -o -iname '*seed*' -o -iname '*install*' -o -iname '*hydrate*' -o -iname '*entitlement*' -o -iname '*credit*' -o -iname '*repair*' \) \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' \
-            -not -name '.env' -not -name '.env.*' -printf '%P\n' 2>/dev/null | sort | head -220 || true
-
-          echo '--- SCHEMA_AND_REPAIR_SNIPPETS ---'
-          find "$app" -maxdepth 7 -type f \
-            \( -iname '*.sql' -o -iname '*migration*.js' -o -iname '*migration*.mjs' -o -iname '*schema*.js' -o -iname '*schema*.mjs' -o -iname '*seed*.js' -o -iname '*seed*.mjs' -o -iname '*install*.js' -o -iname '*install*.mjs' -o -iname '*hydrate*.js' -o -iname '*hydrate*.mjs' -o -iname '*repair*.js' -o -iname '*repair*.mjs' \) \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | head -35 | while read -r file; do
-              echo "FILE=${file#$app/}"
-              grep -n -E -C 10 'owner|internal|entitlement|credit|billing|generation|CREATE TABLE|ALTER TABLE|INSERT INTO|UPDATE|ON DUPLICATE KEY|maria|mysql' "$file" 2>/dev/null | head -180 || true
-            done
-
-          echo '--- SERVICE_METADATA ---'
-          systemctl list-units --type=service --all 2>/dev/null | grep -E 'thee-studio|studio-app' | head -20 || true
-          for svc in thee-studio-app.service thee-studio-api.service thee-studio-worker.service; do
-            systemctl cat "$svc" 2>/dev/null | grep -E '^(\[|Description=|User=|Group=|WorkingDirectory=|ExecStart=|EnvironmentFile=)' | head -80 || true
-          done
-
-          echo '--- SUDO_RIGHTS ---'
-          sudo -n -l 2>&1 | head -100 || true
+            \( -iname '*.sql' -o -iname '*migration*' -o -iname '*schema*' -o -iname '*seed*' -o -iname '*install*' -o -iname '*hydrate*' -o -iname '*repair*' -o -iname '*entitlement*' -o -iname '*credit*' \) \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' -not -name '.env' -not -name '.env.*' -printf '%P\n' 2>/dev/null | sort | head -200 || true
           REMOTE
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            printf 'SERVICE_USER_LOGIN=DENIED rc=%s\n' "$rc" > service-user-access-summary.txt
+          fi
+          cat service-user-access-summary.txt
 
-      - name: Upload entitlement summary
+      - name: Upload access summary
         uses: actions/upload-artifact@v4
         with:
-          name: live-fastify-entitlement-summary
-          path: live-fastify-entitlement-summary.txt
+          name: service-user-access-summary
+          path: service-user-access-summary.txt
           if-no-files-found: error
           retention-days: 1

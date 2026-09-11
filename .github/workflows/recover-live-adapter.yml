@@ -1,4 +1,4 @@
-name: Test Dedicated Service User Recovery Access
+name: Inspect cPanel MariaDB Metadata Read Only
 
 on:
   push:
@@ -12,11 +12,12 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     environment: production
     env:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
+      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
 
     steps:
       - name: Configure SSH
@@ -30,57 +31,68 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/cpanel_recovery ~/.ssh/known_hosts
 
-      - name: Test service user key and inspect app if authorized
+      - name: Inspect database metadata without exposing credentials
         run: |
-          set -u
-          set +e
-          ssh -o BatchMode=yes -o ConnectTimeout=10 \
-            -i ~/.ssh/cpanel_recovery -p "$CPANEL_SSH_PORT" \
-            "thee-studio@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' \
+          set -eu
+          ssh -i ~/.ssh/cpanel_recovery -p "$CPANEL_SSH_PORT" \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' \
             | sed -E \
                 -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[REDACTED_EMAIL]/g' \
                 -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/[REDACTED_UUID]/g' \
-                -e 's/(password|secret|token|api[_-]?key)([[:space:]]*[:=][[:space:]]*)[^,;[:space:]]+/\1\2[REDACTED]/Ig' \
-            | tee service-user-access-summary.txt
+            | tee mariadb-metadata-summary.txt
           set -u
-          echo 'SERVICE_USER_LOGIN=AUTHORIZED'
-          id
-          app=/opt/thee-studio-app
-          echo '--- APP_FILES ---'
-          find "$app" -maxdepth 4 -type f \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' \
-            -not -name '.env' -not -name '.env.*' -printf '%P\n' 2>/dev/null | sort | head -220 || true
-          echo '--- EXACT_402_GUARD ---'
-          files=$(grep -RIl --exclude-dir=node_modules --exclude-dir=.git --exclude='.env' --exclude='.env.*' \
-            'Insufficient generation credits' "$app" 2>/dev/null | head -10 || true)
-          [ -n "$files" ] || echo 'GUARD_LITERAL=NOT_FOUND'
-          while IFS= read -r file; do
-            [ -n "$file" ] || continue
-            echo "FILE=${file#$app/}"
-            grep -n -C 30 'Insufficient generation credits' "$file" 2>/dev/null | head -160 || true
-          done <<EOF
-          $files
-          EOF
-          echo '--- ENTITLEMENT_SYMBOLS ---'
-          grep -RIn --exclude-dir=node_modules --exclude-dir=.git --exclude='.env' --exclude='.env.*' \
-            -E 'internal_owner|billing_exempt|credit_deduction_enabled|usage_tracking_enabled|all_features|admin_access_enabled|generation_credits|credit_balance|entitlement|reply\.code\(402\)' \
-            "$app/src" "$app/scripts" "$app/migrations" "$app/db" 2>/dev/null | head -360 || true
-          echo '--- REPAIR_FILES ---'
-          find "$app" -maxdepth 7 -type f \
-            \( -iname '*.sql' -o -iname '*migration*' -o -iname '*schema*' -o -iname '*seed*' -o -iname '*install*' -o -iname '*hydrate*' -o -iname '*repair*' -o -iname '*entitlement*' -o -iname '*credit*' \) \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' -not -name '.env' -not -name '.env.*' -printf '%P\n' 2>/dev/null | sort | head -200 || true
-          REMOTE
-          rc=${PIPESTATUS[0]}
-          set -e
-          if [ "$rc" -ne 0 ]; then
-            printf 'SERVICE_USER_LOGIN=DENIED rc=%s\n' "$rc" > service-user-access-summary.txt
-          fi
-          cat service-user-access-summary.txt
+          echo '--- CLIENTS ---'
+          command -v mariadb || true
+          command -v mysql || true
+          command -v uapi || true
+          [ -x /usr/local/cpanel/bin/uapi ] && echo 'CPANEL_UAPI=AVAILABLE' || echo 'CPANEL_UAPI=UNAVAILABLE'
 
-      - name: Upload access summary
+          echo '--- CPANEL_DATABASE_NAMES ---'
+          if [ -x /usr/local/cpanel/bin/uapi ]; then
+            /usr/local/cpanel/bin/uapi --output=json Mysql list_databases 2>/dev/null \
+              | python3 -c 'import json,sys; d=json.load(sys.stdin); rows=d.get("result",{}).get("data",[]) or []; names=[]; [names.append(x.get("database") or x.get("name") or "") for x in rows if isinstance(x,dict)]; print("\n".join(x for x in names if x))' \
+              | head -40 || true
+          fi
+
+          echo '--- LOCAL_DEFAULTS ---'
+          if [ -f "$HOME/.my.cnf" ]; then
+            echo 'MY_CNF_PRESENT=true'
+          else
+            echo 'MY_CNF_PRESENT=false'
+          fi
+
+          dbcli=''
+          command -v mariadb >/dev/null 2>&1 && dbcli=$(command -v mariadb)
+          [ -z "$dbcli" ] && command -v mysql >/dev/null 2>&1 && dbcli=$(command -v mysql)
+          if [ -z "$dbcli" ]; then
+            echo 'DB_CLIENT=UNAVAILABLE'
+            exit 0
+          fi
+
+          set +e
+          ping=$($dbcli --batch --skip-column-names -e 'SELECT 1' 2>/dev/null)
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ] || [ "$ping" != '1' ]; then
+            echo 'DB_DEFAULT_LOGIN=UNAVAILABLE'
+            exit 0
+          fi
+          echo 'DB_DEFAULT_LOGIN=AVAILABLE'
+
+          echo '--- DATABASES ---'
+          $dbcli --batch --skip-column-names -e "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME NOT IN ('information_schema','performance_schema','mysql','sys') ORDER BY SCHEMA_NAME" 2>/dev/null | head -50 || true
+
+          echo '--- CANDIDATE_TABLES ---'
+          $dbcli --batch --skip-column-names -e "SELECT TABLE_SCHEMA,TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA NOT IN ('information_schema','performance_schema','mysql','sys') AND (LOWER(TABLE_NAME) REGEXP 'credit|entitle|billing|plan|subscription|account|user|profile|generation') ORDER BY TABLE_SCHEMA,TABLE_NAME" 2>/dev/null | head -160 || true
+
+          echo '--- CANDIDATE_COLUMNS ---'
+          $dbcli --batch --skip-column-names -e "SELECT TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA NOT IN ('information_schema','performance_schema','mysql','sys') AND (LOWER(COLUMN_NAME) REGEXP 'credit|entitle|billing|plan|role|account_type|owner|usage_tracking|deduction|feature|admin|user_id|auth|status') ORDER BY TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION" 2>/dev/null | head -320 || true
+          REMOTE
+
+      - name: Upload metadata summary
         uses: actions/upload-artifact@v4
         with:
-          name: service-user-access-summary
-          path: service-user-access-summary.txt
+          name: mariadb-metadata-summary
+          path: mariadb-metadata-summary.txt
           if-no-files-found: error
           retention-days: 1

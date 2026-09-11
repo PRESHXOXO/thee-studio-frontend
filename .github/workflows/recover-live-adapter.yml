@@ -1,4 +1,4 @@
-name: Recover Live Replacement API Entitlements
+name: Trace Live Replacement API Mount
 
 on:
   push:
@@ -18,6 +18,7 @@ jobs:
       CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
       CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
       CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
 
     steps:
       - name: Configure SSH
@@ -31,83 +32,62 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/cpanel_recovery ~/.ssh/known_hosts
 
-      - name: Build compact recovery summary
+      - name: Trace mount read-only
         run: |
           set -eu
           ssh -i ~/.ssh/cpanel_recovery -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' \
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" \
+            "CPANEL_DEPLOY_PATH='$CPANEL_DEPLOY_PATH' bash -s" <<'REMOTE' \
             | sed -E \
                 -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[REDACTED_EMAIL]/g' \
                 -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/[REDACTED_UUID]/g' \
                 -e 's/(password|secret|token|api[_-]?key)([[:space:]]*[:=][[:space:]]*)[^,;[:space:]]+/\1\2[REDACTED]/Ig' \
-            | tee entitlement-recovery-summary.txt
+            | tee live-api-mount-summary.txt
           set -u
-          backup=$(find "$HOME/deploy-backups/studio" -maxdepth 2 -type d \
-            -name 'cast-fastify-auth-hydration-*' 2>/dev/null | sort | tail -1)
-          [ -n "$backup" ] && [ -d "$backup" ] || { echo 'RESULT=MISSING_BACKUP'; exit 2; }
-          echo 'RESULT=BACKUP_FOUND'
-          echo "BACKUP_BASENAME=$(basename "$backup")"
+          echo '--- IDENTITY ---'
+          printf 'HOME=%s\n' "$HOME"
+          printf 'DEPLOY_BASENAME=%s\n' "$(basename "$CPANEL_DEPLOY_PATH")"
 
-          echo '--- TOP_LEVEL ---'
-          find "$backup" -maxdepth 3 -type f \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' \
-            -not -name '.env' -not -name '.env.*' \
-            -printf '%P\n' 2>/dev/null | sort | head -120 || true
+          echo '--- LIVE_NODE_PASSENGER_PROCESSES ---'
+          ps auxww 2>/dev/null | grep -E '[n]ode|[p]assenger|[f]astify' | head -80 || true
 
-          echo '--- PACKAGE_SCRIPTS_AND_DB_DEPS ---'
-          find "$backup" -maxdepth 6 -type f -name package.json -not -path '*/node_modules/*' | while read -r pkg; do
-            echo "FILE=${pkg#$backup/}"
-            grep -E '"(name|scripts|start|migrate|migration|seed|install|hydrate|repair|fastify|mariadb|mysql2|knex|sequelize|prisma)"' "$pkg" | head -80 || true
+          echo '--- DEPLOY_HTACCESS ---'
+          for f in "$CPANEL_DEPLOY_PATH/.htaccess" "$(dirname "$CPANEL_DEPLOY_PATH")/.htaccess" "$HOME/public_html/.htaccess"; do
+            if [ -f "$f" ]; then
+              echo "FILE=$f"
+              grep -n -E -C 4 'api|Passenger|Proxy|RewriteRule|RewriteCond|127\.0\.0\.1|localhost|node|fastify' "$f" 2>/dev/null | head -160 || true
+            fi
           done
 
-          echo '--- EXACT_402_GUARD ---'
-          matches=$(grep -RIl --exclude-dir=node_modules --exclude-dir=.git \
-            --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
-            'Insufficient generation credits' "$backup" 2>/dev/null | head -10 || true)
-          if [ -z "$matches" ]; then
-            echo 'GUARD_LITERAL=NOT_FOUND'
-          else
-            while IFS= read -r file; do
-              [ -n "$file" ] || continue
-              echo "FILE=${file#$backup/}"
-              grep -n -C 18 'Insufficient generation credits' "$file" | head -100 || true
-            done <<EOF
-          $matches
-          EOF
-          fi
+          echo '--- CPANEL_NODE_CONFIG_CANDIDATES ---'
+          find "$HOME" -maxdepth 6 -type f \
+            \( -path '*/.cpanel/*' -o -path '*/.cl.selector/*' -o -path '*/nodevenv/*' -o -iname '*passenger*' -o -iname '*node*app*' \) \
+            -not -name '.env' -not -name '.env.*' -not -path '*/node_modules/*' 2>/dev/null | head -160 || true
 
-          echo '--- ENTITLEMENT_SCHEMA_SYMBOLS ---'
-          grep -RIn --exclude-dir=node_modules --exclude-dir=.git \
-            --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
-            -E 'CREATE TABLE|ALTER TABLE|INSERT INTO|UPDATE[[:space:]]+[A-Za-z0-9_]+|UPSERT|ON DUPLICATE KEY|internal_owner|billing_exempt|billingExempt|credit_deduction_enabled|creditDeductionEnabled|usage_tracking_enabled|usageTrackingEnabled|all_features|allFeatures|admin_access_enabled|adminAccessEnabled|generation_credits|generationCredits|credit_balance|creditBalance|entitlement' \
-            "$backup" 2>/dev/null | head -220 || true
+          echo '--- APP_ROOT_REFERENCES ---'
+          grep -RIn --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=cache \
+            --exclude='.env' --exclude='.env.*' --exclude='*.log' --exclude='*.map' \
+            -E 'thee-studio-fastify|PassengerAppRoot|PassengerStartupFile|ProxyPass|ProxyPassReverse|127\.0\.0\.1:[0-9]+|localhost:[0-9]+|studio/api|/api/readyz' \
+            "$HOME/.cpanel" "$HOME/.cl.selector" "$HOME/public_html" "$HOME/deploy-backups" 2>/dev/null | head -260 || true
 
-          echo '--- REPAIR_CANDIDATES ---'
-          find "$backup" -maxdepth 8 -type f \
-            \( -iname '*.sql' -o -iname '*migration*' -o -iname '*schema*' -o -iname '*seed*' -o -iname '*install*' -o -iname '*hydrate*' -o -iname '*entitlement*' -o -iname '*credit*' -o -iname '*repair*' \) \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' \
-            -not -name '.env' -not -name '.env.*' -printf '%P\n' 2>/dev/null | sort | head -160 || true
+          echo '--- FASTIFY_PACKAGES_ANYWHERE_HOME ---'
+          find "$HOME" -maxdepth 10 -type f -name package.json \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | while read -r pkg; do
+              if grep -qi '"fastify"' "$pkg" 2>/dev/null; then
+                echo "PACKAGE=$pkg"
+                grep -E '"name"|"version"|"fastify"|"mariadb"|"mysql2"' "$pkg" | head -20 || true
+              fi
+            done | head -80 || true
 
-          echo '--- REPAIR_FILE_SNIPPETS ---'
-          find "$backup" -maxdepth 8 -type f \
-            \( -iname '*.sql' -o -iname '*hydrate*.js' -o -iname '*hydrate*.mjs' -o -iname '*repair*.js' -o -iname '*repair*.mjs' -o -iname '*migration*.js' -o -iname '*migration*.mjs' -o -iname '*install*.js' -o -iname '*install*.mjs' \) \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | head -25 | while read -r file; do
-              echo "FILE=${file#$backup/}"
-              grep -n -E -C 8 'owner|entitlement|credit|billing|internal|generation|maria|mysql|INSERT|UPDATE|CREATE TABLE|ALTER TABLE|ON DUPLICATE KEY' "$file" 2>/dev/null | head -120 || true
-            done
+          echo '--- API_READYZ ---'
+          curl --fail --silent --show-error --max-time 15 https://studio.myvitaworld.online/api/readyz 2>/dev/null | head -c 800 || true
+          echo
           REMOTE
 
-          {
-            echo '## Replacement API entitlement recovery'
-            echo '```text'
-            head -220 entitlement-recovery-summary.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload compact recovery summary
+      - name: Upload mount summary
         uses: actions/upload-artifact@v4
         with:
-          name: entitlement-recovery-summary
-          path: entitlement-recovery-summary.txt
+          name: live-api-mount-summary
+          path: live-api-mount-summary.txt
           if-no-files-found: error
           retention-days: 1

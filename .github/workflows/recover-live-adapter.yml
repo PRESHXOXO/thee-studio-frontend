@@ -1,4 +1,4 @@
-name: Inspect cPanel MariaDB Metadata Read Only
+name: Probe Replacement API Read Only Routes
 
 on:
   push:
@@ -12,87 +12,46 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 5
     environment: production
-    env:
-      CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST }}
-      CPANEL_SSH_PORT: ${{ secrets.CPANEL_SSH_PORT }}
-      CPANEL_SSH_USER: ${{ secrets.CPANEL_SSH_USER }}
 
     steps:
-      - name: Configure SSH
-        env:
-          CPANEL_SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          CPANEL_SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+      - name: Probe bounded GET-only route set
         run: |
           set -eu
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$CPANEL_SSH_PRIVATE_KEY" > ~/.ssh/cpanel_recovery
-          printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/cpanel_recovery ~/.ssh/known_hosts
+          base='https://studio.myvitaworld.online/api'
+          routes='readyz openapi.json swagger.json docs docs/json auth/me auth/csrf access credits account admin/entitlements admin/access admin/credits admin/reconcile internal/entitlements internal/access internal/reconcile'
+          : > api-route-probe.txt
+          for route in $routes; do
+            url="$base/$route"
+            body=$(mktemp)
+            headers=$(mktemp)
+            code=$(curl --silent --show-error --max-time 12 --location \
+              --dump-header "$headers" --output "$body" --write-out '%{http_code}' "$url" || printf '000')
+            ctype=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/{sub(/^[^:]+:[[:space:]]*/,""); gsub(/\r/,""); print; exit}' "$headers")
+            allow=$(awk 'BEGIN{IGNORECASE=1} /^allow:/{sub(/^[^:]+:[[:space:]]*/,""); gsub(/\r/,""); print; exit}' "$headers")
+            printf 'ROUTE=/%s STATUS=%s CONTENT_TYPE=%s ALLOW=%s\n' "$route" "$code" "${ctype:-none}" "${allow:-none}" >> api-route-probe.txt
+            python3 - "$body" <<'PY' >> api-route-probe.txt
+import json, re, sys
+p=sys.argv[1]
+try:
+    raw=open(p,'rb').read(1200).decode('utf-8','replace')
+except Exception:
+    raw=''
+raw=re.sub(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}','[REDACTED_EMAIL]',raw)
+raw=re.sub(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}','[REDACTED_UUID]',raw)
+raw=re.sub(r'(?i)(token|secret|password|api[_-]?key)(["\s:=]+)[^,}\s]+',r'\1\2[REDACTED]',raw)
+print('BODY='+raw.replace('\n',' ')[:900])
+PY
+            printf '\n' >> api-route-probe.txt
+            rm -f "$body" "$headers"
+          done
+          cat api-route-probe.txt
 
-      - name: Inspect database metadata without exposing credentials
-        run: |
-          set -eu
-          ssh -i ~/.ssh/cpanel_recovery -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' \
-            | sed -E \
-                -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[REDACTED_EMAIL]/g' \
-                -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/[REDACTED_UUID]/g' \
-            | tee mariadb-metadata-summary.txt
-          set -u
-          echo '--- CLIENTS ---'
-          command -v mariadb || true
-          command -v mysql || true
-          command -v uapi || true
-          [ -x /usr/local/cpanel/bin/uapi ] && echo 'CPANEL_UAPI=AVAILABLE' || echo 'CPANEL_UAPI=UNAVAILABLE'
-
-          echo '--- CPANEL_DATABASE_NAMES ---'
-          if [ -x /usr/local/cpanel/bin/uapi ]; then
-            /usr/local/cpanel/bin/uapi --output=json Mysql list_databases 2>/dev/null \
-              | python3 -c 'import json,sys; d=json.load(sys.stdin); rows=d.get("result",{}).get("data",[]) or []; names=[]; [names.append(x.get("database") or x.get("name") or "") for x in rows if isinstance(x,dict)]; print("\n".join(x for x in names if x))' \
-              | head -40 || true
-          fi
-
-          echo '--- LOCAL_DEFAULTS ---'
-          if [ -f "$HOME/.my.cnf" ]; then
-            echo 'MY_CNF_PRESENT=true'
-          else
-            echo 'MY_CNF_PRESENT=false'
-          fi
-
-          dbcli=''
-          command -v mariadb >/dev/null 2>&1 && dbcli=$(command -v mariadb)
-          [ -z "$dbcli" ] && command -v mysql >/dev/null 2>&1 && dbcli=$(command -v mysql)
-          if [ -z "$dbcli" ]; then
-            echo 'DB_CLIENT=UNAVAILABLE'
-            exit 0
-          fi
-
-          set +e
-          ping=$($dbcli --batch --skip-column-names -e 'SELECT 1' 2>/dev/null)
-          rc=$?
-          set -e
-          if [ "$rc" -ne 0 ] || [ "$ping" != '1' ]; then
-            echo 'DB_DEFAULT_LOGIN=UNAVAILABLE'
-            exit 0
-          fi
-          echo 'DB_DEFAULT_LOGIN=AVAILABLE'
-
-          echo '--- DATABASES ---'
-          $dbcli --batch --skip-column-names -e "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME NOT IN ('information_schema','performance_schema','mysql','sys') ORDER BY SCHEMA_NAME" 2>/dev/null | head -50 || true
-
-          echo '--- CANDIDATE_TABLES ---'
-          $dbcli --batch --skip-column-names -e "SELECT TABLE_SCHEMA,TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA NOT IN ('information_schema','performance_schema','mysql','sys') AND (LOWER(TABLE_NAME) REGEXP 'credit|entitle|billing|plan|subscription|account|user|profile|generation') ORDER BY TABLE_SCHEMA,TABLE_NAME" 2>/dev/null | head -160 || true
-
-          echo '--- CANDIDATE_COLUMNS ---'
-          $dbcli --batch --skip-column-names -e "SELECT TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA NOT IN ('information_schema','performance_schema','mysql','sys') AND (LOWER(COLUMN_NAME) REGEXP 'credit|entitle|billing|plan|role|account_type|owner|usage_tracking|deduction|feature|admin|user_id|auth|status') ORDER BY TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION" 2>/dev/null | head -320 || true
-          REMOTE
-
-      - name: Upload metadata summary
+      - name: Upload route probe
         uses: actions/upload-artifact@v4
         with:
-          name: mariadb-metadata-summary
-          path: mariadb-metadata-summary.txt
+          name: api-route-probe
+          path: api-route-probe.txt
           if-no-files-found: error
           retention-days: 1

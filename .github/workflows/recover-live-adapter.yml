@@ -31,79 +31,83 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/cpanel_recovery ~/.ssh/known_hosts
 
-      - name: Inspect Fastify auth-hydration recovery artifact read-only
+      - name: Build compact recovery summary
         run: |
           set -eu
           ssh -i ~/.ssh/cpanel_recovery -p "$CPANEL_SSH_PORT" \
-            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
+            "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE' \
+            | sed -E \
+                -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[REDACTED_EMAIL]/g' \
+                -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/[REDACTED_UUID]/g' \
+                -e 's/(password|secret|token|api[_-]?key)([[:space:]]*[:=][[:space:]]*)[^,;[:space:]]+/\1\2[REDACTED]/Ig' \
+            | tee entitlement-recovery-summary.txt
           set -u
           backup=$(find "$HOME/deploy-backups/studio" -maxdepth 2 -type d \
             -name 'cast-fastify-auth-hydration-*' 2>/dev/null | sort | tail -1)
+          [ -n "$backup" ] && [ -d "$backup" ] || { echo 'RESULT=MISSING_BACKUP'; exit 2; }
+          echo 'RESULT=BACKUP_FOUND'
+          echo "BACKUP_BASENAME=$(basename "$backup")"
 
-          echo '=== recovery_artifact ==='
-          if [ -z "$backup" ] || [ ! -d "$backup" ]; then
-            echo 'MISSING_AUTH_HYDRATION_BACKUP'
-            exit 2
-          fi
-          echo "backup=$backup"
-
-          echo '=== recovery_tree ==='
-          find "$backup" -maxdepth 6 -type f \
+          echo '--- TOP_LEVEL ---'
+          find "$backup" -maxdepth 3 -type f \
             -not -path '*/node_modules/*' -not -path '*/.git/*' \
             -not -name '.env' -not -name '.env.*' \
-            -printf '%p\n' 2>/dev/null | sort | head -360 || true
+            -printf '%P\n' 2>/dev/null | sort | head -120 || true
 
-          echo '=== package_files ==='
-          find "$backup" -maxdepth 6 -type f -name package.json \
-            -not -path '*/node_modules/*' 2>/dev/null | while read -r pkg; do
-              echo "--- $pkg ---"
-              cat "$pkg"
-            done
+          echo '--- PACKAGE_SCRIPTS_AND_DB_DEPS ---'
+          find "$backup" -maxdepth 6 -type f -name package.json -not -path '*/node_modules/*' | while read -r pkg; do
+            echo "FILE=${pkg#$backup/}"
+            grep -E '"(name|scripts|start|migrate|migration|seed|install|hydrate|repair|fastify|mariadb|mysql2|knex|sequelize|prisma)"' "$pkg" | head -80 || true
+          done
 
-          echo '=== exact_credit_guard ==='
+          echo '--- EXACT_402_GUARD ---'
           matches=$(grep -RIl --exclude-dir=node_modules --exclude-dir=.git \
             --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
-            'Insufficient generation credits' "$backup" 2>/dev/null | head -30 || true)
+            'Insufficient generation credits' "$backup" 2>/dev/null | head -10 || true)
           if [ -z "$matches" ]; then
-            echo 'NO_EXACT_GUARD_MATCH'
+            echo 'GUARD_LITERAL=NOT_FOUND'
           else
-            printf '%s\n' "$matches"
             while IFS= read -r file; do
               [ -n "$file" ] || continue
-              echo "--- $file ---"
-              grep -n -C 55 'Insufficient generation credits' "$file" 2>/dev/null | head -260 || true
+              echo "FILE=${file#$backup/}"
+              grep -n -C 18 'Insufficient generation credits' "$file" | head -100 || true
             done <<EOF
           $matches
           EOF
           fi
 
-          echo '=== owner_entitlement_symbols ==='
+          echo '--- ENTITLEMENT_SCHEMA_SYMBOLS ---'
           grep -RIn --exclude-dir=node_modules --exclude-dir=.git \
             --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
-            -E 'internal_owner|billing_exempt|billingExempt|credit_deduction|creditDeduction|usage_tracking|usageTracking|all_features|allFeatures|admin_access|adminAccess|entitlement|generation_credits|generationCredits|credit_balance|creditBalance|credits_remaining|creditsRemaining|owner' \
-            "$backup" 2>/dev/null | head -520 || true
+            -E 'CREATE TABLE|ALTER TABLE|INSERT INTO|UPDATE[[:space:]]+[A-Za-z0-9_]+|UPSERT|ON DUPLICATE KEY|internal_owner|billing_exempt|billingExempt|credit_deduction_enabled|creditDeductionEnabled|usage_tracking_enabled|usageTrackingEnabled|all_features|allFeatures|admin_access_enabled|adminAccessEnabled|generation_credits|generationCredits|credit_balance|creditBalance|entitlement' \
+            "$backup" 2>/dev/null | head -220 || true
 
-          echo '=== migrations_schema_install_files ==='
+          echo '--- REPAIR_CANDIDATES ---'
           find "$backup" -maxdepth 8 -type f \
-            \( -iname '*.sql' -o -iname '*migration*' -o -iname '*schema*' -o -iname '*seed*' -o -iname '*install*' -o -iname '*hydrate*' -o -iname '*entitlement*' -o -iname '*credit*' \) \
+            \( -iname '*.sql' -o -iname '*migration*' -o -iname '*schema*' -o -iname '*seed*' -o -iname '*install*' -o -iname '*hydrate*' -o -iname '*entitlement*' -o -iname '*credit*' -o -iname '*repair*' \) \
             -not -path '*/node_modules/*' -not -path '*/.git/*' \
-            -not -name '.env' -not -name '.env.*' -print 2>/dev/null | sort | head -260 || true
+            -not -name '.env' -not -name '.env.*' -printf '%P\n' 2>/dev/null | sort | head -160 || true
 
-          echo '=== likely_migration_contents ==='
+          echo '--- REPAIR_FILE_SNIPPETS ---'
           find "$backup" -maxdepth 8 -type f \
-            \( -iname '*.sql' -o -iname '*migration*.js' -o -iname '*migration*.mjs' -o -iname '*seed*.js' -o -iname '*seed*.mjs' -o -iname '*install*.js' -o -iname '*install*.mjs' -o -iname '*hydrate*.js' -o -iname '*hydrate*.mjs' \) \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | head -50 | while read -r file; do
-              echo "--- $file ---"
-              sed -n '1,420p' "$file" \
-                | sed -E 's/(password|secret|token|api[_-]?key)[[:space:]]*[:=][[:space:]]*[^,;[:space:]]+/\1=[REDACTED]/Ig' \
-                | head -460
-            done
-
-          echo '=== recovery_metadata_and_logs ==='
-          find "$backup" -maxdepth 5 -type f \
-            \( -iname '*.txt' -o -iname '*.md' -o -iname '*.log' -o -iname '*manifest*' -o -iname '*meta*' \) \
-            -not -name '.env' -not -name '.env.*' 2>/dev/null | head -50 | while read -r file; do
-              echo "--- $file ---"
-              grep -Ei -n -C 4 'fastify|maria|mysql|entitlement|credit|owner|install|deploy|source|path|passenger' "$file" 2>/dev/null | head -180 || true
+            \( -iname '*.sql' -o -iname '*hydrate*.js' -o -iname '*hydrate*.mjs' -o -iname '*repair*.js' -o -iname '*repair*.mjs' -o -iname '*migration*.js' -o -iname '*migration*.mjs' -o -iname '*install*.js' -o -iname '*install*.mjs' \) \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | head -25 | while read -r file; do
+              echo "FILE=${file#$backup/}"
+              grep -n -E -C 8 'owner|entitlement|credit|billing|internal|generation|maria|mysql|INSERT|UPDATE|CREATE TABLE|ALTER TABLE|ON DUPLICATE KEY' "$file" 2>/dev/null | head -120 || true
             done
           REMOTE
+
+          {
+            echo '## Replacement API entitlement recovery'
+            echo '```text'
+            head -220 entitlement-recovery-summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload compact recovery summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: entitlement-recovery-summary
+          path: entitlement-recovery-summary.txt
+          if-no-files-found: error
+          retention-days: 1

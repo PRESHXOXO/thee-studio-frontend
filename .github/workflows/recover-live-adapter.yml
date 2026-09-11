@@ -31,91 +31,92 @@ jobs:
           printf '%s\n' "$CPANEL_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/cpanel_recovery ~/.ssh/known_hosts
 
-      - name: Inspect Fastify credit and entitlement path read-only
+      - name: Locate and inspect Fastify entitlement path read-only
         run: |
           set -eu
-          test -n "$CPANEL_SSH_HOST"
-          test -n "$CPANEL_SSH_PORT"
-          test -n "$CPANEL_SSH_USER"
           ssh -i ~/.ssh/cpanel_recovery -p "$CPANEL_SSH_PORT" \
             "$CPANEL_SSH_USER@$CPANEL_SSH_HOST" 'bash -s' <<'REMOTE'
           set -u
-          app="$HOME/thee-studio-fastify"
-          adapter="$HOME/public_html/studio/api"
+          echo '=== locate_candidates ==='
+          find "$HOME" -maxdepth 6 -type d \
+            \( -iname 'thee-studio-fastify' -o -iname '*studio*fastify*' -o -iname '*fastify*' \) \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' -print 2>/dev/null | head -40 || true
+          find "$HOME" -maxdepth 7 -type f -name package.json \
+            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | while read -r pkg; do
+              if grep -qi '"fastify"' "$pkg" 2>/dev/null; then
+                echo "FASTIFY_PACKAGE=$pkg"
+              fi
+            done | head -40 || true
 
-          echo '=== backend_identity ==='
-          if [ ! -d "$app" ]; then
-            echo 'MISSING_FASTIFY_APP'
-            exit 2
+          app=''
+          for candidate in \
+            "$HOME/thee-studio-fastify" \
+            "$HOME/public_html/thee-studio-fastify" \
+            "$HOME/public_html/studio/thee-studio-fastify"; do
+            if [ -f "$candidate/package.json" ] && grep -qi '"fastify"' "$candidate/package.json" 2>/dev/null; then
+              app="$candidate"
+              break
+            fi
+          done
+          if [ -z "$app" ]; then
+            pkg=$(find "$HOME" -maxdepth 7 -type f -name package.json \
+              -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | while read -r p; do
+                grep -qi '"fastify"' "$p" 2>/dev/null && { echo "$p"; break; }
+              done)
+            [ -n "$pkg" ] && app=$(dirname "$pkg")
           fi
-          printf 'app=%s\n' "$app"
-          git -C "$app" branch --show-current 2>/dev/null || true
-          git -C "$app" rev-parse HEAD 2>/dev/null || true
-          git -C "$app" status --short 2>/dev/null || true
 
-          echo '=== backend_root_files ==='
-          find "$app" -maxdepth 3 -type f \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' \
-            -not -name '.env' -not -name '.env.*' \
-            -printf '%p\n' 2>/dev/null | sort | head -220 || true
-
-          echo '=== package_json ==='
-          if [ -f "$app/package.json" ]; then
-            cat "$app/package.json"
+          echo '=== selected_backend ==='
+          if [ -z "$app" ]; then
+            echo 'NO_LIVE_FASTIFY_ROOT_FOUND'
           else
-            echo 'NO_PACKAGE_JSON'
-          fi
+            echo "app=$app"
+            git -C "$app" branch --show-current 2>/dev/null || true
+            git -C "$app" rev-parse HEAD 2>/dev/null || true
+            git -C "$app" status --short 2>/dev/null || true
 
-          echo '=== exact_402_guard ==='
-          guard_files=$(grep -RIl --exclude-dir=node_modules --exclude-dir=.git \
-            --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
-            'Insufficient generation credits' "$app" 2>/dev/null | head -20 || true)
-          if [ -z "$guard_files" ]; then
-            echo 'NO_EXACT_GUARD_MATCH'
-          else
-            printf '%s\n' "$guard_files"
-            while IFS= read -r file; do
-              [ -n "$file" ] || continue
-              echo "--- $file ---"
-              grep -n -C 35 'Insufficient generation credits' "$file" 2>/dev/null | head -180 || true
-            done <<EOF
+            echo '=== package_json ==='
+            cat "$app/package.json" 2>/dev/null || true
+
+            echo '=== backend_files ==='
+            find "$app" -maxdepth 4 -type f \
+              -not -path '*/node_modules/*' -not -path '*/.git/*' \
+              -not -name '.env' -not -name '.env.*' \
+              -printf '%p\n' 2>/dev/null | sort | head -260 || true
+
+            echo '=== exact_402_guard ==='
+            guard_files=$(grep -RIl --exclude-dir=node_modules --exclude-dir=.git \
+              --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
+              'Insufficient generation credits' "$app" 2>/dev/null | head -20 || true)
+            if [ -z "$guard_files" ]; then
+              echo 'NO_EXACT_GUARD_MATCH'
+            else
+              printf '%s\n' "$guard_files"
+              while IFS= read -r file; do
+                [ -n "$file" ] || continue
+                echo "--- $file ---"
+                grep -n -C 45 'Insufficient generation credits' "$file" 2>/dev/null | head -220 || true
+              done <<EOF
           $guard_files
           EOF
+            fi
+
+            echo '=== entitlement_credit_symbols ==='
+            grep -RIn --exclude-dir=node_modules --exclude-dir=.git \
+              --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
+              -E 'entitlement|internal_owner|billing_exempt|credit_deduction|generation_credits|generationCredits|credits_remaining|creditsRemaining|credit_balance|creditBalance|Insufficient.*credits|reply\.code\(402\)|status\(402\)' \
+              "$app" 2>/dev/null | head -420 || true
+
+            echo '=== migrations_and_schema ==='
+            find "$app" -maxdepth 7 -type f \
+              \( -iname '*.sql' -o -iname '*migration*' -o -iname '*schema*' -o -iname '*seed*' -o -iname '*install*' \) \
+              -not -path '*/node_modules/*' -not -path '*/.git/*' \
+              -not -name '.env' -not -name '.env.*' -print 2>/dev/null | sort | head -180 || true
           fi
 
-          echo '=== entitlement_credit_symbols ==='
-          grep -RIn --exclude-dir=node_modules --exclude-dir=.git \
-            --exclude='.env' --exclude='.env.*' --exclude='*.map' --exclude='*.log' \
-            -E 'entitlement|internal_owner|billing_exempt|credit_deduction|generation_credits|generationCredits|credits_remaining|creditsRemaining|credit_balance|creditBalance|402' \
-            "$app" 2>/dev/null | head -320 || true
-
-          echo '=== migration_schema_files ==='
-          find "$app" -maxdepth 6 -type f \
-            \( -iname '*.sql' -o -iname '*migration*' -o -iname '*schema*' -o -iname '*seed*' -o -iname '*install*' \) \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' \
-            -not -name '.env' -not -name '.env.*' -printf '%p\n' 2>/dev/null | sort | head -160 || true
-
-          echo '=== likely_schema_contents ==='
-          find "$app" -maxdepth 6 -type f \( -iname '*.sql' -o -iname '*migration*.js' -o -iname '*migration*.mjs' -o -iname '*migration*.cjs' -o -iname '*schema*.js' -o -iname '*schema*.mjs' \) \
-            -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | head -30 | while read -r file; do
-              echo "--- $file ---"
-              sed -n '1,320p' "$file" | sed -E 's/(password|secret|token|api[_-]?key)[[:space:]]*[:=][[:space:]]*[^,;[:space:]]+/\1=[REDACTED]/Ig' | head -340
-            done
-
-          echo '=== public_api_adapter ==='
-          if [ -e "$adapter" ]; then
-            ls -ld "$adapter" || true
-            readlink -f "$adapter" 2>/dev/null || true
-            find "$adapter" -maxdepth 3 -type f \
-              -not -path '*/node_modules/*' -not -name '.env' -not -name '.env.*' \
-              -printf '%p\n' 2>/dev/null | sort | head -120 || true
-            for f in "$adapter/.htaccess" "$adapter/app.js" "$adapter/server.js" "$adapter/index.js"; do
-              if [ -f "$f" ]; then
-                echo "--- $f ---"
-                sed -n '1,260p' "$f" | sed -E 's/(password|secret|token|api[_-]?key)[[:space:]]*[:=][[:space:]]*[^,;[:space:]]+/\1=[REDACTED]/Ig'
-              fi
-            done
-          else
-            echo 'MISSING_PUBLIC_ADAPTER'
-          fi
+          echo '=== public_api_locations ==='
+          find "$HOME" -maxdepth 7 -type d -path '*/studio/api' -print 2>/dev/null | head -30 || true
+          find "$HOME" -maxdepth 7 -type f \
+            \( -name '.htaccess' -o -name 'app.js' -o -name 'server.js' -o -name 'index.js' \) \
+            -path '*studio/api/*' -not -path '*/node_modules/*' -print 2>/dev/null | head -80 || true
           REMOTE

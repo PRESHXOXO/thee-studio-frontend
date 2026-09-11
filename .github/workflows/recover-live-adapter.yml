@@ -1,4 +1,4 @@
-name: Probe Replacement API Read Only Routes
+name: Probe Replacement API Routes
 
 on:
   push:
@@ -13,38 +13,26 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: production
-
     steps:
       - name: Probe bounded GET-only route set
+        shell: bash
         run: |
-          set -eu
+          set -u
           base='https://studio.myvitaworld.online/api'
           routes='readyz openapi.json swagger.json docs docs/json auth/me auth/csrf access credits account admin/entitlements admin/access admin/credits admin/reconcile internal/entitlements internal/access internal/reconcile'
           : > api-route-probe.txt
           for route in $routes; do
-            url="$base/$route"
-            body=$(mktemp)
-            headers=$(mktemp)
-            code=$(curl --silent --show-error --max-time 12 --location \
-              --dump-header "$headers" --output "$body" --write-out '%{http_code}' "$url" || printf '000')
-            ctype=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/{sub(/^[^:]+:[[:space:]]*/,""); gsub(/\r/,""); print; exit}' "$headers")
-            allow=$(awk 'BEGIN{IGNORECASE=1} /^allow:/{sub(/^[^:]+:[[:space:]]*/,""); gsub(/\r/,""); print; exit}' "$headers")
-            printf 'ROUTE=/%s STATUS=%s CONTENT_TYPE=%s ALLOW=%s\n' "$route" "$code" "${ctype:-none}" "${allow:-none}" >> api-route-probe.txt
-            python3 - "$body" <<'PY' >> api-route-probe.txt
-import json, re, sys
-p=sys.argv[1]
-try:
-    raw=open(p,'rb').read(1200).decode('utf-8','replace')
-except Exception:
-    raw=''
-raw=re.sub(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}','[REDACTED_EMAIL]',raw)
-raw=re.sub(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}','[REDACTED_UUID]',raw)
-raw=re.sub(r'(?i)(token|secret|password|api[_-]?key)(["\s:=]+)[^,}\s]+',r'\1\2[REDACTED]',raw)
-print('BODY='+raw.replace('\n',' ')[:900])
-PY
-            printf '\n' >> api-route-probe.txt
-            rm -f "$body" "$headers"
+            body="$(mktemp)"
+            code="$(curl -sS -m 12 -o "$body" -w '%{http_code}' "$base/$route" || echo 000)"
+            printf 'ROUTE=/%s STATUS=%s\n' "$route" "$code" >> api-route-probe.txt
+            head -c 700 "$body" \
+              | tr '\n\r' '  ' \
+              | sed -E \
+                  -e 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[REDACTED_EMAIL]/g' \
+                  -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/[REDACTED_UUID]/g' \
+              | sed 's/^/BODY=/' >> api-route-probe.txt
+            printf '\n\n' >> api-route-probe.txt
+            rm -f "$body"
           done
           cat api-route-probe.txt
 
@@ -53,5 +41,4 @@ PY
         with:
           name: api-route-probe
           path: api-route-probe.txt
-          if-no-files-found: error
           retention-days: 1

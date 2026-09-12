@@ -1,0 +1,98 @@
+name: Temporary Production Reference Read Diagnostic
+
+on:
+  push:
+    branches: [ops/reference-read-diagnostic-20260912]
+    paths: [.github/workflows/reference-read-diagnostic.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: Production
+    env:
+      CUTOVER_OWNER_EMAIL: ${{ secrets.CUTOVER_OWNER_EMAIL }}
+      CUTOVER_OWNER_PASSWORD: ${{ secrets.CUTOVER_OWNER_PASSWORD }}
+    steps:
+      - name: Probe authenticated reference reads without generation
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://studio.myvitaworld.online/api'
+          ua='Mozilla/5.0 Chrome/152.0.0.0 Safari/537.36'
+          trap 'rm -f /tmp/login.json /tmp/jar /tmp/body /tmp/creators.json /tmp/refs.json /tmp/creator-ids /tmp/ref-url' EXIT
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const email = String(process.env.CUTOVER_OWNER_EMAIL || '').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').trim().toLowerCase();
+          const password = String(process.env.CUTOVER_OWNER_PASSWORD || '');
+          if (!email || !password) process.exit(2);
+          fs.writeFileSync('/tmp/login.json', JSON.stringify({ email, password }), { mode: 0o600 });
+          NODE
+
+          ready=$(curl -sS --compressed -A "$ua" -o /tmp/body -w '%{http_code}' "$base/readyz")
+          echo "READYZ_HTTP=$ready"
+
+          login=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -H 'Content-Type: application/json' -X POST --data-binary @/tmp/login.json -o /tmp/body -w '%{http_code}' "$base/auth/login")
+          echo "OWNER_LOGIN_HTTP=$login"
+          test "$login" = 200
+
+          me=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base/auth/me")
+          echo "AUTH_ME_HTTP=$me"
+          test "$me" = 200
+
+          creators=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/creators.json -w '%{http_code}' "$base/creators")
+          echo "CREATORS_HTTP=$creators"
+          test "$creators" = 200
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const raw = JSON.parse(fs.readFileSync('/tmp/creators.json', 'utf8'));
+          const creators = Array.isArray(raw?.creators) ? raw.creators : Array.isArray(raw) ? raw : [];
+          fs.writeFileSync('/tmp/creator-ids', creators.map(x => x?.id).filter(Boolean).join('\n'));
+          console.log(`CREATOR_COUNT=${creators.length}`);
+          console.log(`CREATORS_WITH_METADATA=${creators.filter(x => x?.metadata && Object.keys(x.metadata).length).length}`);
+          NODE
+
+          i=0
+          while IFS= read -r creator_id; do
+            test -n "$creator_id" || continue
+            i=$((i + 1))
+            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/refs.json -w '%{http_code}' "$base/creators/$creator_id/references")
+            echo "CREATOR_${i}_REFERENCES_HTTP=$code"
+            STATUS="$code" INDEX="$i" node - <<'NODE'
+            const fs = require('fs');
+            let raw = null;
+            try { raw = JSON.parse(fs.readFileSync('/tmp/refs.json', 'utf8')); } catch {}
+            const refs = Array.isArray(raw?.references) ? raw.references : Array.isArray(raw) ? raw : [];
+            console.log(`CREATOR_${process.env.INDEX}_REFERENCE_COUNT=${refs.length}`);
+            console.log(`CREATOR_${process.env.INDEX}_REFERENCE_TYPES=${[...new Set(refs.map(x => x?.reference_type || x?.referenceType).filter(Boolean))].sort().join(',') || 'none'}`);
+            console.log(`CREATOR_${process.env.INDEX}_CANONICAL_COUNT=${refs.filter(x => x?.is_canonical === true).length}`);
+            console.log(`CREATOR_${process.env.INDEX}_ACTIVE_COUNT=${refs.filter(x => x?.is_active !== false).length}`);
+            console.log(`CREATOR_${process.env.INDEX}_WITH_LOCATION=${refs.filter(x => x?.signed_url || x?.signedUrl || x?.url || x?.preview_url || x?.previewUrl || x?.download_url || x?.downloadUrl || x?.storage_path || x?.storagePath).length}`);
+            if (process.env.STATUS !== '200' && raw) console.log(`CREATOR_${process.env.INDEX}_ERROR=${String(raw?.error || raw?.message || 'unknown').slice(0, 300)}`);
+            if (process.env.INDEX === '1' && refs.length) {
+              const ref = refs[0];
+              let url = ref.signed_url || ref.signedUrl || ref.url || ref.preview_url || ref.previewUrl || ref.download_url || ref.downloadUrl || '';
+              const path = ref.storage_path || ref.storagePath || '';
+              if (!url && path) url = `/assets/download/creator-references/${String(path).split('/').map(encodeURIComponent).join('/')}`;
+              if (url) fs.writeFileSync('/tmp/ref-url', url, { mode: 0o600 });
+            }
+            NODE
+          done < /tmp/creator-ids
+
+          if test -s /tmp/ref-url; then
+            ref_url=$(cat /tmp/ref-url)
+            case "$ref_url" in
+              http://*|https://*) target="$ref_url" ;;
+              *) target="$base$ref_url" ;;
+            esac
+            curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /dev/null \
+              -w 'FIRST_REFERENCE_HTTP=%{http_code}\nFIRST_REFERENCE_TYPE=%{content_type}\nFIRST_REFERENCE_BYTES=%{size_download}\n' "$target"
+          else
+            echo 'FIRST_REFERENCE_TEST=unavailable'
+          fi

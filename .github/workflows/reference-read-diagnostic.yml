@@ -59,6 +59,11 @@ jobs:
           console.log(`AUTH_ENTITLEMENT=${JSON.stringify(safe)}`);
           NODE
 
+          for route in generation/schema generation/preflight generation/validate; do
+            code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base/$route")
+            echo "$(printf '%s' "$route" | tr '/-' '__' | tr '[:lower:]' '[:upper:]')_GET_HTTP=$code"
+          done
+
           creators=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/creators.json -w '%{http_code}' "$base/creators")
           echo "CREATORS_HTTP=$creators"
           test "$creators" = 200

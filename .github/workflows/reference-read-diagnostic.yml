@@ -82,7 +82,7 @@ jobs:
               if (!url && path) url = `/assets/download/creator-references/${String(path).split('/').map(encodeURIComponent).join('/')}`;
               if (url) fs.writeFileSync('/tmp/ref-url', url, { mode: 0o600 });
             }
-            NODE
+          NODE
           done < /tmp/creator-ids
 
           if test -s /tmp/ref-url; then

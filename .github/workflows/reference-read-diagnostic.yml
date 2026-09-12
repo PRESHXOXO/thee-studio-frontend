@@ -44,6 +44,20 @@ jobs:
           me=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/body -w '%{http_code}' "$base/auth/me")
           echo "AUTH_ME_HTTP=$me"
           test "$me" = 200
+          node - <<'NODE'
+          const fs = require('fs');
+          const raw = JSON.parse(fs.readFileSync('/tmp/body', 'utf8'));
+          const user = raw?.user || raw || {};
+          const app = user.appMetadata || user.app_metadata || {};
+          const safe = {
+            role: app.role || (Array.isArray(app.roles) ? app.roles[0] : null),
+            accountType: app.accountType || app.account_type || null,
+            billingExempt: app.billingExempt ?? app.billing_exempt ?? null,
+            creditDeductionEnabled: app.creditDeductionEnabled ?? app.credit_deduction_enabled ?? null,
+            usageTrackingEnabled: app.usageTrackingEnabled ?? app.usage_tracking_enabled ?? null,
+          };
+          console.log(`AUTH_ENTITLEMENT=${JSON.stringify(safe)}`);
+          NODE
 
           creators=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/creators.json -w '%{http_code}' "$base/creators")
           echo "CREATORS_HTTP=$creators"
@@ -59,7 +73,7 @@ jobs:
           NODE
 
           i=0
-          while IFS= read -r creator_id; do
+          while IFS= read -r creator_id || test -n "$creator_id"; do
             test -n "$creator_id" || continue
             i=$((i + 1))
             code=$(curl -sS --compressed -A "$ua" -c /tmp/jar -b /tmp/jar -o /tmp/refs.json -w '%{http_code}' "$base/creators/$creator_id/references")
@@ -96,3 +110,74 @@ jobs:
           else
             echo 'FIRST_REFERENCE_TEST=unavailable'
           fi
+
+      - name: Reproduce authenticated frontend runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/thee-browser-check
+          cd /tmp/thee-browser-check
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund playwright-core >/dev/null 2>&1
+          node --input-type=module - <<'NODE'
+          import { chromium } from 'playwright-core';
+
+          const browser = await chromium.launch({
+            executablePath: '/usr/bin/google-chrome',
+            headless: true,
+            args: ['--no-sandbox'],
+          });
+          const context = await browser.newContext();
+          const page = await context.newPage();
+          const consoleErrors = [];
+          const pageErrors = [];
+          const failed = [];
+          const badResponses = [];
+          page.on('console', msg => {
+            if (msg.type() === 'error') consoleErrors.push(msg.text().slice(0, 500));
+          });
+          page.on('pageerror', error => pageErrors.push(String(error?.message || error).slice(0, 500)));
+          page.on('requestfailed', request => failed.push({ path: new URL(request.url()).pathname, reason: request.failure()?.errorText || 'unknown' }));
+          page.on('response', response => {
+            if (response.status() >= 400) badResponses.push({ path: new URL(response.url()).pathname, status: response.status() });
+          });
+
+          await page.goto('https://studio.myvitaworld.online/', { waitUntil: 'networkidle' });
+          const login = await page.evaluate(async ({ email, password }) => {
+            const response = await fetch('/api/auth/login', {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ email, password }),
+            });
+            return response.status;
+          }, { email: process.env.CUTOVER_OWNER_EMAIL, password: process.env.CUTOVER_OWNER_PASSWORD });
+          console.log(`BROWSER_LOGIN_HTTP=${login}`);
+          await page.reload({ waitUntil: 'networkidle' });
+          await page.waitForTimeout(3000);
+
+          const state = await page.evaluate(() => {
+            let roster = [];
+            try { roster = JSON.parse(localStorage.getItem('ts_characters') || '[]'); } catch {}
+            const images = [...document.images];
+            return {
+              title: document.title,
+              pathname: location.pathname,
+              rootChildren: document.querySelector('#root')?.childElementCount ?? -1,
+              bodyTextLength: document.body?.innerText?.length || 0,
+              rosterCount: Array.isArray(roster) ? roster.length : -1,
+              rosterReferenceCounts: Array.isArray(roster) ? roster.map(x => Array.isArray(x?.refImages) ? x.refImages.length : 0) : [],
+              imageCount: images.length,
+              loadedImages: images.filter(x => x.complete && x.naturalWidth > 0).length,
+              brokenImages: images.filter(x => x.complete && x.naturalWidth === 0).length,
+            };
+          });
+          console.log(`BROWSER_STATE=${JSON.stringify(state)}`);
+          console.log(`BROWSER_PAGE_ERRORS=${JSON.stringify(pageErrors)}`);
+          console.log(`BROWSER_CONSOLE_ERRORS=${JSON.stringify(consoleErrors)}`);
+          console.log(`BROWSER_FAILED_REQUESTS=${JSON.stringify(failed)}`);
+          console.log(`BROWSER_BAD_RESPONSES=${JSON.stringify(badResponses.filter(x => x.path !== '/favicon.ico'))}`);
+          await browser.close();
+
+          if (login !== 200 || state.rootChildren < 1 || pageErrors.length || consoleErrors.length) process.exit(1);
+          NODE
